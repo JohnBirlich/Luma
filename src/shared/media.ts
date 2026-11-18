@@ -40,6 +40,7 @@ export interface DesktopBridge {
   chooseTracks(): Promise<ImportResult>;
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
+  openVkLink(url: string): Promise<void>;
   window: {
     minimize(): void;
     toggleMaximize(): void;

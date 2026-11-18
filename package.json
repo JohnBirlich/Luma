@@ -1,13 +1,15 @@
 {
   "name": "luma-player",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "An offline music player for Windows",
+  "description": "A Windows audio player with a local library and VK playlists",
   "author": "Luma Player contributors",
   "license": "GPL-3.0-only",
   "main": "dist-electron/electron/main.js",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "npm run build:electron && node scripts/dev.mjs",
     "dev:web": "vite --host 0.0.0.0",

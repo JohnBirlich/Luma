@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
+import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { createProtocolHandler } from './protocol.js';
 
@@ -67,6 +68,11 @@ function bindIpc(library: DesktopLibrary) {
     if (typeof id !== 'string') throw new TypeError('Expected track ID');
     return library.remove(id);
   });
+  ipcMain.handle('vk:open-link', (event, url: unknown) => {
+    appWindow(event);
+    if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
+    return shell.openExternal(url);
+  });
   ipcMain.handle('window:minimize', (event) => appWindow(event).minimize());
   ipcMain.handle('window:toggle-maximize', (event) => {
     const owner = appWindow(event);
@@ -83,13 +89,18 @@ async function createWindow() {
     frame: false, show: false, backgroundColor: '#101116',
     webPreferences: {
       preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)),
-      nodeIntegration: false, contextIsolation: true, sandbox: true,
+      nodeIntegration: false, nodeIntegrationInSubFrames: false, contextIsolation: true, sandbox: true,
     },
   });
   window = owner;
   owner.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   owner.webContents.on('will-frame-navigate', (event) => {
-    if (!event.isMainFrame || !isAppPage(event.url)) event.preventDefault();
+    const allowed = event.isMainFrame ? isAppPage(event.url) : isVkWidgetFrameUrl(event.url);
+    if (!allowed) event.preventDefault();
+  });
+  owner.webContents.on('will-redirect', (event) => {
+    const allowed = event.isMainFrame ? isAppPage(event.url) : isVkWidgetFrameUrl(event.url);
+    if (!allowed) event.preventDefault();
   });
   owner.webContents.on('will-attach-webview', (event) => event.preventDefault());
   owner.on('closed', () => { if (window === owner) window = null; });

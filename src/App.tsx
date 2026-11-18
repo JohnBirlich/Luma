@@ -7,6 +7,7 @@ import { LibraryPage, PlayerPage } from './components/Collection';
 import { Equalizer } from './components/Equalizer';
 import { PlayerBar } from './components/PlayerBar';
 import { QueuePanel } from './components/QueuePanel';
+import { VkModeBar, VkMusicPage } from './components/VkMusic';
 import { demoTracks } from './data/demos';
 import { localLibrary } from './data/library';
 import { useMediaSession } from './player/mediaSession';
@@ -22,6 +23,7 @@ import type { QueueState } from './shared/queue';
 interface Notice { message: string; detail?: string; error?: boolean }
 const demoIds = demoTracks.map((track) => track.id);
 const noop = () => undefined;
+const noMediaActions = {};
 
 export default function App() {
   const [boot] = useState(readPreferences);
@@ -37,6 +39,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [working, setWorking] = useState(false);
   const [page, setPage] = useState<Page>('player');
+  const isVkPage = page === 'vk';
   const [showEqualizer, setShowEqualizer] = useState(false);
   const [queueOpen, setQueueOpen] = useState(() => window.matchMedia('(min-width: 1080px)').matches);
   const [dropActive, setDropActive] = useState(false);
@@ -53,6 +56,7 @@ export default function App() {
   const player = useAudio(preferences.volume, preferences.equalizer, ended);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
   const tint = usePalette(current);
+  const localPlaybackError = isVkPage ? '' : player.error;
   const queued = queue.order.flatMap((id) => byId.get(id) ?? []);
   const upcoming = upcomingIds(queue).flatMap((id) => byId.get(id) ?? []);
 
@@ -111,7 +115,7 @@ export default function App() {
     seekforward: ({ seekOffset }: MediaSessionActionDetails) => seek(seekOffset ?? 5, true),
     seekbackward: ({ seekOffset }: MediaSessionActionDetails) => seek(-(seekOffset ?? 5), true),
   }), [next, previous, play, pause, seek]);
-  useMediaSession(current, player.playing, player.elapsed, player.duration, mediaActions);
+  useMediaSession(isVkPage ? null : current, player.playing, player.elapsed, player.duration, isVkPage ? noMediaActions : mediaActions);
 
   const setVolume = useCallback((value: number) => {
     const volume = clamp(value, 0, 1);
@@ -166,6 +170,7 @@ export default function App() {
         if (!event.repeat) choose();
         return;
       }
+      if (isVkPage) return;
       if (event.key === 'Escape' && queueOpen && window.matchMedia('(max-width: 1079px)').matches) { setQueueOpen(false); return; }
       if (event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey || (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], button, a'))) return;
       if (event.code === 'Space' || event.code === 'KeyK') { event.preventDefault(); if (!event.repeat) toggle(); }
@@ -175,7 +180,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [choose, mute, seek, toggle, showEqualizer, queueOpen]);
+  }, [choose, mute, seek, toggle, showEqualizer, queueOpen, isVkPage]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -219,11 +224,15 @@ export default function App() {
     setPage('library');
     if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
   }
+  function navigate(target: Page) {
+    if (target === 'vk') pause();
+    setPage(target);
+  }
   const openEqualizer = () => setShowEqualizer(true);
   const closeQueue = () => setQueueOpen(false);
 
   return (
-    <div className={`app-shell${queueOpen ? ' queue-visible' : ''}`}
+    <div className={`app-shell${isVkPage ? ' vk-mode' : queueOpen ? ' queue-visible' : ''}`}
       onDragEnter={(event) => {
         if (!filesDragged(event)) return;
         event.preventDefault();
@@ -244,25 +253,25 @@ export default function App() {
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
       <TitleBar />
-      <Sidebar page={page} navigate={setPage} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled} addMusic={choose} busy={working || !ready} count={tracks.length} />
+      <Sidebar page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled} addMusic={choose} busy={working || !ready} count={tracks.length} />
       <main className="main-pane" ref={scrollArea}>
-        {page === 'player' ? <PlayerPage track={current} tracks={tracks} tint={tint} playing={player.playing} position={queue.order.indexOf(current?.id ?? '') + 1}
+        {isVkPage ? <VkMusicPage /> : page === 'player' ? <PlayerPage track={current} tracks={tracks} tint={tint} playing={player.playing} position={queue.order.indexOf(current?.id ?? '') + 1}
           count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle} play={(id) => playTrack(id, true)} goToLibrary={goToLibrary} openEqualizer={openEqualizer} addMusic={choose} /> :
           <LibraryPage tracks={tracks} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
             addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} remove={(id) => void removeLocal(id)} />}
       </main>
-      {queueOpen && <>
+      {!isVkPage && queueOpen && <>
         <button type="button" className="queue-scrim" onClick={closeQueue} aria-label="Закрыть панель очереди" />
         <QueuePanel active={current} upcoming={upcoming} count={queued.length} duration={queued.reduce((sum, track) => sum + track.duration, 0)} playing={player.playing}
           close={closeQueue} play={(id) => playTrack(id, true)} remove={removeQueued} move={(from, to) => commit(moveUpcoming(queueRef.current, from, to))} goToLibrary={goToLibrary} />
       </>}
-      <PlayerBar track={current} playing={player.playing} elapsed={player.elapsed} duration={player.duration} shuffle={queue.beforeShuffle !== null} repeat={queue.repeat}
+      {isVkPage ? <VkModeBar goToPlayer={() => setPage('player')} /> : <PlayerBar track={current} playing={player.playing} elapsed={player.elapsed} duration={player.duration} shuffle={queue.beforeShuffle !== null} repeat={queue.repeat}
         hasNext={Boolean(adjacentId(queue, 1))} volume={preferences.volume} goToPlayer={() => setPage('player')} togglePlay={toggle}
         toggleShuffle={() => commit(toggleShuffle(queueRef.current))} toggleRepeat={() => {
           const state = queueRef.current;
           commit({ ...state, repeat: state.repeat === 'off' ? 'all' : state.repeat === 'all' ? 'one' : 'off' });
         }} previous={previous} next={() => next()} toggleMute={mute} setVolume={setVolume} seek={seek}
-        queueOpen={queueOpen} toggleQueue={() => setQueueOpen((open) => !open)} />
+        queueOpen={queueOpen} toggleQueue={() => setQueueOpen((open) => !open)} />}
       <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />
       <input type="file" ref={fileInput} hidden accept={AUDIO_ACCEPT} multiple onChange={(event) => {
         handleFiles(Array.from(event.currentTarget.files ?? []));
@@ -270,9 +279,9 @@ export default function App() {
       }} />
       {dropActive && <div className="drop-overlay" aria-hidden="true"><div><FileAudio size={30} /><strong>Отпустите файлы</strong><span>Добавим аудио в вашу медиатеку</span></div></div>}
       <div className="notifications" aria-live="polite">
-        {(notice || player.error) && <div className={`toast${notice?.error || (!notice && player.error) ? ' toast-error' : ''}`}>
-          {notice?.error || (!notice && player.error) ? <CircleAlert size={20} /> : <CircleCheck size={20} />}
-          <div><strong>{notice?.message ?? player.error}</strong>{notice?.detail && <small>{notice.detail}</small>}</div>
+        {(notice || localPlaybackError) && <div className={`toast${notice?.error || (!notice && localPlaybackError) ? ' toast-error' : ''}`}>
+          {notice?.error || (!notice && localPlaybackError) ? <CircleAlert size={20} /> : <CircleCheck size={20} />}
+          <div><strong>{notice?.message ?? localPlaybackError}</strong>{notice?.detail && <small>{notice.detail}</small>}</div>
           {notice && <button type="button" className="icon-button" onClick={() => setNotice(undefined)} aria-label="Скрыть уведомление"><X size={17} /></button>}
         </div>}
       </div>

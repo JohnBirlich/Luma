@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { AudioLines, Disc3, LayoutGrid, Minus, Plus, SlidersHorizontal, Square, X, Copy } from 'lucide-react';
+import { AudioLines, Disc3, LayoutGrid, Minus, Plus, Radio, SlidersHorizontal, Square, X, Copy } from 'lucide-react';
 
-export type Page = 'player' | 'library';
+export type Page = 'player' | 'library' | 'vk';
 
 export function TitleBar() {
   const api = window.luma?.window;
@@ -17,7 +17,7 @@ export function TitleBar() {
         <div className="brand-mark" aria-hidden="true"><AudioLines size={20} strokeWidth={2.05} /></div>
         <strong>Luma<span> Player</span></strong>
       </div>
-      <div className="title-caption">Локальный аудиоплеер</div>
+      <div className="title-caption">Музыкальный плеер</div>
       {api ? <div className="window-buttons">
         <button type="button" onClick={api.minimize} title="Свернуть" aria-label="Свернуть"><Minus size={15} /></button>
         <button type="button" onClick={api.toggleMaximize} title={maximized ? 'Восстановить окно' : 'Развернуть'} aria-label={maximized ? 'Восстановить окно' : 'Развернуть'}>
@@ -45,16 +45,19 @@ export function Sidebar({ page, navigate, openEqualizer, eqEnabled, addMusic, bu
       <nav className="navigation" aria-label="Разделы плеера">
         <div className="nav-group">
           <p className="overline nav-label">Библиотека</p>
-          <button type="button" className="nav-item" aria-current={page === 'player' ? 'page' : undefined} onClick={() => navigate('player')}>
-            <Disc3 size={18} /><span>Сейчас играет</span>
+          <button type="button" className="nav-item" aria-current={page === 'player' ? 'page' : undefined} onClick={() => navigate('player')} aria-label="Сейчас играет">
+            <Disc3 size={18} /><span className="nav-long">Сейчас играет</span><span className="nav-short" aria-hidden="true">Плеер</span>
           </button>
-          <button type="button" className="nav-item" aria-current={page === 'library' ? 'page' : undefined} onClick={() => navigate('library')}>
-            <LayoutGrid size={17} /><span>Моя музыка</span><small className="nav-count">{count}</small>
+          <button type="button" className="nav-item" aria-current={page === 'library' ? 'page' : undefined} onClick={() => navigate('library')} aria-label="Моя музыка">
+            <LayoutGrid size={17} /><span className="nav-long">Моя музыка</span><span className="nav-short" aria-hidden="true">Файлы</span><small className="nav-count">{count}</small>
+          </button>
+          <button type="button" className="nav-item nav-vk" aria-current={page === 'vk' ? 'page' : undefined} onClick={() => navigate('vk')}>
+            <Radio size={18} /><span>VK Музыка</span>
           </button>
         </div>
         <div className="nav-group sound-group">
           <p className="overline nav-label">Настройки звука</p>
-          <button type="button" className="nav-item" onClick={openEqualizer} aria-haspopup="dialog">
+          <button type="button" className="nav-item" onClick={openEqualizer} aria-haspopup="dialog" disabled={page === 'vk'} title={page === 'vk' ? 'Эквалайзер работает только с локальными треками' : undefined}>
             <SlidersHorizontal size={17} /><span>Эквалайзер</span>{eqEnabled && <i className="enabled-dot" />}
           </button>
         </div>
@@ -63,7 +66,9 @@ export function Sidebar({ page, navigate, openEqualizer, eqEnabled, addMusic, bu
         <button type="button" className="button add-button" title="Добавить музыку (Ctrl+O)" aria-label={busy ? 'Добавляем музыку' : 'Добавить музыку'} onClick={addMusic} disabled={busy}>
           <Plus size={18} /><span className="add-label">{busy ? 'Добавляем…' : 'Добавить музыку'}</span><span className="add-label-short" aria-hidden="true">{busy ? '…' : 'Добавить'}</span>
         </button>
-        <div className="local-status"><span className="local-status-dot" /><div>Локальный режим<small>Без аккаунта и загрузок в сеть</small></div></div>
+        <div className={`local-status${page === 'vk' ? ' online-status' : ''}`}><span className="local-status-dot" />
+          {page === 'vk' ? <div>Онлайн-источник<small>Воспроизведение через VK</small></div> : <div>Локальный режим<small>Без аккаунта и загрузок в сеть</small></div>}
+        </div>
       </div>
     </aside>
   );

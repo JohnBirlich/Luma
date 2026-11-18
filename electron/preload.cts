@@ -8,6 +8,7 @@ const bridge: DesktopBridge = {
   chooseTracks: () => ipcRenderer.invoke('library:choose'),
   importDroppedFiles: (files) => ipcRenderer.invoke('library:drop', files.map((file) => webUtils.getPathForFile(file)).filter(Boolean)),
   removeTrack: (id) => ipcRenderer.invoke('library:remove', id),
+  openVkLink: (url) => ipcRenderer.invoke('vk:open-link', url),
   window: {
     minimize: () => { void ipcRenderer.invoke('window:minimize'); },
     toggleMaximize: () => { void ipcRenderer.invoke('window:toggle-maximize'); },
