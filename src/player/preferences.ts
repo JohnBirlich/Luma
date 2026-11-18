@@ -1,24 +1,28 @@
 import { clamp, defaultEqualizer, PRESETS } from '../shared/equalizer';
 import type { EqualizerSettings } from '../shared/equalizer';
 import type { QueueState } from '../shared/queue';
+import { defaultAppearance, defaultPlayback, readAppearance, readPlayback } from '../shared/customization';
+import type { Appearance, PlaybackPreferences } from '../shared/customization';
 
 export interface Preferences {
   volume: number;
   lastVolume: number;
   showDemos: boolean;
   equalizer: EqualizerSettings;
+  appearance: Appearance;
+  playback: PlaybackPreferences;
   queue?: QueueState;
 }
 
 const KEY = 'luma-player:v1';
-const defaults: Preferences = { volume: 0.75, lastVolume: 0.75, showDemos: true, equalizer: defaultEqualizer };
+const defaults: Preferences = { volume: 0.75, lastVolume: 0.75, showDemos: true, equalizer: defaultEqualizer, appearance: defaultAppearance, playback: defaultPlayback };
 const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.every((id) => typeof id === 'string');
 const numeric = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? clamp(value, min, max) : fallback;
 
-export function readPreferences(): Preferences {
+export function decodePreferences(value: string | null): Preferences {
   try {
-    const data = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<Preferences> | null;
+    const data = JSON.parse(value ?? 'null') as Partial<Preferences> | null;
     if (!data || typeof data !== 'object') return defaults;
     const eq = data.equalizer;
     const queue = data.queue;
@@ -27,6 +31,8 @@ export function readPreferences(): Preferences {
       volume: numeric(data.volume, defaults.volume, 0, 1),
       lastVolume: numeric(data.lastVolume, defaults.lastVolume, 0.01, 1),
       showDemos: data.showDemos !== false,
+      appearance: readAppearance(data.appearance),
+      playback: readPlayback(data.playback),
       equalizer: {
         enabled: eq?.enabled === true,
         preset: preset === 'custom' || Object.hasOwn(PRESETS, preset) ? preset : 'flat',
@@ -41,6 +47,10 @@ export function readPreferences(): Preferences {
       } : undefined,
     };
   } catch { return defaults; }
+}
+
+export function readPreferences(): Preferences {
+  try { return decodePreferences(localStorage.getItem(KEY)); } catch { return defaults; }
 }
 
 export function savePreferences(preferences: Preferences) {

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AudioLines, Disc3, LayoutGrid, Minus, Plus, Radio, SlidersHorizontal, Square, X, Copy } from 'lucide-react';
+import { AudioLines, Disc3, LayoutGrid, Minus, Plus, Radio, Settings2, SlidersHorizontal, Square, X, Copy } from 'lucide-react';
 
-export type Page = 'player' | 'library' | 'vk';
+export type Page = 'player' | 'library' | 'vk' | 'settings';
 
-export function TitleBar() {
+export function TitleBar({ openSettings, settingsActive }: { openSettings(): void; settingsActive: boolean }) {
   const api = window.luma?.window;
   const [maximized, setMaximized] = useState(false);
   useEffect(() => {
@@ -18,13 +18,17 @@ export function TitleBar() {
         <strong>Luma<span> Player</span></strong>
       </div>
       <div className="title-caption">Музыкальный плеер</div>
-      {api ? <div className="window-buttons">
-        <button type="button" onClick={api.minimize} title="Свернуть" aria-label="Свернуть"><Minus size={15} /></button>
-        <button type="button" onClick={api.toggleMaximize} title={maximized ? 'Восстановить окно' : 'Развернуть'} aria-label={maximized ? 'Восстановить окно' : 'Развернуть'}>
-          {maximized ? <Copy size={13} /> : <Square size={12} />}
-        </button>
-        <button type="button" className="window-close" onClick={api.close} title="Закрыть окно" aria-label="Закрыть окно"><X size={16} /></button>
-      </div> : <div className="web-status"><span />Веб-превью</div>}
+      <div className="title-actions">
+        <button type="button" className="icon-button title-settings" onClick={openSettings} aria-current={settingsActive ? 'page' : undefined}
+          aria-label="Настройки" title="Настройки (Ctrl+,)"><Settings2 size={17} /></button>
+        {api ? <div className="window-buttons">
+          <button type="button" onClick={api.minimize} title="Свернуть" aria-label="Свернуть"><Minus size={15} /></button>
+          <button type="button" onClick={api.toggleMaximize} title={maximized ? 'Восстановить окно' : 'Развернуть'} aria-label={maximized ? 'Восстановить окно' : 'Развернуть'}>
+            {maximized ? <Copy size={13} /> : <Square size={12} />}
+          </button>
+          <button type="button" className="window-close" onClick={api.close} title="Закрыть окно" aria-label="Закрыть окно"><X size={16} /></button>
+        </div> : <div className="web-status"><span />Веб-превью</div>}
+      </div>
     </header>
   );
 }
@@ -56,9 +60,12 @@ export function Sidebar({ page, navigate, openEqualizer, eqEnabled, addMusic, bu
           </button>
         </div>
         <div className="nav-group sound-group">
-          <p className="overline nav-label">Настройки звука</p>
+          <p className="overline nav-label">Плеер</p>
           <button type="button" className="nav-item" onClick={openEqualizer} aria-haspopup="dialog" disabled={page === 'vk'} title={page === 'vk' ? 'Эквалайзер работает только с локальными треками' : undefined}>
             <SlidersHorizontal size={17} /><span>Эквалайзер</span>{eqEnabled && <i className="enabled-dot" />}
+          </button>
+          <button type="button" className="nav-item" onClick={() => navigate('settings')} title="Настройки (Ctrl+,)" aria-current={page === 'settings' ? 'page' : undefined}>
+            <Settings2 size={17} /><span>Настройки</span>
           </button>
         </div>
       </nav>

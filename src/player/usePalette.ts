@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
+import { trackCoverKey } from '../shared/artwork';
+import { artworkTone } from '../shared/customization';
 import type { Track } from '../shared/media';
-
-const tones = ['#9e6a51', '#715a93', '#49807d', '#5c719d', '#a26a7d'];
 
 export function usePalette(track: Track | null): string {
   const [sample, setSample] = useState<{ url: string; color: string }>();
@@ -38,7 +38,5 @@ export function usePalette(track: Track | null): string {
     return () => { cancelled = true; image.onload = null; };
   }, [url, tint]);
 
-  const code = track?.id ?? '';
-  const index = [...code].reduce((hash, character) => (hash + character.charCodeAt(0)) % tones.length, 0);
-  return tint ?? (url !== undefined && sample?.url === url ? sample.color : tones[index]);
+  return tint ?? (url !== undefined && sample?.url === url ? sample.color : artworkTone(track ? trackCoverKey(track.id) : 'luma'));
 }

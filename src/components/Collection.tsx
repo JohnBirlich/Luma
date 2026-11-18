@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, AudioLines, Disc3, Headphones, ListPlus, Music2, Pause, Play, Plus, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowRight, Disc3, Headphones, ImagePlus, ListPlus, Music2, Pause, Play, Plus, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { formatTime, trackCount } from '../shared/media';
 import type { Track } from '../shared/media';
+import type { HeroStyle } from '../shared/customization';
 import { Artwork } from './Artwork';
 import { Signal } from './QueuePanel';
 
@@ -12,10 +13,11 @@ interface TrackCardProps {
   playing: boolean;
   play(id: string): void;
   add?(id: string): void;
+  editCover?(id: string): void;
   remove?(id: string): void;
 }
 
-function TrackCard({ track, active, playing, play, add, remove }: TrackCardProps) {
+function TrackCard({ track, active, playing, play, add, editCover, remove }: TrackCardProps) {
   return (
     <article className={`track-card${active ? ' track-card-active' : ''}`}>
       <button type="button" className="card-play" onClick={() => play(track.id)} aria-label={`${active && playing ? 'Приостановить' : 'Воспроизвести'} ${track.title}`}>
@@ -31,6 +33,7 @@ function TrackCard({ track, active, playing, play, add, remove }: TrackCardProps
       </button>
       {add && <div className="card-details">
         <span title={track.album}>{track.album} <span aria-hidden="true">·</span> {formatTime(track.duration)}</span>
+        {editCover && <button type="button" className="icon-button" onClick={() => editCover(track.id)} title="Редактировать обложку" aria-label={`Обложка: ${track.title}`} aria-haspopup="dialog"><ImagePlus size={16} /></button>}
         <button type="button" className="icon-button" onClick={() => add(track.id)} title="В очередь" aria-label={`Добавить ${track.title} в очередь`}><ListPlus size={17} /></button>
         {remove && !track.demo && <button type="button" className="icon-button delete-button" onClick={() => remove(track.id)}
           title="Убрать из медиатеки (файл не удаляется)" aria-label={`Убрать ${track.title} из медиатеки`}><Trash2 size={15} /></button>}
@@ -43,6 +46,7 @@ interface PlayerPageProps {
   track: Track | null;
   tracks: Track[];
   tint: string;
+  heroStyle: HeroStyle;
   playing: boolean;
   position: number;
   count: number;
@@ -51,24 +55,30 @@ interface PlayerPageProps {
   play(id: string): void;
   goToLibrary(): void;
   openEqualizer(): void;
+  editCover(id: string): void;
   addMusic(): void;
 }
 
 export function PlayerPage(props: PlayerPageProps) {
   const { track, tracks, tint, playing } = props;
   const artwork = track?.backdropUrl ?? track?.artworkUrl;
+  const showPicture = artwork && props.heroStyle !== 'vinyl';
   const featured = (tracks.length > 1 ? tracks.filter(({ id }) => id !== track?.id) : tracks).slice(0, 4);
   return (
     <div className="page player-page">
       <header className="page-header">
         <div><p className="overline page-kicker"><span />Локальный плеер</p><h1>Сейчас играет</h1></div>
-        <button type="button" className="button outline-button page-equalizer" onClick={props.openEqualizer} aria-haspopup="dialog">
-          <SlidersHorizontal size={17} /> Эквалайзер {props.eqEnabled && <i className="enabled-dot" />}
-        </button>
+        <div className="page-actions">
+          {track && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
+            aria-label="Редактировать обложку" title="Редактировать обложку" aria-haspopup="dialog"><ImagePlus size={17} /><span>Обложка</span></button>}
+          <button type="button" className="button outline-button page-equalizer" onClick={props.openEqualizer} aria-label="Эквалайзер" title="Эквалайзер" aria-haspopup="dialog">
+            <SlidersHorizontal size={17} /><span>Эквалайзер</span>{props.eqEnabled && <i className="enabled-dot" />}
+          </button>
+        </div>
       </header>
-      <section aria-label="Текущий трек" className={`hero${track?.backdropUrl ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint } as CSSProperties}>
-        {artwork ? <img className="hero-image" key={artwork} src={artwork} alt="" draggable={false} onError={(event) => { event.currentTarget.hidden = true; }} /> :
-          <div className="hero-disc" aria-hidden="true"><div><AudioLines size={72} strokeWidth={1.05} /></div></div>}
+      <section aria-label="Текущий трек" className={`hero hero-style-${props.heroStyle}${track?.backdropUrl ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint } as CSSProperties}>
+        {showPicture && <img className="hero-image" key={artwork} src={artwork} alt="" draggable={false} onError={(event) => { event.currentTarget.hidden = true; }} />}
+        {props.heroStyle !== 'blur' && !showPicture && <div className="hero-disc" aria-hidden="true"><Artwork track={track} className="hero-disc-label" /></div>}
         <div className="hero-scrim" aria-hidden="true" />
         <div className="hero-content">
           <div className="hero-label"><Signal playing={playing} /> {track?.demo ? 'Демо-трек' : track ? 'Воспроизведение' : 'Ваша коллекция'}</div>
@@ -107,6 +117,7 @@ interface LibraryPageProps {
   play(id: string): void;
   playAll(tracks: Track[]): void;
   add(id: string): void;
+  editCover(id: string): void;
   remove(id: string): void;
 }
 
@@ -137,7 +148,7 @@ export function LibraryPage(props: LibraryPageProps) {
         <button className="text-button" onClick={() => props.playAll(results)} type="button" disabled={!results.length}><Play size={14} fill="currentColor" /> Воспроизвести все</button>
       </div>
       {results.length ? <div className="track-grid library-grid">
-        {results.map((track) => <TrackCard key={track.id} track={track} active={track.id === props.currentId} playing={props.playing} play={props.play} add={props.add} remove={props.remove} />)}
+        {results.map((track) => <TrackCard key={track.id} track={track} active={track.id === props.currentId} playing={props.playing} play={props.play} add={props.add} editCover={props.editCover} remove={props.remove} />)}
       </div> : <div className="empty-library">
         <div><Music2 size={27} /></div><h2>{search ? 'Ничего не нашлось' : 'Здесь будет ваша музыка'}</h2>
         <p>{search ? 'Попробуйте поискать по части названия или имени исполнителя.' : 'Перетащите аудиофайлы в окно или выберите их на компьютере.'}</p>
