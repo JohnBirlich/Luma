@@ -1,0 +1,125 @@
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session } from 'electron';
+import type { IpcMainInvokeEvent } from 'electron';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
+import { APP_ORIGIN, DesktopLibrary } from './library.js';
+import { createProtocolHandler } from './protocol.js';
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'luma',
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
+}]);
+
+app.setName('Luma Player');
+app.setAppUserModelId('app.lumaplayer.desktop');
+const devUrl = getDevUrl();
+app.setPath('userData', join(app.getPath('appData'), devUrl ? 'Luma Player Dev' : 'Luma Player'));
+let window: BrowserWindow | null = null;
+
+function getDevUrl(): URL | undefined {
+  const value = !app.isPackaged && process.env.LUMA_DEV_SERVER_URL;
+  if (!value) return undefined;
+  const url = new URL(value);
+  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !url.port || url.username || url.password || url.pathname !== '/') {
+    throw new Error('The development URL must be a loopback Vite server.');
+  }
+  return url;
+}
+
+function isAppPage(value: string) {
+  try {
+    const url = new URL(value);
+    if (devUrl) return url.origin === devUrl.origin && url.pathname === '/';
+    return url.protocol === 'luma:' && url.hostname === 'app' && !url.port && !url.username && !url.password
+      && (url.pathname === '/' || url.pathname === '/index.html');
+  } catch {
+    return false;
+  }
+}
+
+function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
+  if (!window || window.isDestroyed() || event.sender !== window.webContents
+    || !event.senderFrame || event.senderFrame !== event.sender.mainFrame || !isAppPage(event.senderFrame.url)) {
+    throw new Error('Untrusted IPC sender');
+  }
+  return window;
+}
+
+function bindIpc(library: DesktopLibrary) {
+  ipcMain.handle('library:list', (event) => { appWindow(event); return library.list(); });
+  ipcMain.handle('library:choose', async (event) => {
+    const owner = appWindow(event);
+    const { filePaths, canceled } = await dialog.showOpenDialog(owner, {
+      title: 'Добавить музыку',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Аудиофайлы', extensions: AUDIO_EXTENSIONS }],
+    });
+    return canceled ? { ...emptyImport(library.list()), cancelled: true } : library.importPaths(filePaths);
+  });
+  ipcMain.handle('library:drop', (event, paths: unknown) => {
+    appWindow(event);
+    if (!Array.isArray(paths) || !paths.every((path) => typeof path === 'string')) throw new TypeError('Expected file paths');
+    return library.importPaths(paths);
+  });
+  ipcMain.handle('library:remove', (event, id: unknown) => {
+    appWindow(event);
+    if (typeof id !== 'string') throw new TypeError('Expected track ID');
+    return library.remove(id);
+  });
+  ipcMain.handle('window:minimize', (event) => appWindow(event).minimize());
+  ipcMain.handle('window:toggle-maximize', (event) => {
+    const owner = appWindow(event);
+    if (owner.isMaximized()) owner.unmaximize();
+    else owner.maximize();
+  });
+  ipcMain.handle('window:is-maximized', (event) => appWindow(event).isMaximized());
+  ipcMain.handle('window:close', (event) => appWindow(event).close());
+}
+
+async function createWindow() {
+  const owner = new BrowserWindow({
+    title: 'Luma Player', width: 1440, height: 900, minWidth: 620, minHeight: 520,
+    frame: false, show: false, backgroundColor: '#101116',
+    webPreferences: {
+      preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)),
+      nodeIntegration: false, contextIsolation: true, sandbox: true,
+    },
+  });
+  window = owner;
+  owner.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  owner.webContents.on('will-frame-navigate', (event) => {
+    if (!event.isMainFrame || !isAppPage(event.url)) event.preventDefault();
+  });
+  owner.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  owner.on('closed', () => { if (window === owner) window = null; });
+  const sendMaximized = () => owner.webContents.send('window:maximized', owner.isMaximized());
+  owner.on('maximize', sendMaximized);
+  owner.on('unmaximize', sendMaximized);
+  owner.once('ready-to-show', () => owner.show());
+  await owner.loadURL(devUrl?.href ?? `${APP_ORIGIN}/`);
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (window?.isMinimized()) window.restore();
+    window?.focus();
+  });
+  void app.whenReady().then(async () => {
+    Menu.setApplicationMenu(null);
+    session.defaultSession.setPermissionRequestHandler((_contents, _permission, reply) => reply(false));
+    session.defaultSession.setPermissionCheckHandler(() => false);
+    const library = await DesktopLibrary.open(app.getPath('userData'));
+    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin));
+    bindIpc(library);
+    await createWindow();
+    app.on('activate', () => { if (!window) void createWindow(); });
+  }).catch((error: unknown) => {
+    console.error(error);
+    dialog.showErrorBox('Luma Player', 'Не удалось открыть плеер. При запуске из исходников сначала выполните npm run build или используйте npm run dev.');
+    app.quit();
+  });
+  app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+}
