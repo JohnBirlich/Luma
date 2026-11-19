@@ -4,7 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: 'ID of a successful Windows build for this main commit'
+        description: 'ID of a successful Windows build for the exact release commit'
+        required: true
+        type: string
+      release_branch:
+        description: 'Confirm the source branch name (main by default)'
+        default: main
         required: true
         type: string
 
@@ -18,7 +23,7 @@ concurrency:
 
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref_type == 'branch' && github.ref_name == inputs.release_branch
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -26,7 +31,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check that the build ran for this commit on main
+      - name: Check that the Windows build ran for this commit and branch
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD_RUN_ID: ${{ inputs.run_id }}
@@ -34,9 +39,9 @@ jobs:
           set -euo pipefail
           [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID" |
-            jq -e --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" '
+            jq -e --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" --arg branch "$GITHUB_REF_NAME" '
               .path == ".github/workflows/windows.yml" and .event == "push" and
-              .head_branch == "main" and .head_repository.full_name == $repo and
+              .head_branch == $branch and .head_repository.full_name == $repo and
               .head_sha == $sha and .status == "completed" and .conclusion == "success"'
       - uses: actions/download-artifact@v4
         with:
