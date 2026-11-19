@@ -38,6 +38,7 @@ export function MusicServiceSearch({ query, connected, openVk }: {
 }) {
   const [failed, setFailed] = useState<MusicService>();
   const [busy, setBusy] = useState<MusicService>();
+  const [browserFailed, setBrowserFailed] = useState(false);
   if (!serviceSearchUrl('vk', query)) return null;
   return <section className="service-search" aria-labelledby="service-search-title">
     <header><div className="service-search-mark"><Search size={20} /></div><div><p className="overline">Ваш запрос</p>
@@ -51,7 +52,7 @@ export function MusicServiceSearch({ query, connected, openVk }: {
           href={connected ? url : undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!connected || busy === id || undefined} onClick={(event) => {
             if (!connected || busy || !url) { event.preventDefault(); return; }
             if (!window.luma) return;
-            event.preventDefault(); setFailed(undefined); setBusy(id);
+            event.preventDefault(); setFailed(undefined); setBrowserFailed(false); setBusy(id);
             const request = desktopVk ? openVk(url) : window.luma.openMusicSearch(id, query);
             void request.catch(() => setFailed(id)).finally(() => setBusy(undefined));
           }}>
@@ -61,7 +62,11 @@ export function MusicServiceSearch({ query, connected, openVk }: {
         </a>;
       })}
     </div>
-    {failed && <p className="online-message error" role="alert">Не удалось открыть {MUSIC_SERVICES[failed].name}. Проверьте подключение и попробуйте снова.</p>}
+    {failed && <p className="online-message error" role="alert">Не удалось открыть {MUSIC_SERVICES[failed].name}.
+      {failed === 'vk' && window.luma && !browserFailed ? <> <button className="text-button service-search-fallback" type="button" onClick={() => {
+        void window.luma?.openMusicSearch('vk', query).catch(() => setBrowserFailed(true));
+      }}>Искать в браузере <ArrowUpRight size={13} /></button></> : ' Проверьте подключение и попробуйте снова.'}
+    </p>}
     <p className="online-footnote">{connected ? 'Некоторые сервисы требуют входа, подписки или доступны не во всех регионах.' : 'Для поиска в сервисах нужно подключение к интернету.'}</p>
   </section>;
 }

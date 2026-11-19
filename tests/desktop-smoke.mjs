@@ -51,9 +51,13 @@ await writeFile(broken, taggedMp3(sample, {
 const library = await DesktopLibrary.open(join(profile, 'Luma Player'));
 assert.equal((await library.importPaths([tagged, broken])).added.length, 2);
 const warnings = [];
+let externalRuntimeErrors = 0;
 app.on('web-contents-created', (_event, contents) => {
   contents.on('console-message', (event) => {
-    if (/MediaImage src can only be|Content Security Policy|Uncaught /u.test(event.message)) warnings.push(event.message);
+    if (!/MediaImage src can only be|Content Security Policy|Uncaught /u.test(event.message)) return;
+    // VK owns its renderer. Its live script errors are reported separately, not counted as Luma CSP/runtime regressions.
+    if (contents.session === session.defaultSession) warnings.push(event.message);
+    else if (/Uncaught /u.test(event.message)) externalRuntimeErrors++;
   });
 });
 await import('../dist-electron/electron/main.js');
@@ -169,6 +173,22 @@ async function smoke() {
   await waitFor('Esc exits native fullscreen', async () => !window.isFullScreen() && await run(`!document.querySelector('.immersive-player')`));
   assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused && Math.abs(window.testAudio.currentTime - 4) < .2`), true);
   console.log(`::notice title=Native fullscreen::Electron fullscreen reached ${display.bounds.width}×${display.bounds.height} monitor bounds; button, Esc, and host exit passed.`);
+  await click('.scene-open');
+  await waitFor('scene dialog reopens', () => run(`!!document.querySelector('.scene-dialog[open]')`));
+  if (!await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`)) {
+    await click('.scene-choice[aria-label="Волны"]');
+    const clip = await waitFor('silent sea loop decodes from the app protocol', () => run(`(() => {
+      const clip = document.querySelector('.scene-dialog-preview video');
+      return clip?.currentTime > .04 ? [clip.videoWidth, clip.videoHeight, clip.muted, clip.loop] : null;
+    })()`));
+    assert.deepEqual(clip, [960, 400, true, true]);
+    await click('.scene-choice[aria-label="Фейерверк"]');
+    await waitFor('fireworks use one bounded canvas', () => run(`(() => {
+      const canvas = document.querySelector('.scene-dialog-preview canvas');
+      return canvas && canvas.width * canvas.height > 0 && canvas.width * canvas.height <= 480000;
+    })()`));
+  }
+  await click('.scene-dialog .primary-button');
   await run(`document.querySelector('.title-settings').click()`);
   await waitFor('settings page', () => run(`!!document.querySelector('.settings-page [aria-label="Обновления приложения"]')`));
   await run(`document.querySelector('.settings-page [aria-label="Обновления приложения"]').click()`);
@@ -301,6 +321,7 @@ async function smoke() {
     const vkRun = (script) => vk.webContents.executeJavaScript(script, true);
     await waitFor('VK home fixture', () => vkRun(`!!document.getElementById('vkid')`));
     assert.equal(vk.webContents.session, vkSession);
+    assert.ok(vkSession.storagePath?.includes('luma-vk-web')); // persistent (not in-memory) partition
     assert.notEqual(vk.webContents.session, window.webContents.session);
     assert.equal(vk.isModal(), true);
     assert.equal(await vkRun(`typeof window.luma === 'undefined' && typeof require === 'undefined' && typeof process === 'undefined'`), true);
@@ -350,7 +371,10 @@ async function smoke() {
       await run(`window.luma.openVkWebsite(${JSON.stringify(VK_MUSIC_URL)})`);
       const vk = BrowserWindow.getAllWindows().find((item) => item !== window);
       assert.ok(vk);
-      console.log('::notice title=Live VK navigation::First-party page loaded; this does not verify login or playback.');
+      await delay(2200); // Give VK's own SPA time to report an initialization error.
+      console.log(externalRuntimeErrors
+        ? '::warning title=Live VK navigation::First-party page loaded but reported a site script error. Account access and playback are unverified.'
+        : '::notice title=Live VK navigation::First-party page loaded; this does not verify login or playback.');
       vk.destroy();
     } catch {
       console.log('::warning title=Live VK navigation::Public VK page did not load in this network. The deterministic session checks passed.');

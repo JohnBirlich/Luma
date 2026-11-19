@@ -73,10 +73,11 @@ export function readAppleCandidates(data: unknown, country: string): MetadataCan
     const trackId = id(track.trackId);
     const collectionId = id(track.collectionId);
     const title = field(track.trackName);
+    const duration = typeof track.trackTimeMillis === 'number' ? seconds(track.trackTimeMillis / 1000) : undefined;
     const artist = field(track.artistName);
     if (track.kind !== 'song' || !trackId || !collectionId || !title || !artist) return [];
     return [{ source: 'apple', page: `https://music.apple.com/${country.toLowerCase()}/album/${collectionId}?i=${trackId}`,
-      title, artist, album: field(track.collectionName) || undefined, duration: seconds(Number(track.trackTimeMillis) / 1000) }];
+      title, artist, album: field(track.collectionName) || undefined, duration }];
   });
 }
 
@@ -111,7 +112,7 @@ export function readAcoustidCandidates(data: unknown): MetadataCandidate[] {
 }
 
 export function isMetadataPage(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length > 180) return false;
+  if (typeof value !== 'string' || value.length > 180 || value.trim() !== value) return false;
   return /^https:\/\/music\.apple\.com\/[a-z]{2}\/album\/[1-9]\d{0,15}\?i=[1-9]\d{0,15}$/.test(value)
     || (value.startsWith('https://musicbrainz.org/recording/') && mbid.test(value.slice('https://musicbrainz.org/recording/'.length)));
 }

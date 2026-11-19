@@ -50,6 +50,10 @@ export class VkWebsite {
       label: 'VK Музыка', submenu: [
         { label: 'Назад', accelerator: 'Alt+Left', click: () => { if (contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack(); } },
         { label: 'Обновить', accelerator: 'Ctrl+R', click: () => contents.reload() },
+        { label: 'Вернуться к выбранной музыке', click: () => {
+          // If VK finished login on a profile/home screen, retry the saved music destination in the same session.
+          void contents.loadURL(this.destination).catch(() => this.logs.main('vk.websiteFailed'));
+        } },
         { label: 'Открыть в обычном браузере', click: () => {
           void shell.openExternal(this.destination).then(() => this.logs.main('vk.browserOpened'), () => this.logs.main('vk.browserFailed'));
         } },
@@ -105,8 +109,11 @@ export class VkWebsite {
     try {
       await Promise.race([window.loadURL(url), new Promise<never>((_, reject) => { deadline = setTimeout(reject, 18_000); })]);
       if (this.revision === revision) this.logs.main('vk.websiteOpened');
-    } catch {
+    } catch (error) {
       if (this.revision !== revision || window.isDestroyed()) return;
+      // A site-initiated first-party login/navigation can replace the initial load.
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_ABORTED'
+        && isVkWebsiteUrl(window.webContents.getURL())) return;
       window.destroy();
       // Do not forward Electron's raw error (may contain private redirect URLs).
       throw new Error('VK Music website unavailable');

@@ -1256,6 +1256,7 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .service-search-link > svg { color: var(--service-tone); }
 .service-search-link strong, .service-search-link small { display: block; overflow-wrap: anywhere; }
 .service-search-link strong { font: 760 12px/1.2 var(--display); }
+.service-search-fallback { display: inline-flex; min-height: 26px; }
 .service-search-link small { margin-top: 3px; color: var(--muted); font-size: 10px; }
 .vk-native-account { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; background: linear-gradient(112deg, #1c2c45, #191f30 75%); }
 .vk-account-copy { flex: 1 1 220px; min-width: 0; }
