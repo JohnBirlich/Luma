@@ -43,21 +43,22 @@ export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabl
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
   const [tracks, setTracks] = useState<OnlineTrack[] | undefined>();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [failure, setFailure] = useState<{ cause: unknown }>();
   const pending = useRef<AbortController | null>(null);
+  const platformOnly = (id: string) => !window.luma && (id === 'netlabels' || id === 'southern_city');
   useEffect(() => () => pending.current?.abort(), []);
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || !connected || query.trim().length < 2) return;
+    if (busy || !connected || platformOnly(filter) || query.trim().length < 2) return;
     const request = pending.current = new AbortController();
     setBusy(true);
     setTracks(undefined);
-    setError('');
+    setFailure(undefined);
     try {
       const items = await findOnlineTracks(query, filter, request.signal);
       if (!request.signal.aborted) setTracks(items);
-    } catch (error) { if (!request.signal.aborted) setError(message(error, t)); }
+    } catch (error) { if (!request.signal.aborted) setFailure({ cause: error }); }
     finally { if (!request.signal.aborted) setBusy(false); }
   }
 
@@ -70,14 +71,14 @@ export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabl
     {!connected && <p className="online-offline" role="status"><CloudOff size={17} />{" "}{t("Устройство вне сети. Онлайн-поиск пока недоступен.")}</p>}
     <form id="online-search-form" className="online-search-form" onSubmit={search}>
       <select value={filter} aria-label={t("Источник онлайн-поиска")} onChange={(event) => {
-        pending.current?.abort(); setBusy(false); setTracks(undefined); setError(''); setFilter(event.currentTarget.value as OnlineFilter);
+        pending.current?.abort(); setBusy(false); setTracks(undefined); setFailure(undefined); setFilter(event.currentTarget.value as OnlineFilter);
       }}>
         <option value="all">Jamendo + Wikimedia Commons</option>
-        {Object.entries(ONLINE_FILTERS).map(([id, name]) => <option key={id} value={id}>{t(name)}{!window.luma && (id === 'southern_city' || id === 'netlabels') ? ' · Windows' : ''}</option>)}
+        {Object.entries(ONLINE_FILTERS).map(([id, name]) => <option key={id} value={id} disabled={platformOnly(id)}>{t(name)}{platformOnly(id) ? ' · Windows' : ''}</option>)}
       </select>
       <button className="button primary-button" type="submit" disabled={busy || !connected || query.trim().length < 2}><Search size={16} /> {busy ? t("Ищем…") : t("Искать онлайн")}</button>
     </form>
-    {error && <p className="online-message error" role="alert">{error}</p>}
+    {failure && <p className="online-message error" role="alert">{message(failure.cause, t)}</p>}
     {tracks && <p className="online-message" role="status">{tracks.length ? t("Доступно записей: {0}", tracks.length) : t("Подходящих записей нет. Попробуйте другой запрос или источник.")}</p>}
     {tracks && tracks.length > 0 && <ul className="online-results">
       {tracks.map((track) => <li key={track.id}>
@@ -104,7 +105,7 @@ export function OnlineImport({ disabled, save }: { disabled: boolean; save(track
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [failure, setFailure] = useState<{ cause: unknown }>();
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
   async function add(event: FormEvent<HTMLFormElement>) {
@@ -112,11 +113,11 @@ export function OnlineImport({ disabled, save }: { disabled: boolean; save(track
     if (busy || disabled || !connected) return;
     const request = pending.current = new AbortController();
     setBusy(true);
-    setError('');
+    setFailure(undefined);
     try {
       const track = await importOnlineTrack(link, request.signal);
       if (!request.signal.aborted) { save(track); setLink(''); }
-    } catch (error) { if (!request.signal.aborted) setError(message(error, t)); }
+    } catch (error) { if (!request.signal.aborted) setFailure({ cause: error }); }
     finally { if (!request.signal.aborted) setBusy(false); }
   }
   return <section className="online-import" aria-labelledby="online-import-heading">
@@ -126,6 +127,6 @@ export function OnlineImport({ disabled, save }: { disabled: boolean; save(track
       <input type="url" required maxLength={2048} aria-label={t("Ссылка на запись Openverse")} placeholder="https://openverse.org/audio/…" value={link} onChange={(event) => setLink(event.currentTarget.value)} />
       <button className="button outline-button" disabled={busy || disabled || !connected || !link.trim()} type="submit"><Link2 size={16} /> {busy ? t("Проверяем…") : t("Сохранить ссылку")}</button>
     </form>
-    {error && <p className="online-message error" role="alert">{error}</p>}
+    {failure && <p className="online-message error" role="alert">{message(failure.cause, t)}</p>}
   </section>;
 }

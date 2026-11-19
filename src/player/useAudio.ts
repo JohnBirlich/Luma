@@ -14,10 +14,11 @@ export type ReadSpectrum = (buffer: Uint8Array<ArrayBuffer>) => boolean;
 
 interface Snapshot {
   playing: boolean;
+  loading?: boolean;
   elapsed: number;
   duration: number;
   error: string;
-  stream?: { id: string; url: string };
+  stream?: { id: string; url: string; cached: boolean };
 }
 interface Transition {
   seconds: number;
@@ -109,6 +110,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
   const fading = useRef<{ audio: HTMLAudioElement; timeout: number } | null>(null);
   const token = useRef(0);
   const playIntent = useRef(0);
+  const pendingOnline = useRef<Deck | null>(null);
   const loadStarted = useRef(0);
   const native = useRef<FloatSink | undefined>(undefined);
   const [floatStatus, setFloatStatus] = useState<FloatStatus>('system');
@@ -210,7 +212,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
         play: () => {
           if (audio.paused) return;
           recordDiagnostic('audio.play');
-          setSnapshot((previous) => ({ ...previous, playing: true }));
+          setSnapshot((previous) => ({ ...previous, playing: true, loading: false }));
         },
         playing: (deck) => { if (!audio.paused) { trackStarted(deck.track.id); markListening(deck); } },
         seeking: (deck) => deck.listening?.interrupt(),
@@ -221,7 +223,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
           if (!audio.paused) return;
           cancelTransitions();
           recordDiagnostic('audio.pause');
-          setSnapshot((previous) => ({ ...previous, playing: false }));
+          setSnapshot((previous) => ({ ...previous, playing: false, loading: false }));
         },
         loadedmetadata: () => recordDiagnostic('audio.ready', { ms: performance.now() - loadStarted.current }),
         timeupdate: (deck) => {
@@ -236,14 +238,14 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
         ended: (deck) => {
           deck.listening = undefined;
           cancelTransitions();
-          setSnapshot((previous) => ({ ...previous, playing: false }));
+          setSnapshot((previous) => ({ ...previous, playing: false, loading: false }));
           ended.current();
         },
         error: () => {
           if (!audio.error) return;
           cancelTransitions();
           recordDiagnostic('audio.error', { code: audio.error.code });
-          setSnapshot((previous) => ({ ...previous, playing: false, error: errorText() }));
+          setSnapshot((previous) => ({ ...previous, playing: false, loading: false, error: errorText() }));
         },
       };
       const bindings = Object.entries(listeners).map(([event, callback]) => {
@@ -268,26 +270,36 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     const deck = active.current;
     if (!deck) return;
     const { audio, track } = deck;
-    if (track.online && native.current) {
-      await native.current.set(false);
-      if (intent !== playIntent.current || active.current !== deck) return;
-    }
-    if (track.online && (!audio.getAttribute('src') || audio.error)) {
-      const cached = track.online.source === 'wikimedia_audio' && window.luma?.streamCache
-        ? await window.luma.streamCache.url(track).catch(() => null) : null;
-      if (intent !== playIntent.current || active.current !== deck) return;
-      if (!cached && !navigator.onLine) {
-        setSnapshot((previous) => ({ ...previous, playing: false, error: 'Устройство вне сети. Для онлайн-треков нужно подключение.' }));
-        return;
+    if (track.online) {
+      const hasSource = !!audio.getAttribute('src') && !audio.error;
+      const retryOffline = hasSource && audio.paused && !navigator.onLine && !audio.src.startsWith('luma:');
+      pendingOnline.current = deck;
+      if (audio.paused) setSnapshot((previous) => ({ ...previous, loading: true, error: '' }));
+      try {
+        if (native.current) await native.current.set(false);
+        if (intent !== playIntent.current || active.current !== deck) return;
+        if (!hasSource || retryOffline) {
+          const cached = track.online.source === 'wikimedia_audio' && window.luma?.streamCache
+            ? await window.luma.streamCache.url(track).catch(() => null) : null;
+          if (intent !== playIntent.current || active.current !== deck) return;
+          if (!cached && !navigator.onLine && !hasSource) {
+            setSnapshot((previous) => ({ ...previous, playing: false, loading: false, error: 'Устройство вне сети. Для онлайн-треков нужно подключение.' }));
+            return;
+          }
+          if (cached || !hasSource) {
+            loadStarted.current = performance.now();
+            recordDiagnostic('audio.loading');
+            // A restored queue never fetches audio until the user starts playing.
+            const q = settings.current.quality;
+            const connection = (navigator as Navigator & { connection?: { type?: string; saveData?: boolean } }).connection;
+            const url = streamUrl(track, isMetered(q.network, connection) ? q.metered : q.normal);
+            audio.src = cached ?? url;
+            setSnapshot((previous) => ({ ...previous, stream: { id: track.id, url, cached: !!cached } }));
+          }
+        }
+      } finally {
+        if (intent === playIntent.current && pendingOnline.current === deck) pendingOnline.current = null;
       }
-      loadStarted.current = performance.now();
-      recordDiagnostic('audio.loading');
-      // Select quality when actually starting a stream. A restored queue never starts a download.
-      const q = settings.current.quality;
-      const connection = (navigator as Navigator & { connection?: { type?: string; saveData?: boolean } }).connection;
-      const url = streamUrl(track, isMetered(q.network, connection) ? q.metered : q.normal);
-      audio.src = cached ?? url;
-      setSnapshot((previous) => ({ ...previous, stream: { id: track.id, url } }));
     }
     if (!track.online) {
       if (!graph.current && !graphUnavailable.current) {
@@ -307,17 +319,17 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     setSnapshot((previous) => ({ ...previous, error: '' }));
     const version = token.current;
     const deadline = track.online ? window.setTimeout(() => {
-      if (version !== token.current || audio.paused || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
+      if (intent !== playIntent.current || version !== token.current || audio.paused || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
       unload(audio);
       recordDiagnostic('audio.error', { code: 0 });
       setSnapshot({ ...stopped, duration: track.duration, error: 'Источник не ответил вовремя. Повторите попытку или откройте страницу записи.' });
     }, 15_000) : undefined;
     void audio.play().catch((error: unknown) => {
-      if (version !== token.current || (error instanceof DOMException && error.name === 'AbortError')) return;
+      if (intent !== playIntent.current || version !== token.current || (error instanceof DOMException && error.name === 'AbortError')) return;
       const autoplayBlocked = error instanceof DOMException && error.name === 'NotAllowedError';
       recordDiagnostic(autoplayBlocked ? 'audio.blocked' : 'audio.error', { code: audio.error?.code ?? 0 });
       setSnapshot((previous) => ({
-        ...previous, playing: false, error: autoplayBlocked ? 'Нажмите «Воспроизвести», чтобы начать.' : errorText(),
+        ...previous, playing: false, loading: false, error: autoplayBlocked ? 'Нажмите «Воспроизвести», чтобы начать.' : errorText(),
       }));
     }).finally(() => window.clearTimeout(deadline));
   }, [errorText]);
@@ -326,6 +338,8 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     const previous = active.current;
     if (track?.id !== previous?.track.id || track?.audioUrl !== previous?.track.audioUrl) {
       token.current++;
+      playIntent.current++;
+      pendingOnline.current = null;
       cancelTransitions();
       active.current = null;
       if (previous) unload(previous.audio);
@@ -345,9 +359,16 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     if (track && autoplay) play();
   }, [cancelTransitions, play]);
 
-  const pause = useCallback(() => { playIntent.current++; cancelTransitions(); active.current?.audio.pause(); }, [cancelTransitions]);
+  const pause = useCallback(() => {
+    playIntent.current++;
+    pendingOnline.current = null;
+    cancelTransitions();
+    active.current?.audio.pause();
+    setSnapshot((previous) => previous.loading ? { ...previous, loading: false } : previous);
+    void native.current?.set(false);
+  }, [cancelTransitions]);
   const toggle = useCallback(() => {
-    if (active.current?.audio.paused) play();
+    if (active.current?.audio.paused && !pendingOnline.current) play();
     else pause();
   }, [play, pause]);
   const isPlaying = useCallback(() => {

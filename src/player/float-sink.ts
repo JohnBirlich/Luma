@@ -14,13 +14,11 @@ export class FloatSink {
   private stopListening: () => void;
   private closed = false;
   constructor(private context: SwitchableContext, private master: GainNode, private bridge: DesktopBridge['floatOutput'], private status: (status: FloatStatus) => void) {
-    this.stopListening = bridge.onLost(() => {
-      void this.set(false).then(() => { if (!this.closed) this.status('failed'); });
-    });
+    this.stopListening = bridge.onLost(() => { void this.set(false, 'failed'); });
   }
   private async restoreSystem() {
     if (this.node) {
-      this.master.disconnect(this.node);
+      try { this.master.disconnect(this.node); } catch { /* Audio graph already closed or never connected. */ }
       this.node.disconnect();
       this.node.port.close();
       this.node = undefined;
@@ -31,7 +29,7 @@ export class FloatSink {
       this.silent = false;
     }
   }
-  set(wanted: boolean) {
+  set(wanted: boolean, stopped: 'system' | 'failed' = 'system') {
     if (this.closed && wanted) return this.chain;
     const id = ++this.revision;
     const current = () => this.revision === id;
@@ -39,7 +37,7 @@ export class FloatSink {
     this.chain = this.chain.then(async () => {
       if (!current()) return;
       try {
-        if (!wanted) { await this.restoreSystem(); status('system'); return; }
+        if (!wanted) { await this.restoreSystem(); status(stopped); return; }
         if (this.node) return;
         if (!this.context.setSinkId || !this.context.audioWorklet) { status('missing'); return; }
         if (!await this.bridge.available() || !current()) { status('missing'); return; }
@@ -59,7 +57,7 @@ export class FloatSink {
         node.port.onmessage = ({ data }) => {
           if (this.node === node && data instanceof ArrayBuffer) { this.bridge.write(data); node.port.postMessage(1); }
         };
-        node.onprocessorerror = () => { void this.set(false).then(() => { if (!this.closed) this.status('failed'); }); };
+        node.onprocessorerror = () => { if (this.node === node) void this.set(false, 'failed'); };
         this.master.connect(node).connect(this.context.destination);
         status('running');
       } catch {

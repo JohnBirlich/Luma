@@ -42,6 +42,8 @@ const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
 const cover = await readFile(join(root, 'public/artwork/afterimage.webp'));
 const tagged = join(profile, 'Ты здесь.mp3');
 const broken = join(profile, 'Без обложки.mp3');
+await writeFile(join(profile, 'Ты здесь.lrc'), '[00:00.00] Локальная строка\n[00:01.25] Следующая строка');
+await writeFile(join(profile, 'Ты здесь.lyrics.txt'), 'Простой текст локальной записи');
 await writeFile(tagged, taggedMp3(sample, {
   title: 'Òû çäåñü', artist: 'Àðèÿ', album: 'Æèâîé çâóê', picture: { mime: 'image/webp', data: cover },
 }));
@@ -127,6 +129,18 @@ async function smoke() {
     await image.decode(); return [image.naturalWidth, image.naturalHeight];
   })()`);
   assert.deepEqual(dimensions, [384, 384]);
+  await waitFor('sidecar LRC has priority over plain lyrics', () => run(`document.querySelector('.lyrics-scroll [aria-current="true"]')?.textContent === 'Локальная строка'`));
+  await run(`(() => { document.querySelector('audio').currentTime = 1.5; })()`);
+  await waitFor('seek updates the highlighted line', () => run(`document.querySelector('.lyrics-scroll [aria-current="true"]')?.textContent === 'Следующая строка'`));
+  await run(`(() => {
+    const field = document.querySelector('.lyrics-sources input');
+    const file = new DataTransfer();
+    file.items.add(new File(['Прикреплённый текст'], 'lyrics.txt', { type: 'text/plain' }));
+    field.files = file.files; field.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await waitFor('manual TXT replaces the sidecar', () => run(`document.querySelector('.lyrics-plain')?.textContent === 'Прикреплённый текст'`));
+  await run(`[...document.querySelectorAll('.lyrics-sources button')].find((item) => item.textContent === 'Убрать текст из файла').click()`);
+  await waitFor('clearing the override restores the sidecar', () => run(`document.querySelector('.lyrics-scroll [aria-current="true"]')?.textContent === 'Следующая строка'`));
 
   await run(`[...document.querySelectorAll('.nav-item')].find((item) => item.textContent.startsWith('Медиатека')).click()`);
   const second = `.card-play[aria-label="Воспроизвести Ty Zdes'"]`;
@@ -139,6 +153,7 @@ async function smoke() {
   assert.equal((await run('window.luma.getAppInfo()')).version, version);
   const go = (name) => run(`[...document.querySelectorAll('nav .nav-item')].find((item) => item.getAttribute('aria-label') === ${JSON.stringify(name)}).click()`);
   await go('Главная');
+  assert.ok(!(await run(`document.querySelector('.lyrics-card')?.textContent.includes('Локальная строка')`)), 'previous lyrics do not carry over');
   await waitFor('appearance button', () => run(`!!document.querySelector('.scene-open')`));
   await run(`document.querySelector('.scene-open').click()`);
   await waitFor('appearance dialog', () => run(`!!document.querySelector('.scene-dialog[open]')`));
@@ -271,7 +286,9 @@ async function smoke() {
   const lyricQueries = [];
   const economyUrl = jamendoRecording.url.replace('format=mp32', 'format=mp31');
 
+  let offlineFixture = false;
   session.defaultSession.protocol.handle('https', async (request) => {
+    if (offlineFixture) return new Response(null, { status: 503 });
     const url = new URL(request.url);
     if (url.origin === 'https://itunes.apple.com' && url.pathname === '/search') {
       const term = url.searchParams.get('term');
@@ -363,6 +380,24 @@ async function smoke() {
     await click('.player-bar .play-button');
     await waitFor('pause cancels the retiring deck', () => run(`[...document.querySelectorAll('audio')].every((item) => item.paused) && !document.querySelector('audio').hasAttribute('src')`));
     console.log('::notice title=Local crossfade::Two decoded tracks overlap before the first ends. Pausing stops both decks immediately.');
+
+    if (process.platform === 'win32') {
+      await settings('Качество аудио');
+      const toggle = '[role="switch"][aria-label="Попробовать Float-вывод"]';
+      await waitFor('experimental Float toggle available', () => run(`document.querySelector('${toggle}')?.disabled === false`));
+      await click(toggle);
+      await click('.player-bar .play-button');
+      const status = await waitFor('Float graph reaches driver result', () => run(`(() => {
+        const state = document.querySelector('.settings-page .setting-body-copy[role="status"]')?.textContent;
+        return /WASAPI Exclusive|Устройство занято или не приняло Float32/.test(state ?? '') ? state : false;
+      })()`));
+      await waitFor('local decoding continues', () => run(`[...document.querySelectorAll('audio:not([data-online-audio])')].some((audio) => !audio.paused && audio.currentTime > .5)`));
+      await click(toggle);
+      await waitFor('system output restored', () => run(`document.querySelector('.settings-page .setting-body-copy[role="status"]')?.textContent === 'Системный вывод'`));
+      await click('.player-bar .play-button');
+      await click('.settings-return');
+      console.log(`::notice title=Float output in playback::${status}`);
+    }
 
     await go('Поиск');
     await waitFor('collection search', () => run(`!!document.querySelector('main input[type="search"]')`));
@@ -503,8 +538,6 @@ async function smoke() {
     })()`));
     assert.equal(streamCalls.filter((url) => url === synced.url).length, beforeCache + 1, 'cached playback makes no request for the source audio');
     await click('.player-bar .play-button');
-    assert.deepEqual(await run('window.luma.streamCache.clear()'), { count: 0, bytes: 0 });
-    assert.ok((await preferences()).onlineTracks.some(({ id }) => id === `ov-${synced.id}`), 'cache cleanup keeps bookmarks');
 
     await settings('Внешний вид');
     await select('label:has(select option[value="en"]) select', 'en');
@@ -514,9 +547,43 @@ async function smoke() {
     await waitFor('settings returns to the same page with search input intact', () => run(`document.querySelector('main input[type="search"]')?.value === 'fixture-mp3'`));
     await click('.title-settings');
     await waitFor('most recent settings section reopens', () => run(`document.querySelector('.settings-page h1')?.textContent === 'Appearance'`));
+    await click('.settings-return');
+    const reloaded = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
+    window.webContents.reload();
+    await reloaded;
+    await waitFor('English preference survives a renderer restart', () => run(`document.documentElement.lang === 'en' && !!document.querySelector('[aria-label="Home"]')`));
+    await click('.title-settings');
+    await waitFor('English settings index', () => run(`!!document.querySelector('.settings-page [aria-label="Appearance"]')`));
+    await click('.settings-page [aria-label="Appearance"]');
     await select('label:has(select option[value="en"]) select', 'ru');
     await waitFor('Russian interface restored', () => run(`document.documentElement.lang === 'ru'`));
     await click('.settings-return');
+
+    offlineFixture = true;
+    await run(`Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+      window.dispatchEvent(new Event('offline'));`);
+    await go('Медиатека');
+    await click('.collection-tabs button:last-child');
+    await click(`button.card-play[aria-label="Воспроизвести ${synced.title}"]`);
+    const cacheUrl = await waitFor('cached bookmark decodes offline after reload', () => run(`(() => {
+      const audio = document.querySelector('${onlineAudio}');
+      return audio.currentTime > .12 && audio.currentSrc.startsWith('luma://app/media/cache/') && audio.currentSrc;
+    })()`));
+    const partial = await run(`(async () => {
+      const reply = await fetch(${JSON.stringify(cacheUrl)}, { headers: { Range: 'bytes=16-31' } });
+      return { status: reply.status, range: reply.headers.get('Content-Range'), bytes: Array.from(new Uint8Array(await reply.arrayBuffer())) };
+    })()`);
+    assert.deepEqual(partial, { status: 206, range: `bytes 16-31/${sample.length}`, bytes: [...sample.subarray(16, 32)] });
+    await run(`document.querySelector('${onlineAudio}').currentTime = 12`);
+    await waitFor('offline seeking succeeds', () => run(`document.querySelector('${onlineAudio}').currentTime > 12.05`));
+    await click('.player-bar .play-button');
+    assert.equal(streamCalls.filter((url) => url === synced.url).length, beforeCache + 1);
+    assert.deepEqual(await run('window.luma.streamCache.clear()'), { count: 0, bytes: 0 });
+    assert.ok((await preferences()).onlineTracks.some(({ id }) => id === `ov-${synced.id}`), 'cache cleanup keeps bookmarks');
+    offlineFixture = false;
+    await run(`delete navigator.onLine; window.dispatchEvent(new Event('online'));`);
+    console.log('::notice title=Cache and localization::Switched RU/EN and reloaded; verified offline MP3 playback, byte ranges, seeking and cache cleanup.');
+
   } finally {
     session.defaultSession.protocol.unhandle('https');
     vkSession.protocol.unhandle('https');

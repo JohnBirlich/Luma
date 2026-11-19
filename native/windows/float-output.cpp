@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 namespace {
@@ -64,7 +65,7 @@ int play(DWORD rate) {
     }
     Event available;
     ComPtr<IAudioRenderClient> render;
-    if (FAILED(result) || !available.value || FAILED(client->GetBufferSize(&frames)) || !frames || frames > rate / 2 ||
+    if (FAILED(result) || !available.value || FAILED(client->GetBufferSize(&frames)) || !frames || frames > rate / 8 ||
         FAILED(client->SetEventHandle(available.value)) || FAILED(client->GetService(IID_PPV_ARGS(&render)))) {
         say("unsupported"); return 2;
     }
@@ -76,29 +77,36 @@ int play(DWORD rate) {
     const DWORD capacity = frames * FrameBytes;
     // Exclusive, event-driven playback requires the complete buffer on each wake-up.
     // The parent bounds the pipe backlog, and a stalled or closed parent cannot keep the device open indefinitely.
+    std::vector<float> fifo(3 * capacity / sizeof(float));
+    auto* fifoBytes = reinterpret_cast<BYTE*>(fifo.data());
+    DWORD buffered = 0;
+    bool priming = true;
     unsigned empty = 0;
     for (;;) {
         if (WaitForSingleObject(available.value, 2000) != WAIT_OBJECT_0) break;
         DWORD waiting = 0;
         if (!PeekNamedPipe(pipe, nullptr, 0, nullptr, &waiting, nullptr)) break;
-        const DWORD bytes = std::min(capacity, waiting - waiting % FrameBytes);
-        if (bytes < FrameBytes) {
-            if (++empty >= 200) break;
-            if (FAILED(render->GetBuffer(frames, &data)) || FAILED(render->ReleaseBuffer(frames, AUDCLNT_BUFFERFLAGS_SILENT))) break;
+        const DWORD bytes = std::min(3 * capacity - buffered, waiting - waiting % FrameBytes);
+        if (bytes) {
+            DWORD read = 0;
+            if (!ReadFile(pipe, fifoBytes + buffered, bytes, &read, nullptr) || read % FrameBytes) break;
+            buffered += read;
+            empty = 0;
+        } else if (++empty >= 200) break;
+        if (FAILED(render->GetBuffer(frames, &data))) break;
+        if (buffered < (priming ? capacity + capacity / 2 : capacity)) {
+            priming = true; // Recover jitter without inserting silence in the middle of a partial frame block.
+            if (FAILED(render->ReleaseBuffer(frames, AUDCLNT_BUFFERFLAGS_SILENT))) break;
             continue;
         }
-        empty = 0;
-        if (FAILED(render->GetBuffer(frames, &data))) break;
-        DWORD read = 0;
-        if (!ReadFile(pipe, data, bytes, &read, nullptr) || read % FrameBytes) {
-            render->ReleaseBuffer(frames, AUDCLNT_BUFFERFLAGS_SILENT);
-            break;
+        priming = false;
+        auto* samples = reinterpret_cast<float*>(data);
+        for (DWORD i = 0; i < capacity / sizeof(float); ++i) {
+            const auto sample = fifo[i];
+            samples[i] = std::isfinite(sample) ? std::clamp(sample, -1.0f, 1.0f) : 0.0f;
         }
-        for (DWORD i = 0; i < read / sizeof(float); ++i) {
-            auto& sample = reinterpret_cast<float*>(data)[i];
-            sample = std::isfinite(sample) ? std::clamp(sample, -1.0f, 1.0f) : 0.0f;
-        }
-        std::memset(data + read, 0, capacity - read);
+        buffered -= capacity;
+        std::memmove(fifoBytes, fifoBytes + capacity, buffered);
         if (FAILED(render->ReleaseBuffer(frames, 0))) break;
     }
     client->Stop();

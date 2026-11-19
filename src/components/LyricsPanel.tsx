@@ -59,7 +59,7 @@ export function LyricsPanel({ track, elapsed, playing, auto, connected }: {
     setAttachError(false);
     try {
       if (file.size > MAX_LYRIC_FILE || !/\.(?:txt|lrc)$/i.test(file.name)) throw new Error('Invalid file');
-      const text = await file.text();
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
       const lyrics = /\.lrc$/i.test(file.name) ? readLocalLyrics(undefined, text) : readLocalLyrics(text);
       if (!lyrics) throw new Error('No lyrics');
       setAttached(lyrics); setEditionOpen(false);

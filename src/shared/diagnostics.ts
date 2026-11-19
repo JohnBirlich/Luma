@@ -1,3 +1,5 @@
+import { textFor } from '../i18n/text.js';
+import type { Text } from '../i18n/text.js';
 import { runtimeMode } from './app-info.js';
 import type { AppInfo } from './app-info.js';
 
@@ -110,25 +112,30 @@ export function readLog(raw: string | null, source?: Source): LogEntry[] {
   } catch { return []; }
 }
 
-export function displayValues({ values }: LogEntry): string[] {
+export function diagnosticSystem(system: string, t: Text) {
+  const build = /^(Windows[^·]*) · сборка (\d+)$/.exec(system);
+  return build ? t("{0} · сборка {1}", build[1], build[2]) : t(system);
+}
+
+export function displayValues({ values }: LogEntry, t: Text = textFor('ru')): string[] {
   return (Object.keys(FIELDS) as Field[]).flatMap((key) => {
     const value = values[key];
-    return value === undefined ? [] : [`${FIELDS[key]}: ${value}${key === 'ms' ? ' мс' : ''}`];
+    return value === undefined ? [] : [`${t(FIELDS[key])}: ${key === 'ms' ? t("{0} мс", value) : value}`];
   });
 }
 
 export const reportFilename = () => `Luma-diagnostics-${new Date().toISOString().slice(0, 10)}.log`;
 
-export function diagnosticsReport({ entries, environment }: DiagnosticSnapshot): string {
+export function diagnosticsReport({ entries, environment }: DiagnosticSnapshot, t: Text = textFor('ru')): string {
   const info = [
-    `Luma Player ${environment.version} · ${runtimeMode[environment.mode]}`,
-    `Система: ${environment.system}`, `Среда: ${environment.runtime}`,
-    `Сеть: ${environment.online ? 'устройство в сети' : 'устройство вне сети'}`, `Записей: ${entries.length}`, '',
+    `Luma Player ${environment.version} · ${t(runtimeMode[environment.mode])}`,
+    t("Система: {0}", diagnosticSystem(environment.system, t)), t("Среда: {0}", t(environment.runtime)),
+    t("Сеть: {0}", environment.online ? t("устройство в сети") : t("устройство вне сети")), t("Записей: {0}", entries.length), '',
   ];
   const lines = entries.map((entry) => {
     const [, area, level, message] = LOG_EVENTS[entry.event];
-    const values = displayValues(entry);
-    return `${new Date(entry.at).toISOString()} [${LOG_LEVELS[level]}] ${LOG_AREAS[area]} (${entry.event}) — ${message}${values.length ? ` · ${values.join(' · ')}` : ''}`;
+    const values = displayValues(entry, t);
+    return `${new Date(entry.at).toISOString()} [${t(LOG_LEVELS[level])}] ${t(LOG_AREAS[area])} (${entry.event}) — ${t(message)}${values.length ? ` · ${values.join(' · ')}` : ''}`;
   });
   return [...info, ...lines, ''].join('\n');
 }

@@ -86,6 +86,7 @@ interface PlayerPageProps {
   openPresentation(): void;
   sceneVisible: boolean;
   playing: boolean;
+  loading: boolean;
   position: number;
   count: number;
   eqEnabled: boolean;
@@ -145,8 +146,8 @@ export function PlayerPage(props: PlayerPageProps) {
           </div>
           <div className="hero-actions-row">
             <button type="button" className="button primary-button hero-action" onClick={track ? props.toggle : props.addMusic}>
-              {track ? playing ? <Pause size={16} fill="currentColor" /> : <Play className="play-icon" size={16} fill="currentColor" /> : <Plus size={18} />}
-              <span>{track ? playing ? t("Пауза") : t("Воспроизвести") : t("Добавить музыку")}</span>
+              {track ? playing || props.loading ? <Pause size={16} fill="currentColor" /> : <Play className="play-icon" size={16} fill="currentColor" /> : <Plus size={18} />}
+              <span>{track ? props.loading ? t("Отменить загрузку") : playing ? t("Пауза") : t("Воспроизвести") : t("Добавить музыку")}</span>
             </button>
             {track && <>
               <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />

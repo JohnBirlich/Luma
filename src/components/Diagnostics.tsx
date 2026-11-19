@@ -2,7 +2,7 @@ import { useText } from '../i18n/context';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowLeft, Bug, Copy, Monitor, Radio, Terminal, Trash2 } from 'lucide-react';
 import { clearDiagnostics, getDiagnostics, saveDiagnostics, subscribeDiagnostics } from '../data/diagnostics';
-import { diagnosticsReport, displayValues, LOG_AREAS, LOG_EVENTS, LOG_LEVELS, MAX_LOG_ENTRIES } from '../shared/diagnostics';
+import { diagnosticSystem, diagnosticsReport, displayValues, LOG_AREAS, LOG_EVENTS, LOG_LEVELS, MAX_LOG_ENTRIES } from '../shared/diagnostics';
 import { runtimeMode } from '../shared/app-info';
 import type { DiagnosticSnapshot, LogArea } from '../shared/diagnostics';
 
@@ -24,7 +24,7 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
       const request = ++revision;
       void getDiagnostics().then((data) => {
         if (active && request === revision) setSnapshot(data);
-      }).catch(() => { if (active) setStatus(t("Не удалось прочитать журнал.")); });
+      }).catch(() => { if (active) setStatus("Не удалось прочитать журнал."); });
     };
     const unsubscribe = subscribeDiagnostics(() => {
       if (!frame) frame = requestAnimationFrame(() => { frame = 0; refresh(); });
@@ -46,11 +46,11 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
       if (kind === 'clear') {
         setSnapshot(await clearDiagnostics());
         setConfirm(false);
-        setStatus(t("Журнал очищен."));
+        setStatus("Журнал очищен.");
       } else if (kind === 'save') {
-        if (await saveDiagnostics()) setStatus(t("Отчёт сохранён."));
+        if (await saveDiagnostics(t)) setStatus("Отчёт сохранён.");
       } else {
-        const text = diagnosticsReport(snapshot);
+        const text = diagnosticsReport(snapshot, t);
         try { await navigator.clipboard.writeText(text); }
         catch {
           const copy = document.createElement('textarea');
@@ -62,9 +62,9 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
           try { if (!document.execCommand('copy')) throw new Error('Clipboard unavailable'); }
           finally { copy.remove(); if (previous instanceof HTMLElement) previous.focus(); }
         }
-        setStatus(t("Отчёт скопирован."));
+        setStatus("Отчёт скопирован.");
       }
-    } catch { setStatus(t("Не удалось выполнить действие. Попробуйте сохранить отчёт в файл.")); }
+    } catch { setStatus("Не удалось выполнить действие. Попробуйте сохранить отчёт в файл."); }
     finally { setWorking(false); }
   }
 
@@ -79,7 +79,7 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
     <p className="diagnostic-intro">{t("Журнал запуска, загрузки, подключения к VK и локального воспроизведения.")}</p>
     {system && snapshot && <section className="diagnostic-system" aria-label={t("Сведения о приложении")}>
       <div><div className="diagnostic-system-icon"><Terminal size={18} /></div><span><small>{t("Версия Luma")}</small><strong>{system.version}</strong><span>{t(runtimeMode[system.mode])}</span></span></div>
-      <div><div className="diagnostic-system-icon"><Monitor size={18} /></div><span><small>{t("Система")}</small><strong>{system.system}</strong><span>{system.runtime}</span></span></div>
+      <div><div className="diagnostic-system-icon"><Monitor size={18} /></div><span><small>{t("Система")}</small><strong>{diagnosticSystem(system.system, t)}</strong><span>{t(system.runtime)}</span></span></div>
       <div><div className="diagnostic-system-icon"><Radio size={18} /></div><span><small>{t("Подключение")}</small><strong>{system.online ? t("Устройство в сети") : t("Устройство вне сети")}</strong><span>{t(storageLabel[snapshot.storage])}</span></span></div>
     </section>}
     <section className="journal" aria-label={t("Журнал приложения")}>
@@ -102,7 +102,7 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
       {!!rows.length && <ol className="journal-entries" aria-label={t("События, новые сверху")}>
         {rows.map((item, index) => {
           const [, group, level, text] = LOG_EVENTS[item.event];
-          const values = displayValues(item);
+          const values = displayValues(item, t);
           return <li key={`${item.at}-${item.event}-${snapshot!.entries.length - index}`} className={`journal-entry level-${level}`}>
             <time dateTime={new Date(item.at).toISOString()}>{localTime.format(item.at)}</time>
             <span className="journal-level">{t(LOG_LEVELS[level])}</span>
@@ -113,6 +113,6 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
       {snapshot && !rows.length && <p className="journal-empty">{snapshot.entries.length ? t("Нет событий с выбранными фильтрами.") : t("Записей пока нет. Новые события появятся здесь автоматически.")}</p>}
     </section>
     <p className="diagnostic-note">{t("Храним последние")}{" "}{MAX_LOG_ENTRIES}{" "}{t("событий локально. Без имён треков, путей, ссылок и токенов. Экспортируются все записи, не только отфильтрованные.")}</p>
-    <div className="diagnostic-action-status" role="status">{status}</div>
+    <div className="diagnostic-action-status" role="status">{t(status)}</div>
   </div>;
 });

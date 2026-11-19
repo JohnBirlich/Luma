@@ -860,5 +860,19 @@ export const english: Record<string, string> = {
   "Float-вывод недоступен в этом окружении.": "Float output is unavailable in this environment.",
   "Для локальных файлов: выделенный WASAPI Exclusive в стерео IEEE Float32, только если драйвер принимает точный формат. Не меняет разрядность исходника и не гарантирует bit-perfect.": "For local files: WASAPI exclusive stereo IEEE Float32, only if the driver accepts the exact format. This does not change the source bit depth or guarantee bit-perfect playback.",
   "Попробовать Float-вывод": "Try Float output",
-  "Устройство может быть временно занято Luma. При несовместимости звук остаётся на системном выходе. VK и онлайн-потоки не затрагиваются.": "Luma may temporarily reserve the device. Incompatible devices use system output. VK and online streams are not affected."
+  "Устройство может быть временно занято Luma. При несовместимости звук остаётся на системном выходе. VK и онлайн-потоки не затрагиваются.": "Luma may temporarily reserve the device. Incompatible devices use system output. VK and online streams are not affected.",
+  "Система: {0}": "System: {0}",
+  "Среда: {0}": "Runtime: {0}",
+  "Сеть: {0}": "Network: {0}",
+  "Записей: {0}": "Entries: {0}",
+  "устройство в сети": "device online",
+  "устройство вне сети": "device offline",
+  "{0} мс": "{0} ms",
+  "{0} · сборка {1}": "{0} · build {1}",
+  "Windows · сборка неизвестна": "Windows · unknown build",
+  "Windows · выпуск не определён": "Windows · release unavailable",
+  "Windows 11 или новее": "Windows 11 or later",
+  "Не определена": "Unknown",
+  "Браузер": "Browser",
+  "Отменить загрузку": "Cancel loading"
 };

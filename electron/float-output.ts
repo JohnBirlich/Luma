@@ -54,7 +54,7 @@ export class DesktopFloatOutput {
   drain(bytes: unknown) {
     const playback = this.playback;
     if (!playback?.started || playback.stopping || !(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 24 * 1024
-      || bytes.byteLength % FLOAT_FRAME_BYTES || playback.child.stdin.destroyed || playback.child.stdin.writableLength > playback.maxPending) return;
+      || bytes.byteLength % FLOAT_FRAME_BYTES || playback.child.stdin.destroyed || playback.child.stdin.writableLength + bytes.byteLength > playback.maxPending) return;
     playback.child.stdin.write(Buffer.from(bytes));
   }
 

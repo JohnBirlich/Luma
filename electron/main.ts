@@ -104,7 +104,11 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     void lastfm.record(data);
   });
   const vk = new VkWebsite(logs);
-  ipcMain.handle('vk:open-website', (event, url: unknown, bounds: unknown) => vk.open(appWindow(event), url, bounds));
+  ipcMain.handle('vk:open-website', async (event, url: unknown, bounds: unknown) => {
+    appWindow(event);
+    await floatOutput.stop();
+    return vk.open(appWindow(event), url, bounds);
+  });
   ipcMain.handle('vk:layout', (event, bounds: unknown) => vk.layout(appWindow(event), bounds));
   ipcMain.handle('vk:command', (event, action: unknown) => vk.command(appWindow(event), action));
   ipcMain.handle('vk:close', (event) => { appWindow(event); vk.close(); });
@@ -180,7 +184,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
       title: t("Сохранить журнал Luma"), defaultPath: reportFilename(), filters: [{ name: t("Журнал"), extensions: ['log'] }],
     });
     if (result.canceled || !result.filePath) return false;
-    await writeFile(result.filePath, diagnosticsReport(logs.snapshot()), 'utf8');
+    await writeFile(result.filePath, diagnosticsReport(logs.snapshot(), t), 'utf8');
     return true;
   });
   let pendingCovers = 0;
@@ -251,6 +255,9 @@ async function createWindow() {
       nodeIntegration: false, nodeIntegrationInSubFrames: false, contextIsolation: true, sandbox: true,
       autoplayPolicy: 'no-user-gesture-required', // App-controlled local autoplay, off by default.
     },
+  });
+  owner.webContents.on('did-start-navigation', ({ isMainFrame, isSameDocument }) => {
+    if (isMainFrame && !isSameDocument) void floatOutput.stop();
   });
   owner.webContents.on('render-process-gone', () => { void floatOutput.stop(); });
   owner.once('closed', () => { void floatOutput.stop(); });

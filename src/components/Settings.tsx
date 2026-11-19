@@ -101,7 +101,7 @@ interface SettingsProps {
   nativeFloat: boolean;
   floatStatus: FloatStatus;
   changeFloat(value: boolean): void;
-  playingStream?: string;
+  playingStream?: { url: string; cached: boolean };
   metered: boolean;
   connected: boolean;
   autoLyrics: boolean;
@@ -271,7 +271,7 @@ export function SettingsPage(props: SettingsProps) {
                 </select></label>)}
             </SettingCard>
             <SettingCard title={t("Текущий трек")} detail={props.previewTrack ? props.previewTrack.title : t("Выберите трек, чтобы посмотреть его формат.")}>
-              {props.previewTrack && <p className="setting-body-copy">{props.playingStream ? describeStream(props.previewTrack, props.playingStream, t.language)
+              {props.previewTrack && <p className="setting-body-copy">{props.playingStream ? `${props.playingStream.cached ? `${t("Копия в кэше")} · ` : ''}${describeStream(props.previewTrack, props.playingStream.url, t.language)}`
                 : props.previewTrack.online ? t("Поток ещё не запущен.")
                 : formatId && formatProbe?.id !== formatId ? t("Читаем сведения о файле…")
                 : describeAudioFormat(props.previewTrack.format ?? (formatProbe?.id === formatId ? formatProbe?.result ?? undefined : undefined), props.locale, t.language) || t("Файл воспроизводится без перекодирования. Битрейт не определён.")}</p>}
