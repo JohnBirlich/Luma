@@ -5,6 +5,8 @@ import type { DiagnosticsBridge } from './diagnostics.js';
 import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
 import { cleanTrackText, musicSearchKey, readTrackTag } from './russian.js';
 import type { CommunitySource, Mp3ExportResult, OnlineCreditData, OnlineTrack } from './online.js';
+import type { StreamCacheInfo } from './stream-cache.js';
+import type { LastFmStatus, ListeningEvent } from './lastfm.js';
 import type { Lyrics, LyricsQuery } from './lyrics.js';
 import type { VkCoverImage, VkPlaylist, VkViewBounds, VkWebsiteState } from './vk.js';
 import type { Fingerprint, MetadataCandidate } from './recognition.js';
@@ -71,13 +73,28 @@ export interface DesktopBridge {
     onState(callback: (state: VkWebsiteState) => void): () => void;
   };
   getVkCover(playlist: VkPlaylist): Promise<VkCoverImage | null>;
-  lyrics: { lookup(query: LyricsQuery): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null> };
+  lyrics: { lookup(query: LyricsQuery): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null>; openEdition(url: string): Promise<void> };
   exportMp3(track: OnlineTrack, saveLyrics: boolean): Promise<Mp3ExportResult>;
   recognition: {
     search(query: string, locale: string): Promise<MetadataCandidate[]>;
     hasAcoustid(): Promise<boolean>;
     identify(fingerprint: Fingerprint): Promise<MetadataCandidate[]>;
     openSource(url: string): Promise<void>;
+  };
+  streamCache: {
+    url(track: Track): Promise<string | null>;
+    save(track: OnlineTrack): Promise<boolean>;
+    info(): Promise<StreamCacheInfo>;
+    clear(): Promise<StreamCacheInfo>;
+  };
+  lastfm: {
+    status(): Promise<LastFmStatus>;
+    begin(): Promise<LastFmStatus>;
+    finish(): Promise<LastFmStatus>;
+    enable(enabled: boolean): Promise<LastFmStatus>;
+    disconnect(): Promise<LastFmStatus>;
+    record(event: ListeningEvent): void;
+    onChange(callback: (status: LastFmStatus) => void): () => void;
   };
   diagnostics: DiagnosticsBridge;
   window: {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage, session, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -10,7 +10,9 @@ import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js'
 import { DesktopDiagnostics } from './diagnostics.js';
 import { searchCommunity } from '../src/shared/community-catalogs.js';
 import { isOnlineExternalUrl } from '../src/shared/online.js';
+import { isLyricEditionPage } from '../src/shared/lyric-editions.js';
 import { createLyricsService } from '../src/shared/lyrics-service.js';
+import { DesktopLastFm, lastFmConfig } from './lastfm.js';
 import { createOnlineExporter } from './online-export.js';
 import { MAIN_MINIMUM, widgetController } from './desktop-widget.js';
 import { createMetadataService, validAcoustidClient } from '../src/shared/metadata-service.js';
@@ -19,6 +21,7 @@ import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
 import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
+import { StreamCache } from './stream-cache.js';
 import { createProtocolHandler } from './protocol.js';
 import { fetchVkCover } from './vk-artwork.js';
 import { VkWebsite } from './vk-window.js';
@@ -68,8 +71,24 @@ function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
   return window;
 }
 
-function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo) {
+function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo, lastfm: DesktopLastFm, cache: StreamCache) {
   ipcMain.handle('app:info', (event) => { appWindow(event); return info; });
+  lastfm.onChange = (status) => {
+    if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('lastfm:changed', status);
+  };
+  ipcMain.handle('lastfm:status', (event) => { appWindow(event); return lastfm.status(); });
+  ipcMain.handle('lastfm:begin', (event) => { appWindow(event); return lastfm.begin((url) => shell.openExternal(url)); });
+  ipcMain.handle('lastfm:finish', (event) => { appWindow(event); return lastfm.finish(); });
+  ipcMain.handle('lastfm:enable', (event, enabled: unknown) => {
+    appWindow(event);
+    if (typeof enabled !== 'boolean') throw new TypeError('Expected an opt-in state');
+    return lastfm.enable(enabled);
+  });
+  ipcMain.handle('lastfm:disconnect', (event) => { appWindow(event); return lastfm.disconnect(); });
+  ipcMain.on('lastfm:record', (event, data: unknown) => {
+    try { appWindow(event); } catch { return; }
+    void lastfm.record(data);
+  });
   const vk = new VkWebsite(logs);
   ipcMain.handle('vk:open-website', (event, url: unknown, bounds: unknown) => vk.open(appWindow(event), url, bounds));
   ipcMain.handle('vk:layout', (event, bounds: unknown) => vk.layout(appWindow(event), bounds));
@@ -79,10 +98,19 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   const lookupLyrics = createLyricsService(net.fetch, true);
   const exportMp3 = createOnlineExporter(lookupLyrics);
   ipcMain.handle('lyrics:local', (event, id: unknown) => { appWindow(event); return library.lyrics(id); });
+  ipcMain.handle('lyrics:edition', (event, url: unknown) => {
+    appWindow(event);
+    if (!isLyricEditionPage(url)) throw new Error('Unsupported lyrics link');
+    return shell.openExternal(url);
+  });
   ipcMain.handle('lyrics:lookup', (event, query: unknown) => {
     appWindow(event);
     return lookupLyrics(query, AbortSignal.timeout(9000));
   });
+  ipcMain.handle('cache:url', (event, track: unknown) => { appWindow(event); return cache.url(track); });
+  ipcMain.handle('cache:save', (event, track: unknown) => { appWindow(event); return cache.save(track); });
+  ipcMain.handle('cache:info', (event) => { appWindow(event); return cache.info(); });
+  ipcMain.handle('cache:clear', (event) => { appWindow(event); return cache.clear(); });
   ipcMain.handle('online:export-mp3', (event, track: unknown, withLyrics: unknown) => exportMp3(appWindow(event), track, withLyrics));
   const metadata = createMetadataService(net.fetch);
   const acoustidClient = process.env.LUMA_ACOUSTID_CLIENT;
@@ -104,7 +132,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   let catalogSearch: { id: number; controller: AbortController } | undefined;
   ipcMain.handle('online:search-community', async (event, id: unknown, query: unknown, filter: unknown) => {
     appWindow(event);
-    if (typeof id !== 'number' || !Number.isSafeInteger(id) || (filter !== 'ccmixter' && filter !== 'netlabels')) return [];
+    if (typeof id !== 'number' || !Number.isSafeInteger(id) || (filter !== 'southern_city' && filter !== 'netlabels')) return [];
     catalogSearch?.controller.abort();
     const controller = new AbortController();
     catalogSearch = { id, controller };
@@ -286,9 +314,12 @@ if (!app.requestSingleInstanceLock()) {
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, reply) => reply(false));
     session.defaultSession.setPermissionCheckHandler(() => false);
     const library = await DesktopLibrary.open(app.getPath('userData'));
-    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin));
+    const cache = await StreamCache.open(join(app.getPath('userData'), 'stream-cache'), net.fetch);
+    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache));
     journal.main('desktop.protocol');
-    bindIpc(library, journal, info);
+    const lastfm = await DesktopLastFm.open(lastFmConfig(process.env.LUMA_LASTFM_API_KEY, process.env.LUMA_LASTFM_SECRET), net.fetch,
+      join(app.getPath('userData'), 'lastfm-session.bin'), safeStorage);
+    bindIpc(library, journal, info, lastfm, cache);
     await createWindow();
     journal.main('desktop.ready', { ms: performance.now() - started });
     app.on('activate', () => { if (!window) void createWindow(); });

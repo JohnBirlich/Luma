@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { ONLINE_ORIGINS } from '../src/shared/online.js';
+import type { StreamCache } from './stream-cache.js';
 import { audioMime } from '../src/shared/media.js';
 import { VK_WIDGET_URL } from '../src/shared/vk.js';
 import { APP_ORIGIN, type DesktopLibrary } from './library.js';
@@ -61,7 +62,7 @@ async function streamFile(path: string, request: Request, headers: Headers) {
   return new Response(body, { status: range ? 206 : 200, headers });
 }
 
-export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string) {
+export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.protocol !== 'luma:' || url.hostname !== 'app' || url.port || url.username || url.password) return new Response(null, { status: 404 });
@@ -86,6 +87,11 @@ export function createProtocolHandler(root: string, library: DesktopLibrary, dev
     }
     if (request.method === 'OPTIONS' && origin && origin === devOrigin) return new Response(null, { status: 204, headers });
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405, headers });
+    const cacheMatch = /^\/media\/cache\/([a-f0-9]{64})$/.exec(url.pathname);
+    if (cacheMatch) {
+      const path = cache?.mediaPath(cacheMatch[1]);
+      return path ? streamFile(path, request, headers) : new Response(null, { status: 404, headers });
+    }
     const match = /^\/media\/(audio|cover)\/([a-f\d-]+)$/i.exec(url.pathname);
     const path = match
       ? library.mediaPath(match[2], match[1] as 'audio' | 'cover')

@@ -1399,3 +1399,6 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
   .hero-actions-row .dislike-toggle { width: 34px; height: 38px; }
   .hero-actions-row { flex-wrap: wrap; }
 }
+.lyrics-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; padding: 4px 0 8px; }
+.lyrics-sources .text-button { font-size: .79rem; }
+.lyrics-sources [aria-pressed=true] { color: var(--accent); }

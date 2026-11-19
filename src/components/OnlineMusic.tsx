@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { ArrowUpRight, BookmarkPlus, Check, Cloud, CloudOff, Download, Globe2, Link2, ListPlus, Play, Search } from 'lucide-react';
+import { ArrowUpRight, BookmarkPlus, Check, HardDriveDownload, Cloud, CloudOff, Download, Globe2, Link2, ListPlus, Play, Search } from 'lucide-react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { findOnlineTracks, importOnlineTrack } from '../data/online';
 import { formatTime } from '../shared/media';
-import { commonsMp3Export, ONLINE_SOURCES } from '../shared/online';
+import { commonsMp3Export, ONLINE_FILTERS, ONLINE_SOURCES } from '../shared/online';
 import type { OnlineFilter, OnlineTrack } from '../shared/online';
 import { Artwork } from './Artwork';
 
-export type OnlineAction = 'play' | 'queue' | 'save' | 'export';
+export type OnlineAction = 'play' | 'queue' | 'save' | 'export' | 'cache';
 
 function SourceLink({ url, children }: { url: string; children: ReactNode }) {
   const [failed, setFailed] = useState(false);
@@ -67,7 +67,7 @@ export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabl
         pending.current?.abort(); setBusy(false); setTracks(undefined); setError(''); setFilter(event.currentTarget.value as OnlineFilter);
       }}>
         <option value="all">Jamendo + Wikimedia Commons</option>
-        {Object.entries(ONLINE_SOURCES).map(([id, name]) => <option key={id} value={id}>{name}{!window.luma && (id === 'ccmixter' || id === 'netlabels') ? ' · Windows' : ''}</option>)}
+        {Object.entries(ONLINE_FILTERS).map(([id, name]) => <option key={id} value={id}>{name}{!window.luma && (id === 'southern_city' || id === 'netlabels') ? ' · Windows' : ''}</option>)}
       </select>
       <button className="button primary-button" type="submit" disabled={busy || !connected || query.trim().length < 2}><Search size={16} /> {busy ? 'Ищем…' : 'Искать онлайн'}</button>
     </form>
@@ -84,11 +84,12 @@ export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabl
           <button type="button" className="icon-button" disabled={disabled || saved.has(track.id)} aria-label={saved.has(track.id) ? `Сохранено: ${track.title}` : `Сохранить: ${track.title}`} title="Сохранить ссылку в медиатеке" onClick={() => choose(track, 'save')}>
             {saved.has(track.id) ? <Check size={17} /> : <BookmarkPlus size={17} />}
           </button>
+          {window.luma?.streamCache && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={`В кэш: ${track.title}`} title="Сохранить временную копию для офлайн-прослушивания" onClick={() => choose(track, 'cache')}><HardDriveDownload size={17} /></button>}
           {window.luma && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={`Скачать MP3: ${track.title}`} title="Сохранить копию MP3" onClick={() => choose(track, 'export')}><Download size={17} /></button>}
         </div>
       </li>)}
     </ul>}
-    <p className="online-footnote">Закладка сохраняет ссылку. Загрузить файл можно отдельно, если источник разрешает. Для потоков нужна сеть. Эквалайзер и реакция фона на звук работают с файлами.</p>
+    <p className="online-footnote">Закладка сохраняет ссылку. Загрузить файл можно отдельно, если источник разрешает. Без сети играют файлы и доступные копии в кэше. Эквалайзер и реакция фона на звук работают с файлами.</p>
   </section>;
 }
 

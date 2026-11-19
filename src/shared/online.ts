@@ -6,12 +6,13 @@ export const OPENVERSE_API = 'https://api.openverse.org/v1/audio/';
 export const ONLINE_ORIGINS = {
   connect: 'https://api.openverse.org',
   images: 'https://api.openverse.org/v1/audio/',
-  media: 'https://*.storage.jamendo.com https://storage.jamendo.com https://upload.wikimedia.org/wikipedia/commons/ https://ccmixter.org/content/ https://archive.org/download/ https://*.archive.org/',
+  media: 'https://*.storage.jamendo.com https://storage.jamendo.com https://upload.wikimedia.org/wikipedia/commons/ https://archive.org/download/ https://*.archive.org/',
 };
-export const ONLINE_SOURCES = { jamendo: 'Jamendo', wikimedia_audio: 'Wikimedia Commons', ccmixter: 'ccMixter', netlabels: 'Internet Archive · Netlabels' } as const;
+export const ONLINE_SOURCES = { jamendo: 'Jamendo', wikimedia_audio: 'Wikimedia Commons', netlabels: 'Internet Archive · Netlabels' } as const;
 export type OnlineSource = keyof typeof ONLINE_SOURCES;
-export type CommunitySource = Extract<OnlineSource, 'ccmixter' | 'netlabels'>;
-export type OnlineFilter = OnlineSource | 'all';
+export const ONLINE_FILTERS = { ...ONLINE_SOURCES, southern_city: 'Southern City’s Lab · Россия' } as const;
+export type CommunitySource = 'netlabels' | 'southern_city';
+export type OnlineFilter = keyof typeof ONLINE_FILTERS | 'all';
 export const MAX_ONLINE_TRACKS = 180;
 export interface OnlineCreditData { source: OnlineSource; page: string; license: string; licenseUrl: string }
 export interface OnlineTrack extends Track { online: OnlineCreditData }
@@ -36,17 +37,12 @@ function webUrl(value: unknown): URL | undefined {
 }
 
 export const archiveId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{1,99}$/.test(value);
-const mixterUser = '[A-Za-z0-9_+-]{1,60}';
-const mixterPage = new RegExp(`^/files/(${mixterUser})/([1-9][0-9]{0,11})/?$`);
 
 function sourcePage(url: URL, source: OnlineSource): URL | undefined {
   if (source === 'jamendo') {
     if (['www.jamendo.com', 'jamendo.com'].includes(url.hostname) && /^\/track\/\d+(?:\/[^/]+)?\/?$/.test(url.pathname)) {
       return new URL(`https://www.jamendo.com${url.pathname}`);
     }
-  } else if (source === 'ccmixter') {
-    const match = url.hostname === 'ccmixter.org' && mixterPage.exec(url.pathname);
-    if (match) return new URL(`${url.origin}/files/${match[1]}/${match[2]}`);
   } else if (source === 'netlabels') {
     const id = url.pathname.match(/^\/details\/([^/]+)\/?$/)?.[1];
     if (url.hostname === 'archive.org' && archiveId(id)) return new URL(`${url.origin}/details/${id}`);
@@ -89,11 +85,6 @@ function sourceMedia(url: URL, source: OnlineSource, page: URL): string | undefi
     const format = url.searchParams.get('format');
     if (/^(?:prod-\d+\.)?storage\.jamendo\.com$/.test(url.hostname) && url.pathname === '/' &&
       url.searchParams.get('trackid') === id && format && /^mp3[12]$/.test(format)) return `${url.origin}/?trackid=${id}&format=${format}`;
-  } else if (source === 'ccmixter') {
-    const user = page.pathname.split('/')[2];
-    const prefix = `/content/${user}/`;
-    const file = url.hostname === 'ccmixter.org' && url.pathname.startsWith(prefix) && singleAudioFile(url.pathname.slice(prefix.length));
-    if (file) return url.origin + prefix + file;
   } else if (source === 'netlabels') {
     const prefix = `/download/${page.pathname.split('/')[2]}/`;
     const file = url.hostname === 'archive.org' && url.pathname.startsWith(prefix) && singleAudioFile(url.pathname.slice(prefix.length));
@@ -119,7 +110,7 @@ export function readOnlineTrack(value: unknown): OnlineTrack | undefined {
   const info = catalogObject(row.online);
   const id = typeof row.id === 'string' && row.id.startsWith('ov-') ? row.id.slice(3) : '';
   const source = info.source;
-  if (source !== 'jamendo' && source !== 'wikimedia_audio' && source !== 'ccmixter' && source !== 'netlabels') return;
+  if (source !== 'jamendo' && source !== 'wikimedia_audio' && source !== 'netlabels') return;
   const openverse = source === 'jamendo' || source === 'wikimedia_audio';
   if (openverse && !uuid.test(id)) return;
   const pageUrl = webUrl(info.page), audioUrl = webUrl(row.audioUrl), licenseUrl = webUrl(info.licenseUrl);
@@ -129,7 +120,7 @@ export function readOnlineTrack(value: unknown): OnlineTrack | undefined {
   if (!page || !media || !license) return;
   const name = title(row.title);
   if (!name) return;
-  const normalizedId = openverse ? `ov-${id.toLowerCase()}` : source === 'ccmixter' ? `ccmixter-${page.pathname.split('/')[3]}` : archiveTrackId(media);
+  const normalizedId = openverse ? `ov-${id.toLowerCase()}` : archiveTrackId(media);
   if (!openverse && row.id !== normalizedId && row.id !== undefined) return;
   const art = openverse ? webUrl(row.artworkUrl) : undefined;
   const cover = art?.origin === ONLINE_ORIGINS.connect && art.pathname === `/v1/audio/${id}/thumb/` ? art.origin + art.pathname : undefined;

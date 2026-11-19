@@ -2,6 +2,7 @@ import electron = require('electron');
 const { contextBridge, ipcRenderer, webUtils } = electron;
 import type { IpcRendererEvent } from 'electron';
 import type { DesktopBridge } from '../src/shared/media.js';
+import type { LastFmStatus } from '../src/shared/lastfm.js';
 import type { VkWebsiteState } from '../src/shared/vk.js';
 
 const bridge: DesktopBridge = {
@@ -29,13 +30,32 @@ const bridge: DesktopBridge = {
     },
   },
   getVkCover: (playlist) => ipcRenderer.invoke('vk:cover', playlist),
-  lyrics: { lookup: (query) => ipcRenderer.invoke('lyrics:lookup', query), local: (id) => ipcRenderer.invoke('lyrics:local', id) },
+  lyrics: { lookup: (query) => ipcRenderer.invoke('lyrics:lookup', query), local: (id) => ipcRenderer.invoke('lyrics:local', id), openEdition: (url) => ipcRenderer.invoke('lyrics:edition', url) },
   exportMp3: (track, withLyrics) => ipcRenderer.invoke('online:export-mp3', track, withLyrics),
   recognition: {
     search: (query, locale) => ipcRenderer.invoke('metadata:search', query, locale),
     hasAcoustid: () => ipcRenderer.invoke('metadata:has-acoustid'),
     identify: (fingerprint) => ipcRenderer.invoke('metadata:identify', fingerprint),
     openSource: (url) => ipcRenderer.invoke('metadata:open-link', url),
+  },
+  streamCache: {
+    url: (track) => ipcRenderer.invoke('cache:url', track),
+    save: (track) => ipcRenderer.invoke('cache:save', track),
+    info: () => ipcRenderer.invoke('cache:info'),
+    clear: () => ipcRenderer.invoke('cache:clear'),
+  },
+  lastfm: {
+    status: () => ipcRenderer.invoke('lastfm:status'),
+    begin: () => ipcRenderer.invoke('lastfm:begin'),
+    finish: () => ipcRenderer.invoke('lastfm:finish'),
+    enable: (enabled) => ipcRenderer.invoke('lastfm:enable', enabled),
+    disconnect: () => ipcRenderer.invoke('lastfm:disconnect'),
+    record: (event) => ipcRenderer.send('lastfm:record', event),
+    onChange: (callback) => {
+      const listener = (_event: IpcRendererEvent, status: LastFmStatus) => callback(status);
+      ipcRenderer.on('lastfm:changed', listener);
+      return () => ipcRenderer.removeListener('lastfm:changed', listener);
+    },
   },
   diagnostics: {
     record: (event, values) => ipcRenderer.send('diagnostics:record', event, values),

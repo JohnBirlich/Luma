@@ -4,6 +4,7 @@ import { BANDS, clamp } from '../shared/equalizer';
 import type { EqualizerSettings } from '../shared/equalizer';
 import { isMetered, streamUrl } from '../shared/audio-quality';
 import type { AudioQuality } from '../shared/audio-quality';
+import { ListeningClock } from '../shared/lastfm';
 import type { Track } from '../shared/media';
 import { recordDiagnostic } from '../data/diagnostics';
 
@@ -21,7 +22,16 @@ interface Transition {
   next(current: Track): Track | undefined;
   advance(id: string): void;
 }
-interface Deck { audio: HTMLAudioElement; track: Track }
+interface Deck { audio: HTMLAudioElement; track: Track; listening?: ListeningClock }
+function markListening(deck: Deck) {
+  if (!window.luma?.lastfm || deck.audio.paused || deck.listening) return;
+  deck.listening = ListeningClock.start(deck.track, Math.floor(Date.now() / 1000));
+  if (deck.listening) {
+    const duration = length(deck.audio, deck.track);
+    window.luma.lastfm.record(deck.listening.now(duration));
+    deck.listening.sample(deck.audio.currentTime, performance.now() / 1000, duration, deck.audio.playbackRate);
+  }
+}
 const stopped: Snapshot = { playing: false, elapsed: 0, duration: 0, error: '' };
 const linear = (db: number) => 10 ** (db / 20);
 
@@ -96,6 +106,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
   const candidate = useRef<(Deck & { starting: boolean }) | null>(null);
   const fading = useRef<{ audio: HTMLAudioElement; timeout: number } | null>(null);
   const token = useRef(0);
+  const playIntent = useRef(0);
   const loadStarted = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot>(stopped);
   const settings = useRef({ volume, eq, quality });
@@ -175,6 +186,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
       latest.advance(warm.track.id);
       recordDiagnostic('audio.play');
       trackStarted(warm.track.id);
+      markListening(warm);
     }).catch(() => { if (candidate.current === warm) cancelWarmup(); });
   }, [cancelWarmup, endFade, trackStarted, transition]);
 
@@ -187,8 +199,12 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
           recordDiagnostic('audio.play');
           setSnapshot((previous) => ({ ...previous, playing: true }));
         },
-        playing: ({ track }) => { if (!audio.paused) trackStarted(track.id); },
-        pause: () => {
+        playing: (deck) => { if (!audio.paused) { trackStarted(deck.track.id); markListening(deck); } },
+        seeking: (deck) => deck.listening?.interrupt(),
+        waiting: (deck) => deck.listening?.interrupt(),
+        ratechange: (deck) => deck.listening?.interrupt(),
+        pause: (deck) => {
+          deck.listening?.interrupt();
           if (!audio.paused) return;
           cancelTransitions();
           recordDiagnostic('audio.pause');
@@ -197,10 +213,15 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
         loadedmetadata: () => recordDiagnostic('audio.ready', { ms: performance.now() - loadStarted.current }),
         timeupdate: (deck) => {
           setSnapshot((previous) => ({ ...previous, elapsed: audio.currentTime }));
+          if (!audio.paused && !audio.seeking && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            const event = deck.listening?.sample(audio.currentTime, performance.now() / 1000, length(audio, deck.track), audio.playbackRate);
+            if (event) window.luma?.lastfm?.record(event);
+          }
           advanceSmoothly(deck);
         },
         durationchange: ({ track }) => setSnapshot((previous) => ({ ...previous, duration: length(audio, track) })),
-        ended: () => {
+        ended: (deck) => {
+          deck.listening = undefined;
           cancelTransitions();
           setSnapshot((previous) => ({ ...previous, playing: false }));
           ended.current();
@@ -227,12 +248,16 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     };
   }, [advanceSmoothly, cancelTransitions, ended, errorText, trackStarted]);
 
-  const play = useCallback(() => {
+  const play = useCallback(async () => {
+    const intent = ++playIntent.current;
     const deck = active.current;
     if (!deck) return;
     const { audio, track } = deck;
     if (track.online && (!audio.getAttribute('src') || audio.error)) {
-      if (!navigator.onLine) {
+      const cached = track.online.source === 'wikimedia_audio' && window.luma?.streamCache
+        ? await window.luma.streamCache.url(track).catch(() => null) : null;
+      if (intent !== playIntent.current || active.current !== deck) return;
+      if (!cached && !navigator.onLine) {
         setSnapshot((previous) => ({ ...previous, playing: false, error: 'Устройство вне сети. Для онлайн-треков нужно подключение.' }));
         return;
       }
@@ -242,7 +267,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
       const q = settings.current.quality;
       const connection = (navigator as Navigator & { connection?: { type?: string; saveData?: boolean } }).connection;
       const url = streamUrl(track, isMetered(q.network, connection) ? q.metered : q.normal);
-      audio.src = url;
+      audio.src = cached ?? url;
       setSnapshot((previous) => ({ ...previous, stream: { id: track.id, url } }));
     }
     if (!track.online) {
@@ -301,7 +326,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     if (track && autoplay) play();
   }, [cancelTransitions, play]);
 
-  const pause = useCallback(() => { cancelTransitions(); active.current?.audio.pause(); }, [cancelTransitions]);
+  const pause = useCallback(() => { playIntent.current++; cancelTransitions(); active.current?.audio.pause(); }, [cancelTransitions]);
   const toggle = useCallback(() => {
     if (active.current?.audio.paused) play();
     else pause();

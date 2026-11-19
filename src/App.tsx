@@ -408,6 +408,22 @@ export default function App() {
   function chooseOnline(track: OnlineTrack, action: OnlineAction) {
     if (!ready) return;
     const state = queueRef.current;
+    if (action === 'cache') {
+      if (!window.luma?.streamCache || busy.current) return;
+      if (!savedOnline.has(track.id) && onlineTracks.length >= MAX_ONLINE_TRACKS) {
+        setNotice({ message: 'Коллекция онлайн-ссылок заполнена', error: true });
+        return;
+      }
+      busy.current = true; setWorking(true); setNotice(undefined);
+      void window.luma.streamCache.save(track).catch(() => false).then((saved) => {
+        if (!saved) { setNotice({ message: 'Не удалось сохранить в кэш', detail: 'Проверьте сеть. Кэш принимает только подходящие MP3 до 32 МБ.', error: true }); return; }
+        setPreferences((data) => data.onlineTracks.some(({ id }) => id === track.id) ? data : {
+          ...data, onlineTracks: [...data.onlineTracks, track], onlineRefs: data.onlineRefs.filter(({ id }) => id !== track.id),
+        });
+        setNotice({ message: 'Копия в кэше', detail: 'Запись доступна в «Медиатека → Из интернета».' });
+      }).finally(() => { busy.current = false; setWorking(false); });
+      return;
+    }
     if (action === 'export') {
       if (!window.luma || busy.current) return;
       busy.current = true;

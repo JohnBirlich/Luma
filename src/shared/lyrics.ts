@@ -3,6 +3,7 @@ import { cleanTrackText, musicSearchKey } from './russian.js';
 export const LRCLIB_URL = 'https://lrclib.net/api/get';
 export interface LyricsQuery { title: string; artist: string; album?: string; duration?: number }
 export interface Lyrics { plain?: string; synced?: string; instrumental: boolean }
+export const MAX_LYRIC_FILE = 128 * 1024;
 export interface LyricLine { time: number; text: string }
 const field = (value: unknown) => typeof value === 'string' && value.length <= 256 ? cleanTrackText(value) : '';
 
@@ -35,6 +36,18 @@ export function readLocalLyrics(plainText?: unknown, lrcText?: unknown): Lyrics 
   const lrc = cleanLyrics(lrcText);
   const synced = lrc && timedLines(lrc).some(({ text }) => text) ? lrc : undefined;
   return plain || synced ? { instrumental: false, ...(plain && { plain }), ...(synced && { synced }) } : null;
+}
+
+export function lyricsFromTags(tags?: { text?: string; timeStampFormat?: number; contentType?: number; syncText?: { timestamp?: number; text: string }[] }[]) {
+  const timed = tags?.find((tag) => tag.timeStampFormat === 2 && tag.contentType === 1 && tag.syncText?.length)?.syncText;
+  const synced = timed?.slice(0, 600).flatMap(({ timestamp, text }) => {
+    if (typeof timestamp !== 'number' || !Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp >= 60_000_000 || !text.trim()) return [];
+    const min = Math.floor(timestamp / 60_000);
+    const sec = String(Math.floor(timestamp / 1000) % 60).padStart(2, '0');
+    const ms = String(timestamp % 1000).padStart(3, '0');
+    return [`[${min}:${sec}.${ms}]${text.replace(/[\r\n]+/g, ' ').slice(0, 1000)}`];
+  }).join('\n');
+  return readLocalLyrics(tags?.find(({ text }) => text?.trim())?.text, synced);
 }
 
 export function timedLines(text: string): LyricLine[] {

@@ -361,7 +361,7 @@ async function smoke() {
     await waitFor('online fallback prompt', () => run(`!!document.querySelector('.online-search-form button')`));
     assert.equal(catalogCalls.length, 0, 'typing stays local until the user opts in');
     assert.equal(await run(`document.querySelectorAll('.service-search-link').length`), 0);
-    assert.deepEqual(await run(`[...document.querySelector('.online-search-form select').options].map(option => option.value)`), ['all', 'jamendo', 'wikimedia_audio', 'ccmixter', 'netlabels']);
+    assert.deepEqual(await run(`[...document.querySelector('.online-search-form select').options].map(option => option.value)`), ['all', 'jamendo', 'wikimedia_audio', 'netlabels', 'southern_city']);
     await click('.online-search-form button');
     await waitFor('both online sources', () => run(`document.querySelectorAll('.online-results li').length === 2`));
     assert.equal(catalogCalls.length, 1);
@@ -555,7 +555,7 @@ async function smoke() {
   if (liveCatalog) {
     await session.defaultSession.clearCache();
     const failed = [];
-    for (const source of ['jamendo', 'wikimedia_audio', 'ccmixter', 'netlabels']) {
+    for (const source of ['jamendo', 'wikimedia_audio', 'netlabels', 'southern_city']) {
       // The controlled check exercised mp31. The live check confirms the requested variant really plays.
 
       let result;
@@ -563,7 +563,7 @@ async function smoke() {
         await go('Главная');
         await go('Поиск');
         await waitFor('live search field', () => run(`!!document.querySelector('main input[type="search"]')`));
-        await fill('main input[type="search"]', ({ jamendo: 'jazz', wikimedia_audio: 'Bach chaconne', ccmixter: 'reFramed', netlabels: 'Anatoly Nikulin' })[source]);
+        await fill('main input[type="search"]', ({ jamendo: 'jazz', wikimedia_audio: 'Bach chaconne', netlabels: 'Anatoly Nikulin', southern_city: 'Газ' })[source]);
         await waitFor('live catalog form', () => run(`!!document.querySelector('.online-search-form select')`));
         await run(`(() => {
           const choice = document.querySelector('.online-search-form select');

@@ -6,6 +6,8 @@ import type { Appearance, CrossfadeTime, DataLanguage, EffectTempo, LibraryLayou
 import { describeAudioFormat, describeStream, NETWORK_MODES, STREAM_QUALITIES } from '../shared/audio-quality';
 import type { AudioQuality, NetworkMode, StreamQuality } from '../shared/audio-quality';
 import type { Track } from '../shared/media';
+import type { LastFmStatus } from '../shared/lastfm';
+import type { StreamCacheInfo } from '../shared/stream-cache';
 import { localLibrary } from '../data/library';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { ReleaseLink, useInstalledBuild } from './About';
@@ -250,7 +252,6 @@ export function SettingsPage(props: SettingsProps) {
                 <select value={props.audioQuality[id]} onChange={(event) => props.changeQuality({ ...props.audioQuality, [id]: event.currentTarget.value as StreamQuality })}>
                   {Object.entries(STREAM_QUALITIES).map(([option, title]) => <option value={option} key={option}>{title}</option>)}
                 </select></label>)}
-              <div className="setting-row"><div><strong>Кеширование / загрузка</strong><small>Загрузка сохраняет оригинальный MP3 из Wikimedia Commons, если он доступен. Luma не перекодирует файлы и не сохраняет поток для офлайн-прослушивания.</small></div><span className="setting-status">Оригинал</span></div>
             </SettingCard>
             <SettingCard title="Текущий трек" detail={props.previewTrack ? props.previewTrack.title : 'Выберите трек, чтобы посмотреть его формат.'}>
               {props.previewTrack && <p className="setting-body-copy">{props.playingStream ? describeStream(props.previewTrack, props.playingStream)
@@ -316,24 +317,23 @@ export function SettingsPage(props: SettingsProps) {
             </SettingCard>
             <SettingCard title="Сервисы">
               <VkAccountSettings connected={props.connected} openVk={props.openVk} />
-              <Service title="Last.fm" status="Не подключён">
-                <p>Для входа и скробблинга нужны ключ и секрет зарегистрированного приложения Last.fm. Эта сборка не отправляет данные в Last.fm.</p>
-              </Service>
+              <LastFmSettings connected={props.connected} />
               <Service title="Тексты песен" status="LRCLIB">
-                <p>Доступен LRCLIB. Для следующих источников — Musixmatch, Genius и VK — пока нет подключённого доступа к текстам.</p>
+                <p>Теги и локальные .lrc / .lyrics.txt, LRCLIB и несколько оригинальных изданий из Викитеки. Для полного каталога Musixmatch нужен отдельный договор.</p>
                 <ToggleRow title="Автопоиск текстов" detail="Искать для играющего трека на главной. LRCLIB получит название, исполнителя, альбом и длительность, если они известны." enabled={props.autoLyrics} change={() => props.toggleLyrics('autoLyrics')} />
                 {window.luma && <ToggleRow title="Сохранять текст с новым MP3" detail="Для личной копии MP3: синхронный текст в соседний .lrc, обычный — в тег MP3. Если найдены оба, сохраняются оба. Существующие файлы не меняются." enabled={props.exportLyrics} change={() => props.toggleLyrics('exportLyrics')} />}
               </Service>
-              <Service title="iTunes" status="Поиск данных">
-                <p>Поиск названия и тегов в каталоге Apple Music запускается вручную. Сервис независим, доступность не гарантируется. Автозамены обложек VK и записи тегов в исходный файл нет.</p>
+              <Service title="iTunes" status="Только метаданные">
+                <p>Название и теги можно найти в редакторе трека. Условия iTunes Search API не дают права использовать рекламные изображения как постоянные обложки Luma.</p>
                 {props.openTrackInfo && <div className="settings-actions"><button className="button outline-button" type="button" onClick={props.openTrackInfo}>Данные текущего трека</button></div>}
               </Service>
-              <Service title="VK Recommendations" status="Нет доступа">
-                <p>Luma не передаёт данные о треках в VK Recommendations. «Похожее на прослушанное» и «Недавно слушали» в Luma строятся локально и не требуют входа.</p>
+              <Service title="VK Recommendations" status="Нужно разрешение VK">
+                <p>Подборки VK доступны на официальной странице после входа. В очереди Luma они не появятся без разрешённого аудио API. Рекомендации Luma остаются локальными.</p>
               </Service>
             </SettingCard>
           </>}
           {section?.id === 'storage' && <>
+            <StreamCacheSettings />
             <SettingCard title="Локальный профиль" detail="Настройки, обложки и история остаются на устройстве; на Windows исходные аудиофайлы не копируются при добавлении.">
               <dl className="settings-storage"><div><dt>Треков с устройства</dt><dd>{formatCount(props.localCount, appearance.fullNumbers)}</dd></div><div><dt>Недавних треков</dt><dd>{formatCount(props.recentCount, appearance.fullNumbers)}</dd></div></dl>
               <ToggleRow title="Запоминать прослушанные треки" detail="Хранить локально до 60 последних треков. При отключении новая история не записывается." enabled={playback.rememberRecent} change={() => changePlayback({ ...playback, rememberRecent: !playback.rememberRecent })} />
@@ -374,6 +374,68 @@ function Service({ title, status, children }: { title: string; status: string; c
     <header><h3>{title}</h3><span className="setting-status">{status}</span></header>
     {children}
   </section>;
+}
+
+function LastFmSettings({ connected }: { connected: boolean }) {
+  const bridge = window.luma?.lastfm;
+  const [status, setStatus] = useState<LastFmStatus>();
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!bridge) return;
+    let current = true;
+    void bridge.status().then((value) => { if (current) setStatus(value); }, () => {});
+    const unsubscribe = bridge.onChange(setStatus);
+    return () => { current = false; unsubscribe(); };
+  }, [bridge]);
+  function run(action: () => Promise<LastFmStatus>) {
+    setBusy(true);
+    void action().then(setStatus, () => setStatus((value) => value && { ...value, issue: 'offline' })).finally(() => setBusy(false));
+  }
+  const issues = { authorize: 'Подтвердите доступ в браузере, затем завершите подключение.', offline: 'Last.fm не ответил. Проверьте сеть.',
+    rejected: 'Last.fm не принял запрос. Проверьте настройки приложения и аккаунта.', expired: 'Сессия Last.fm отозвана. Подключите аккаунт снова.' };
+  return <Service title="Last.fm" status={status?.user ?? (bridge ? 'Не подключён' : 'В приложении Windows')}>
+    <p>Скробблинг выключен до вашего согласия. При включении Last.fm получит название, исполнителя, альбом, длительность и время начала трека. Демо и звук со страницы VK не отправляются.</p>
+    {status && !status.configured && <p>Создайте API-аккаунт и запустите Luma с переменными LUMA_LASTFM_API_KEY и LUMA_LASTFM_SECRET. Пошаговая инструкция — в репозитории.</p>}
+    {status?.user && <>
+      {!status.persistent && <p>Системное хранилище недоступно. Сессия останется только до закрытия Luma.</p>}
+      <ToggleRow title="Отправлять прослушивания в Last.fm" detail="Не менее половины трека или 4 минут. Перемотка не считается." enabled={status.enabled} disabled={busy} change={() => bridge && run(() => bridge.enable(!status.enabled))} />
+    </>}
+    {bridge && <div className="settings-actions">
+      {status?.user ? <button className="button outline-button" type="button" disabled={busy} onClick={() => run(bridge.disconnect)}>Отключить Last.fm</button> : <>
+        <button className="button outline-button" type="button" disabled={busy || !connected || !status} onClick={() => run(bridge.begin)}>
+          {status?.configured ? status.waiting ? 'Открыть вход заново' : 'Подключить Last.fm' : 'Создать API-аккаунт'}
+        </button>
+        {status?.waiting && <button className="button primary-button" type="button" disabled={busy || !connected} onClick={() => run(bridge.finish)}>Завершить подключение</button>}
+      </>}
+    </div>}
+    {status?.waiting && !status.issue && <p role="status">Разрешите Luma доступ на сайте Last.fm и вернитесь сюда.</p>}
+    {status?.issue && <p role="status">{issues[status.issue]}</p>}
+  </Service>;
+}
+
+function StreamCacheSettings() {
+  const bridge = window.luma?.streamCache;
+  const [info, setInfo] = useState<StreamCacheInfo>();
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!bridge) return;
+    let current = true;
+    void bridge.info().then((value) => { if (current) setInfo(value); }, () => {});
+    return () => { current = false; };
+  }, [bridge]);
+  return <SettingCard title="Кэш потоков" detail="В поиске выберите «В кэш» у разрешённого MP3 из Wikimedia Commons. Копия играет без сети из «Медиатека → Из интернета». Автоматических загрузок нет.">
+    <p className="setting-body-copy">До 128 МБ на 14 дней. Старые копии удаляются первыми; закладки и исходные файлы остаются.</p>
+    {bridge && <div className="settings-actions">
+      <span className="setting-status">{info ? `${info.count} · ${Math.round(info.bytes / 1024 / 1024 * 10) / 10} МБ` : 'Читаем размер…'}</span>
+      <button className="button outline-button" type="button" disabled={busy || !info?.count} onClick={() => {
+        setBusy(true); setFailed(false);
+        void bridge.clear().then(setInfo, () => setFailed(true)).finally(() => setBusy(false));
+      }}>Очистить кэш</button>
+    </div>}
+    {!bridge && <span className="setting-status">В приложении Windows</span>}
+    {failed && <p role="status">Не удалось полностью очистить кэш. Остановите воспроизведение и повторите.</p>}
+  </SettingCard>;
 }
 
 function VkAccountSettings({ connected, openVk }: { connected: boolean; openVk(): void }) {

@@ -48,7 +48,7 @@ async function communityTracks(query: string, source: CommunitySource, signal: A
 }
 
 export async function findOnlineTracks(query: string, source: OnlineFilter, signal: AbortSignal): Promise<OnlineTrack[]> {
-  if (source === 'ccmixter' || source === 'netlabels') return communityTracks(query, source, signal);
+  if (source === 'southern_city' || source === 'netlabels') return communityTracks(query, source, signal);
   const data = await getJson(onlineSearchUrl(query, source), signal) as { results?: unknown[] } | null;
   if (!Array.isArray(data?.results)) throw new Error('Каталог вернул неожиданный ответ.');
   const tracks = new Map<string, OnlineTrack>();
