@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, RefObject } from 'react';
 import { AudioLines, ChevronDown, Heart, Palette, SlidersHorizontal } from 'lucide-react';
 import type { ReadSpectrum } from '../player/useAudio';
 import type { Appearance } from '../shared/customization';
@@ -17,6 +17,7 @@ interface FullscreenPlayerProps extends PlaybackProps {
   favorite: boolean;
   readSpectrum: ReadSpectrum;
   sceneVisible: boolean;
+  stage: RefObject<HTMLDivElement | null>;
   close(): void;
   toggleFavorite(id: string): void;
   openAppearance(): void;
@@ -29,16 +30,12 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   const ref = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
     const dialog = ref.current;
-    const previous = document.activeElement;
     dialog?.showModal();
-    return () => {
-      dialog?.close();
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true });
-    };
+    return () => dialog?.close();
   }, []);
 
   return <dialog ref={ref} className="immersive-player" aria-labelledby="immersive-title" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <div className={`immersive-stage immersive-${hero}`} style={{ '--immersive-tone': tint } as CSSProperties}>
+    <div ref={props.stage} className={`immersive-stage immersive-${hero}`} style={{ '--immersive-tone': tint } as CSSProperties}>
       {appearance.coverColors && <Artwork track={track} className="immersive-backdrop" imageUrl={track.backdropUrl} />}
       <SceneBackground effect={effect} strength={effectStrength} animate={motion && playing && props.sceneVisible} sample={props.readSpectrum} />
       <div aria-hidden="true" className="immersive-scrim" />

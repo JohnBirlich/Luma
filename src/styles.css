@@ -1026,6 +1026,7 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
   background: radial-gradient(ellipse at 33% 62%, color-mix(in srgb, var(--immersive-tone), #17101d 72%), var(--chrome-bg) 85%);
   padding: max(20px, env(safe-area-inset-top)) var(--stage-padding) max(25px, env(safe-area-inset-bottom));
 }
+.immersive-stage:fullscreen { overflow-y: auto; scrollbar-width: thin; }
 .immersive-stage > .immersive-backdrop { position: absolute; inset: -8%; z-index: -3; opacity: .48; border-radius: 0; filter: blur(52px) saturate(1.14); }
 .immersive-blur > .immersive-backdrop { opacity: .68; filter: blur(70px) saturate(1.23); }
 .immersive-stage > .scene-background { z-index: -2; --scene-tone: var(--immersive-tone); mask-image: linear-gradient(125deg, #000a, #000 64%, #000d); }

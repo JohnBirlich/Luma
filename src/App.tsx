@@ -85,7 +85,7 @@ export default function App() {
   const current = byId.get(queue.currentId ?? '') ?? null;
   const detailsTrack = detailsId ? byId.get(detailsId) : undefined;
   const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance);
-  const { open: presentationOpen, show: showPresentation, close: closePresentation } = usePresentation();
+  const { open: presentationOpen, show: showPresentation, close: closePresentation, stage: presentationStage } = usePresentation();
   const player = useAudio(preferences.volume, preferences.equalizer, ended);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
   const sampledTone = usePalette(appearance.coverColors ? current : null);
@@ -398,7 +398,7 @@ export default function App() {
       </>}
       {isVkPage ? <VkModeBar goToPlayer={() => setPage('player')} /> : <PlayerBar {...localControls} track={current}
         goToPlayer={() => setPage('player')} openPresentation={showPresentation} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
-      {presentationOpen && current && !isVkPage && <FullscreenPlayer {...localControls} track={current} tint={tint} appearance={appearance}
+      {presentationOpen && current && !isVkPage && <FullscreenPlayer {...localControls} stage={presentationStage} track={current} tint={tint} appearance={appearance}
         favorite={favoriteIds.has(current.id)} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
         openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} />}
       <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />

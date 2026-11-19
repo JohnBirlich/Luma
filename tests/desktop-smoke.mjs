@@ -105,7 +105,8 @@ async function smoke() {
   await waitFor('seekable audio', () => run(`Number.isFinite(document.querySelector('audio').duration)`));
   await run(`window.testAudio = document.querySelector('audio'); window.testAudio.pause(); window.testAudio.currentTime = 4;`);
   await run(`document.querySelector('.hero-fullscreen').click()`);
-  await waitFor('expanded player', () => run(`document.querySelector('.immersive-player[open] h1')?.textContent === "Ty Zdes'"`));
+  await waitFor('expanded player dialog', () => run(`!!document.querySelector('.immersive-player[open]')`));
+  assert.equal(await run(`document.querySelector('.immersive-player h1')?.textContent`), "Ty Zdes'");
   assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused && Math.abs(window.testAudio.currentTime - 4) < .2`), true);
   assert.equal(await run(`!!document.querySelector('.immersive-player .record-platter')`), true);
   await run(`document.querySelector('.immersive-collapse').click()`);
