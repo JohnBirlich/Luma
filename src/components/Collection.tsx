@@ -7,7 +7,7 @@ import { LyricsPanel } from './LyricsPanel';
 import { homeRecommendations, musicGroups, tracksInGroup } from '../shared/mix';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
-import type { OnlineTrack } from '../shared/online';
+import type { OnlineFilter, OnlineTrack } from '../shared/online';
 import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
 import type { OnlineAction } from './OnlineMusic';
 import type { Track } from '../shared/media';
@@ -211,6 +211,7 @@ export function LibraryPage(props: LibraryPageProps) {
   const isRecent = props.mode === 'recent';
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
   const [search, setSearch] = useState('');
+  const [catalogSource, setCatalogSource] = useState<OnlineFilter>('all');
   const [scopeId, setScope] = useState<'all' | 'offline' | 'online'>(props.initialScope ?? 'all');
   const files = useMemo(() => props.tracks.filter(({ online }) => !online), [props.tracks]);
   const online = useMemo(() => props.tracks.filter(({ online }) => online), [props.tracks]);
@@ -294,7 +295,7 @@ export function LibraryPage(props: LibraryPageProps) {
           : scopeId === 'online' ? <button type="button" className="button outline-button" onClick={props.openSearch}>Открыть поиск <Search size={16} /></button>
           : <button type="button" className="button outline-button" onClick={props.addMusic} disabled={props.busy}><Plus size={17} /> Выбрать файлы</button>)}
       </div>}
-      {isSearch && search.trim().length >= 2 && <OnlineSearch key={search.trim()} query={search.trim()} hasLocal={results.length > 0} saved={saved} disabled={props.busy} choose={props.chooseOnline} />}
+      {isSearch && search.trim().length >= 2 && <OnlineSearch key={search.trim()} query={search.trim()} hasLocal={results.length > 0} filter={catalogSource} setFilter={setCatalogSource} saved={saved} disabled={props.busy} choose={props.chooseOnline} />}
     </div>
   );
 }

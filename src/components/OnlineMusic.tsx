@@ -31,11 +31,10 @@ function message(error: unknown) {
     ? error.message : 'Не удалось связаться с Openverse. Проверьте подключение и повторите попытку.';
 }
 
-export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
-  query: string; hasLocal: boolean; saved: ReadonlySet<string>; disabled: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
+export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabled, choose }: {
+  query: string; hasLocal: boolean; filter: OnlineFilter; setFilter(value: OnlineFilter): void; saved: ReadonlySet<string>; disabled: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
 }) {
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
-  const [filter, setFilter] = useState<OnlineFilter>('all');
   const [tracks, setTracks] = useState<OnlineTrack[] | undefined>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -59,7 +58,8 @@ export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
   return <section className="online-panel" aria-labelledby="online-title" aria-busy={busy}>
     <header><div className="online-mark"><Globe2 size={20} /></div><div>
       <p className="overline">Слушать в Luma</p><h2 id="online-title">Найти в музыкальных сервисах</h2>
-      <p>{hasLocal ? 'Хотите больше вариантов? Проверьте онлайн-каталоги.' : 'Не нашли в медиатеке? Проверьте онлайн-каталоги.'} Запрос отправляется в Openverse только по кнопке.</p>
+      <p>{hasLocal ? 'Хотите больше вариантов? Нажмите «Искать онлайн», чтобы отправить запрос в Openverse.'
+        : 'Отправьте запрос в Openverse кнопкой «Искать онлайн» или клавишей Enter.'}</p>
     </div></header>
     {!connected && <p className="online-offline" role="status"><CloudOff size={17} /> Устройство вне сети. Онлайн-поиск пока недоступен.</p>}
     <form id="online-search-form" className="online-search-form" onSubmit={search}>

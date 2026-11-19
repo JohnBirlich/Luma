@@ -48,15 +48,18 @@ await writeFile(tagged, taggedMp3(sample, {
 await writeFile(broken, taggedMp3(sample, {
   title: "Ty Zdes'", picture: { mime: 'image/png', data: Buffer.from('89504e470d0a1a0a', 'hex') },
 }));
-const library = await DesktopLibrary.open(join(profile, 'Luma Player'));
-assert.equal((await library.importPaths([tagged, broken])).added.length, 2);
-// An upgraded library has no new audio-format fields; inspect an old track on demand, not at startup.
-const libraryFile = join(profile, 'Luma Player', 'library.json');
-const index = JSON.parse(await readFile(libraryFile, 'utf8'));
-const legacyEntry = index.find((entry) => entry.path === broken);
-assert.ok(legacyEntry?.format);
-delete legacyEntry.format;
-await writeFile(libraryFile, JSON.stringify(index));
+try {
+  const library = await DesktopLibrary.open(join(profile, 'Luma Player'));
+  const { added } = await library.importPaths([tagged, broken]);
+  assert.equal(added.length, 2);
+  // An upgraded library has no format fields. Find the fixture by ID: realpath can expand Windows short names.
+  const libraryFile = join(profile, 'Luma Player', 'library.json');
+  const index = JSON.parse(await readFile(libraryFile, 'utf8'));
+  const legacyEntry = index.find((entry) => entry.id === added[1]);
+  assert.ok(legacyEntry?.format);
+  delete legacyEntry.format;
+  await writeFile(libraryFile, JSON.stringify(index));
+} catch (error) { fail(error); }
 const warnings = [];
 let externalRuntimeErrors = 0;
 app.on('web-contents-created', (_event, contents) => {
@@ -583,7 +586,7 @@ async function smoke() {
             const media = document.querySelector('${onlineAudio}');
             return media.currentTime > .15 ? new URL(media.currentSrc).searchParams.get('format') ?? 'original' : media.error ? 'unavailable' : null;
           })()`)).catch(() => 'timed out');
-          if (decoded === 'mp31' && source === 'jamendo' || decoded === 'original' && source === 'wikimedia_audio') {
+          if (decoded === (source === 'jamendo' ? 'mp31' : 'original')) {
             result = `live search and playback passed (${name.replace('Слушать онлайн: ', '')}, ${decoded})`;
             break;
           }
