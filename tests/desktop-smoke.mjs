@@ -176,7 +176,7 @@ async function smoke() {
   assert.equal(await run(`document.querySelector('.immersive-player h1')?.textContent`), "Ty Zdes'");
   assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused && Math.abs(window.testAudio.currentTime - 4) < .2`), true);
   assert.equal(await run(`!!document.querySelector('.immersive-player .record-platter')`), true);
-  assert.deepEqual(await run(`[...document.querySelectorAll('.upcoming-copy strong')].map((item) => item.textContent)`), ['Отблеск', 'Отлив', 'Фиолетовый час', 'Бумажные спутники', 'Синий меридиан']);
+  assert.deepEqual(await run(`[...document.querySelectorAll('.upcoming-copy strong')].map((item) => item.textContent)`), ['Отблеск', 'Отлив', 'Фиолетовый час', 'Бумажные спутники', 'Синий меридиан', 'Ночной гараж', 'Синее кафе', 'Бит квартала', 'Стеклянный вальс', 'Сигнальный контур']);
   await click('.immersive-queue-toggle');
   await waitFor('fullscreen queue hidden and saved', async () => !(await preferences()).appearance.fullscreenQueue && await run(`!document.getElementById('immersive-upcoming')`));
   await collapseWithPointer();
