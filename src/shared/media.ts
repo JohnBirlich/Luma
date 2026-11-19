@@ -1,3 +1,4 @@
+import type { DiagnosticsBridge } from './diagnostics.js';
 import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
 import { cleanTrackText, readTrackTag } from './russian.js';
 import type { VkCoverImage, VkPlaylist } from './vk.js';
@@ -46,6 +47,7 @@ export interface DesktopBridge {
   removeTrack(id: string): Promise<Track[]>;
   openVkLink(url: string): Promise<void>;
   getVkCover(playlist: VkPlaylist): Promise<VkCoverImage | null>;
+  diagnostics: DiagnosticsBridge;
   window: {
     minimize(): void;
     toggleMaximize(): void;

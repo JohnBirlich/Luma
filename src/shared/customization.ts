@@ -11,11 +11,13 @@ export const ACCENTS = [
   { name: 'Роза', color: '#f7aabf' }, { name: 'Серебро', color: '#c5cddd' },
 ] as const;
 
-export const HERO_STYLES = ['cover', 'blur', 'vinyl'] as const;
+export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
+export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum'] as const;
 export const START_PAGES = ['player', 'library', 'vk'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
 export type ThemeName = keyof typeof THEMES;
 export type HeroStyle = typeof HERO_STYLES[number];
+export type BackgroundEffect = typeof BACKGROUND_EFFECTS[number];
 export type StartPage = typeof START_PAGES[number];
 export type SeekStep = typeof SEEK_STEPS[number];
 export type LibraryLayout = 'list' | 'grid';
@@ -24,6 +26,9 @@ export interface Appearance {
   theme: ThemeName;
   accent: string | null;
   hero: HeroStyle;
+  effect: BackgroundEffect;
+  effectStrength: number;
+  compactSidebar: boolean;
   coverColors: boolean;
   motion: boolean;
   libraryLayout: LibraryLayout;
@@ -35,16 +40,20 @@ export interface PlaybackPreferences {
   autoNext: boolean;
 }
 
-export const defaultAppearance: Appearance = { theme: 'amber', accent: null, hero: 'cover', coverColors: true, motion: true, libraryLayout: 'list' };
+export const defaultAppearance: Appearance = { theme: 'amber', accent: null, hero: 'cover', effect: 'aurora', effectStrength: 0.75, compactSidebar: false, coverColors: true, motion: true, libraryLayout: 'list' };
 export const defaultPlayback: PlaybackPreferences = { startPage: 'player', seekStep: 5, autoNext: true };
 export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 
 export function readAppearance(value: unknown): Appearance {
   const data = value as Partial<Appearance> | null | undefined;
+  const oldAppearance = data && typeof data === 'object' && HERO_STYLES.includes(data.hero as HeroStyle) && !Object.hasOwn(data, 'effect');
   return {
     theme: typeof data?.theme === 'string' && Object.hasOwn(THEMES, data.theme) ? data.theme : defaultAppearance.theme,
     accent: isHexColor(data?.accent) ? data.accent.toLowerCase() : null,
     hero: data?.hero && HERO_STYLES.includes(data.hero) ? data.hero : defaultAppearance.hero,
+    effect: data?.effect && BACKGROUND_EFFECTS.includes(data.effect) ? data.effect : oldAppearance ? 'off' : defaultAppearance.effect,
+    effectStrength: typeof data?.effectStrength === 'number' && Number.isFinite(data.effectStrength) ? Math.max(0.25, Math.min(1, data.effectStrength)) : defaultAppearance.effectStrength,
+    compactSidebar: data?.compactSidebar === true,
     coverColors: data?.coverColors !== false,
     motion: data?.motion !== false,
     libraryLayout: data?.libraryLayout === 'grid' ? 'grid' : 'list',

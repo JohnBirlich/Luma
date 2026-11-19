@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, AudioLines, ChevronRight, FolderOpen, Info, Music2, Radio, Settings2, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, Info, Music2, Radio, Settings2, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
 
@@ -35,6 +35,8 @@ interface MenuPageProps {
   openSettings(): void;
   openEqualizer(): void;
   openLibrary(): void;
+  openFavorites(): void;
+  openDiagnostics(): void;
   openVk(): void;
   addMusic(): void;
 }
@@ -59,12 +61,14 @@ export function MenuPage(props: MenuPageProps) {
         </section> : <>
           <MenuGroup label="Музыка">
             <MenuItem icon={Music2} title="Моя медиатека" detail="Файлы с устройства и встроенные демотреки" select={props.openLibrary} />
+            <MenuItem icon={Heart} title="Избранное" detail="Треки, отмеченные сердцем" select={props.openFavorites} />
             <MenuItem icon={FolderOpen} title="Импортировать треки" detail="Добавьте аудиофайлы или перетащите их в окно" select={props.addMusic} disabled={!props.ready} />
             <MenuItem icon={Radio} title="Плейлисты VK" detail="Подборка VK и сохранённые плейлисты" select={props.openVk} />
           </MenuGroup>
           <MenuGroup label="Плеер">
             <MenuItem icon={Settings2} title="Настройки" detail="Внешний вид, медиатека и воспроизведение" select={props.openSettings} />
             <MenuItem icon={SlidersHorizontal} title="Эквалайзер" detail={props.eqEnabled ? 'Включён · пресеты и пять полос' : 'Выключен · пресеты и пять полос'} select={props.openEqualizer} dialog />
+            <MenuItem icon={Bug} title="Диагностика" detail="Журнал событий, подключение и сведения о системе" select={props.openDiagnostics} />
             <MenuItem icon={Info} title="О приложении" detail="Источники и хранение данных" select={() => setAbout(true)} />
           </MenuGroup>
         </>}

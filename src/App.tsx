@@ -5,8 +5,10 @@ import { Sidebar, TitleBar } from './components/Chrome';
 import type { Page } from './components/Chrome';
 import { LibraryPage, PlayerPage } from './components/Collection';
 import { CoverEditor } from './components/CoverEditor';
+import { DiagnosticsPage } from './components/Diagnostics';
 import { Equalizer } from './components/Equalizer';
 import { MenuPage } from './components/Menu';
+import { NowPlayingDialog } from './components/NowPlayingOptions';
 import { PlayerBar } from './components/PlayerBar';
 import { QueuePanel } from './components/QueuePanel';
 import { SettingsPage } from './components/Settings';
@@ -14,6 +16,7 @@ import { TrackDetailsEditor } from './components/TrackDetailsEditor';
 import { VkModeBar, VkMusicPage } from './components/VkMusic';
 import { useCoverArt } from './data/cover-art';
 import { demoTracks } from './data/demos';
+import { recordDiagnostic } from './data/diagnostics';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
 import type { TrackDetails } from './data/track-details';
@@ -24,7 +27,7 @@ import { usePalette } from './player/usePalette';
 import { trackCoverKey, withCover } from './shared/artwork';
 import type { CoverTarget } from './shared/artwork';
 import { defaultAppearance, defaultPlayback, shouldAdvanceAfterEnd, themeVariables } from './shared/customization';
-import type { LibraryLayout } from './shared/customization';
+import type { Appearance, LibraryLayout } from './shared/customization';
 import { clamp } from './shared/equalizer';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
 import type { ImportResult, Track } from './shared/media';
@@ -52,6 +55,7 @@ export default function App() {
   const [page, setPage] = useState<Page>(boot.playback.startPage);
   const isVkPage = page === 'vk';
   const [showEqualizer, setShowEqualizer] = useState(false);
+  const [showAppearance, setShowAppearance] = useState(false);
   const [coverTarget, setCoverTarget] = useState<CoverTarget>();
   const { urls: covers, update: updateCover } = useCoverArt();
   const [detailsId, setDetailsId] = useState<string>();
@@ -73,9 +77,11 @@ export default function App() {
     return withCover(override ? { ...track, ...override } : track, covers.get(trackCoverKey(track.id)));
   }), [originals, covers, details]);
   const byId = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
+  const favoriteIds = useMemo(() => new Set(preferences.favorites), [preferences.favorites]);
+  const favorites = useMemo(() => tracks.filter(({ id }) => favoriteIds.has(id)), [tracks, favoriteIds]);
   const current = byId.get(queue.currentId ?? '') ?? null;
   const detailsTrack = detailsId ? byId.get(detailsId) : undefined;
-  const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer);
+  const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance);
   const player = useAudio(preferences.volume, preferences.equalizer, ended);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
   const sampledTone = usePalette(appearance.coverColors ? current : null);
@@ -86,8 +92,11 @@ export default function App() {
 
   useEffect(() => {
     let ignored = false;
+    const start = performance.now();
+    recordDiagnostic('library.opening');
     void localLibrary.list().then((allLocal) => {
       if (ignored) return;
+      recordDiagnostic('library.opened', { tracks: allLocal.length, ms: performance.now() - start });
       setLocalTracks(allLocal);
       const ids = [...allLocal.map(({ id }) => id), ...(boot.showDemos ? demoIds : [])];
       const state = queueRef.current;
@@ -96,7 +105,10 @@ export default function App() {
         commit(startQueue(ids, ids[0], state.repeat));
       } else commit(restored);
     }).catch(() => {
-      if (!ignored) setNotice({ message: 'Не удалось открыть локальную медиатеку.', error: true });
+      if (!ignored) {
+        recordDiagnostic('library.failed', { ms: performance.now() - start });
+        setNotice({ message: 'Не удалось открыть локальную медиатеку.', error: true });
+      }
     }).finally(() => { if (!ignored) setReady(true); });
     return () => { ignored = true; };
   }, [boot, commit, isPlaying]);
@@ -155,9 +167,13 @@ export default function App() {
     if (!ready || busy.current) return;
     busy.current = true;
     setWorking(true);
+    const start = performance.now();
+    recordDiagnostic('library.import');
     try {
       const result = await operation();
-      if (result.cancelled) return;
+      if (result.cancelled) { recordDiagnostic('library.cancelled'); return; }
+      const snapshot = { ms: performance.now() - start, added: result.added.length, duplicates: result.duplicates, failed: result.failures.length };
+      recordDiagnostic(result.failures.length && !result.added.length ? 'library.importFailed' : result.temporary || result.failures.length ? 'library.partial' : 'library.imported', snapshot);
       setLocalTracks(result.tracks);
       const state = queueRef.current;
       if (result.added.length) {
@@ -173,6 +189,7 @@ export default function App() {
         detail: notes.join(' '), error: !result.added.length && result.failures.length > 0,
       });
     } catch {
+      recordDiagnostic('library.importFailed', { ms: performance.now() - start });
       setNotice({ message: 'Не удалось добавить музыку.', detail: 'Проверьте доступ к файлам и повторите попытку.', error: true });
     } finally {
       busy.current = false;
@@ -193,6 +210,11 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || modalOpen) return;
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.code === 'KeyL') {
+        event.preventDefault();
+        if (!event.repeat) { setPage('diagnostics'); if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false); }
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'Comma') {
         event.preventDefault();
         if (!event.repeat) {
@@ -240,6 +262,7 @@ export default function App() {
       removeQueued(id);
       void updateCover(trackCoverKey(id));
       updateDetails(id);
+      setPreferences((data) => ({ ...data, favorites: data.favorites.filter((favorite) => favorite !== id) }));
       setNotice({ message: 'Трек убран из медиатеки', detail: 'Исходный файл не удалён.' });
     } catch {
       setNotice({ message: 'Не удалось убрать трек из медиатеки.', error: true });
@@ -299,11 +322,18 @@ export default function App() {
     setPage(target);
   }
   const openEqualizer = () => setShowEqualizer(true);
+  const toggleQueue = () => setQueueOpen((open) => !open);
+  const changeAppearance = (appearance: Appearance) => setPreferences((data) => ({ ...data, appearance }));
+  const toggleCompact = () => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, compactSidebar: !data.appearance.compactSidebar } }));
+  const toggleFavorite = useCallback((id: string) => setPreferences((data) => ({
+    ...data, favorites: data.favorites.includes(id) ? data.favorites.filter((favorite) => favorite !== id) : [...data.favorites, id],
+  })), []);
+  const backToMenu = useCallback(() => setPage('menu'), []);
   const changeLibraryLayout = (libraryLayout: LibraryLayout) => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, libraryLayout } }));
   const closeQueue = () => setQueueOpen(false);
 
   return (
-    <div className={`app-shell${isVkPage ? ' vk-mode' : queueOpen ? ' queue-visible' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
+    <div data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${isVkPage ? ' vk-mode' : queueOpen ? ' queue-visible' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
       onDragEnter={(event) => {
         if (modalOpen || !filesDragged(event)) return;
         event.preventDefault();
@@ -324,19 +354,23 @@ export default function App() {
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
       <TitleBar openSettings={() => navigate('settings')} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready} />
-      <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready} count={tracks.length} />
+      <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready} count={tracks.length} favoriteCount={favorites.length}
+        queued={queued.length} queueOpen={queueOpen} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
+        compact={appearance.compactSidebar} toggleCompact={toggleCompact} />
       <main className="main-pane" ref={scrollArea}>
         {isVkPage ? <VkMusicPage covers={covers} editCover={setCoverTarget} discardCover={(key) => { void updateCover(key); }} /> :
+          page === 'diagnostics' ? <DiagnosticsPage back={backToMenu} /> :
           page === 'settings' ? <SettingsPage appearance={appearance} playback={playback} showDemos={preferences.showDemos} libraryReady={ready && !working}
-            previewTrack={current} tint={tint} changeAppearance={(appearance) => setPreferences((data) => ({ ...data, appearance }))}
+            previewTrack={current} tint={tint} changeAppearance={changeAppearance}
             changePlayback={(playback) => setPreferences((data) => ({ ...data, playback }))} toggleDemos={toggleDemos} reset={resetCustomization} goToMenu={() => navigate('menu')} /> :
           page === 'menu' ? <MenuPage localCount={localTracks.length} ready={ready && !working} eqEnabled={preferences.equalizer.enabled}
-            openSettings={() => navigate('settings')} openEqualizer={openEqualizer} openLibrary={goToLibrary} openVk={() => navigate('vk')} addMusic={choose} /> :
-          page === 'player' ? <PlayerPage track={current} tracks={tracks} tint={tint} heroStyle={appearance.hero} playing={player.playing} position={queue.order.indexOf(current?.id ?? '') + 1}
+            openSettings={() => navigate('settings')} openEqualizer={openEqualizer} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openDiagnostics={() => navigate('diagnostics')} openVk={() => navigate('vk')} addMusic={choose} /> :
+          page === 'player' ? <PlayerPage track={current} tracks={tracks} tint={tint} appearance={appearance} playing={player.playing} position={queue.order.indexOf(current?.id ?? '') + 1}
             count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle} play={(id) => playTrack(id, true)} goToLibrary={goToLibrary}
+            favorite={Boolean(current && favoriteIds.has(current.id))} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)} readSpectrum={player.readSpectrum}
             openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} /> :
-          <LibraryPage key={page} tracks={tracks} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
-            searchPage={page === 'search'} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={(id) => void removeLocal(id)} />}
+          <LibraryPage key={page} tracks={page === 'favorites' ? favorites : tracks} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
+            mode={page === 'favorites' || page === 'search' ? page : 'library'} favorites={favoriteIds} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={(id) => void removeLocal(id)} />}
       </main>
       {!isVkPage && queueOpen && <>
         <button type="button" className="queue-scrim" onClick={closeQueue} aria-label="Закрыть панель очереди" />
@@ -349,7 +383,7 @@ export default function App() {
           const state = queueRef.current;
           commit({ ...state, repeat: state.repeat === 'off' ? 'all' : state.repeat === 'all' ? 'one' : 'off' });
         }} previous={previous} next={() => next()} toggleMute={mute} setVolume={setVolume} seek={seek}
-        queueOpen={queueOpen} toggleQueue={() => setQueueOpen((open) => !open)} />}
+        queueOpen={queueOpen} toggleQueue={toggleQueue} />}
       <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />
       <input type="file" ref={fileInput} hidden accept={AUDIO_ACCEPT} multiple onChange={(event) => {
         handleFiles(Array.from(event.currentTarget.files ?? []));
@@ -365,6 +399,7 @@ export default function App() {
       </div>
       {coverTarget && <CoverEditor key={coverTarget.key} target={coverTarget} currentUrl={covers.get(coverTarget.key)} update={saveCover} close={() => setCoverTarget(undefined)} />}
       {detailsTrack && <TrackDetailsEditor key={detailsTrack.id} track={detailsTrack} edited={details.has(detailsTrack.id)} save={saveDetails} close={() => setDetailsId(undefined)} />}
+      {showAppearance && <NowPlayingDialog appearance={appearance} tint={tint} change={changeAppearance} close={() => setShowAppearance(false)} />}
       {showEqualizer && <Equalizer settings={preferences.equalizer} change={(equalizer) => setPreferences((data) => ({ ...data, equalizer }))} close={() => setShowEqualizer(false)} />}
     </div>
   );

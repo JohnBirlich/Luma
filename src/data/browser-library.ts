@@ -1,6 +1,7 @@
 import { audioMime, emptyImport, trackInfo, usableArtwork } from '../shared/media';
 import type { ImportResult, Track } from '../shared/media';
 import type { LibrarySource } from './library';
+import { recordDiagnostic } from './diagnostics';
 
 type Info = ReturnType<typeof trackInfo>;
 interface StoredTrack extends Info {
@@ -65,6 +66,7 @@ function makeEntry(record: StoredTrack, persisted: boolean): SessionEntry {
 
 function ensureLoaded() {
   load ??= readRecords().then((records) => { entries = records.sort((a, b) => a.addedAt - b.addedAt).map((record) => makeEntry(record, true)); }).catch(() => {
+    recordDiagnostic('library.storage');
     // Some embedded previews and private windows disallow IndexedDB. Import still works in memory.
   });
   return load;

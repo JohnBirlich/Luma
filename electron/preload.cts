@@ -10,6 +10,17 @@ const bridge: DesktopBridge = {
   removeTrack: (id) => ipcRenderer.invoke('library:remove', id),
   openVkLink: (url) => ipcRenderer.invoke('vk:open-link', url),
   getVkCover: (playlist) => ipcRenderer.invoke('vk:cover', playlist),
+  diagnostics: {
+    record: (event, values) => ipcRenderer.send('diagnostics:record', event, values),
+    snapshot: () => ipcRenderer.invoke('diagnostics:snapshot'),
+    clear: () => ipcRenderer.invoke('diagnostics:clear'),
+    saveReport: () => ipcRenderer.invoke('diagnostics:save'),
+    onChange: (callback) => {
+      const listener = () => callback();
+      ipcRenderer.on('diagnostics:changed', listener);
+      return () => ipcRenderer.removeListener('diagnostics:changed', listener);
+    },
+  },
   window: {
     minimize: () => { void ipcRenderer.invoke('window:minimize'); },
     toggleMaximize: () => { void ipcRenderer.invoke('window:toggle-maximize'); },

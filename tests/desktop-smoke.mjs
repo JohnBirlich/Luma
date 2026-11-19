@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
 import { taggedMp3 } from './fixtures/mp3.mjs';
 
@@ -84,7 +84,37 @@ async function smoke() {
   assert.match(fallback.picture.src, /^data:image\/jpeg;base64,/);
   assert.notEqual(fallback.picture.src, first.picture.src, 'broken cover does not keep the previous track’s artwork');
   assert.equal(window.getTitle(), "Ty Zdes' — Luma Player");
+  const journalFile = join(profile, 'Luma Player', 'logs', 'diagnostics.json');
+  const snapshot = await waitFor('desktop and renderer startup events', async () => {
+    const data = await run('window.luma.diagnostics.snapshot()');
+    const names = data.entries.map(({ event }) => event);
+    return ['desktop.start', 'desktop.ready', 'renderer.start', 'library.opened', 'audio.ready'].every((name) => names.includes(name)) ? data : undefined;
+  });
+  assert.match(snapshot.environment.runtime, /Electron .*Chromium/);
+  assert.equal(snapshot.storage, 'file');
+  await run(`window.luma.diagnostics.record('audio.error', { code: 4, path: 'private-test-path.mp3', token: 'private-test-token' });
+    window.luma.diagnostics.record('desktop.failed', { code: 1 });`);
+  const persisted = await waitFor('persisted filtered diagnostics', async () => {
+    const raw = await readFile(journalFile, 'utf8').catch(() => '');
+    return raw.includes('"code":4') ? raw : undefined;
+  });
+  assert.doesNotMatch(persisted, /private-test|desktop\.failed/u);
+  await run(`document.querySelector('.sidebar-diagnostic').click()`);
+  await waitFor('diagnostics page', () => run(`document.querySelector('h1')?.textContent === 'Диагностика' && !!document.querySelector('.journal-entry.level-error')`));
+  const reportFile = join(profile, 'Отчёт Luma.log');
+  const saveDialog = dialog.showSaveDialog;
+  try {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: reportFile });
+    assert.equal(await run('window.luma.diagnostics.saveReport()'), true);
+  } finally { dialog.showSaveDialog = saveDialog; }
+  const report = await readFile(reportFile, 'utf8');
+  assert.match(report, /Luma Player .*Система: .*Electron/s);
+  assert.match(report, /audio\.error/u);
+  assert.doesNotMatch(report, /private-test/u);
+  assert.deepEqual((await run('window.luma.diagnostics.clear()')).entries, []);
+  assert.deepEqual(JSON.parse(await readFile(journalFile, 'utf8')), []);
   assert.deepEqual(warnings, []);
+  console.log('Desktop smoke: native diagnostics recorded, persisted, exported, and cleared.');
   console.log('Desktop smoke: Cyrillic and embedded/fallback artwork published from luma:// with production CSP.');
 }
 

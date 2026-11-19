@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { ArrowUpRight, Disc3, ImagePlus, Plus, Radio, RotateCw, Trash2, X } from 'lucide-react';
 import { useVkArtwork } from '../data/vk-artwork';
+import { recordDiagnostic } from '../data/diagnostics';
 import { MAX_VK_PLAYLISTS, readVkShelf, saveVkShelf } from '../data/vk-playlists';
 import { editorialPlaylist, parseVkPlaylist, vkPlaylistKey, vkPlaylistShareUrl, vkPlaylistUrl, vkWidgetUrl, VK_MUSIC_URL, VK_WIDGET_DOCS_URL } from '../shared/vk';
 import type { NamedVkPlaylist } from '../shared/vk';
@@ -25,21 +26,31 @@ function VkLink({ href, children, className }: { href: string; children: ReactNo
 }
 
 function VkFrame({ playlist }: { playlist: NamedVkPlaylist }) {
-  const [status, setStatus] = useState<'loading' | 'timeout' | 'loaded'>('loading');
+  type Status = 'loading' | 'timeout' | 'error' | 'loaded';
+  const [status, setStatus] = useState<Status>('loading');
+  const when = useRef(performance.now());
+  const state = useRef<Status>('loading');
+  function finish(next: Exclude<Status, 'loading'>) {
+    if (state.current === 'loaded' || (next !== 'loaded' && state.current !== 'loading')) return;
+    state.current = next;
+    recordDiagnostic(next === 'loaded' ? 'vk.loaded' : next === 'error' ? 'vk.frameError' : 'vk.timeout', { ms: performance.now() - when.current });
+    setStatus(next);
+  }
   useEffect(() => {
-    const timer = window.setTimeout(() => setStatus((value) => value === 'loading' ? 'timeout' : value), 9000);
+    recordDiagnostic('vk.loading');
+    const timer = window.setTimeout(() => finish('timeout'), 9000);
     return () => window.clearTimeout(timer);
   }, []);
   return (
     <div className="vk-frame-stage" aria-busy={status === 'loading'}>
       {status !== 'loaded' && <div className="vk-frame-placeholder" role="status">
         <Radio size={27} />
-        <strong>{status === 'timeout' ? 'VK пока не ответил' : 'Загружаем плейлист из VK'}</strong>
-        <span>{status === 'timeout' ? 'Попробуйте обновить виджет или открыть плейлист в браузере.' : 'Воспроизведение идёт через официальный плеер.'}</span>
+        <strong>{status === 'timeout' ? 'VK пока не ответил' : status === 'error' ? 'Не удалось загрузить виджет VK' : 'Загружаем плейлист из VK'}</strong>
+        <span>{status === 'loading' ? 'Воспроизведение идёт через официальный плеер.' : 'Попробуйте обновить виджет или открыть плейлист в браузере.'}</span>
       </div>}
       <iframe className={`vk-frame${status === 'loaded' ? ' vk-frame-loaded' : ''}`} src={vkWidgetUrl(playlist)}
         title={`Плейлист VK: ${playlist.name}`} sandbox="allow-scripts allow-same-origin" allow="autoplay; encrypted-media"
-        referrerPolicy="no-referrer" tabIndex={status === 'loaded' ? undefined : -1} onLoad={() => setStatus('loaded')} onError={() => setStatus('timeout')} />
+        referrerPolicy="no-referrer" tabIndex={status === 'loaded' ? undefined : -1} onLoad={() => finish('loaded')} onError={() => finish('error')} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { coverMime, MAX_COVER_FILE } from '../shared/artwork';
+import { recordDiagnostic } from './diagnostics';
 
 const STORE = 'covers';
 let database: Promise<IDBDatabase> | undefined;
@@ -38,7 +39,7 @@ async function write(key: string, image?: Blob): Promise<boolean> {
       else store.delete(key);
     });
     return true;
-  } catch { return false; }
+  } catch { recordDiagnostic('library.coverStorage'); return false; }
 }
 
 export function useCoverArt() {
@@ -58,7 +59,7 @@ export function useCoverArt() {
         live.current.set(key, URL.createObjectURL(image));
       }
       setUrls(new Map(live.current));
-    }).catch(() => { /* Covers still work for the session without IndexedDB. */ });
+    }).catch(() => { if (!cancelled) recordDiagnostic('library.coverStorage'); });
     return () => {
       cancelled = true;
       mounted.current = false;

@@ -1,18 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { ArrowLeft, AudioLines, Check, Disc3, Focus, Headphones, Image, Music2, Palette, Play, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, AudioLines, Check, Headphones, Music2, Palette, Play, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
 import { ACCENTS, accentFor, SEEK_STEPS, THEMES } from '../shared/customization';
-import type { Appearance, HeroStyle, LibraryLayout, PlaybackPreferences, SeekStep, StartPage, ThemeName } from '../shared/customization';
+import type { Appearance, LibraryLayout, PlaybackPreferences, SeekStep, StartPage, ThemeName } from '../shared/customization';
 import type { Track } from '../shared/media';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { Artwork } from './Artwork';
 import { MenuGroup, MenuItem } from './Menu';
+import { NowPlayingOptions } from './NowPlayingOptions';
+import { SceneBackground } from './SceneBackground';
 
-const HERO_OPTIONS = [
-  { id: 'cover', label: 'Обложка', detail: 'Чёткое изображение', icon: Image },
-  { id: 'blur', label: 'Размытие', detail: 'Мягкий свет', icon: Focus },
-  { id: 'vinyl', label: 'Винил', detail: 'Обложка на пластинке', icon: Disc3 },
-] as const;
 
 function ToggleRow({ title, detail, enabled, change, disabled }: {
   title: string; detail: string; enabled: boolean; change(): void; disabled?: boolean;
@@ -56,8 +53,10 @@ function ThemePreview({ appearance, track, tint }: { appearance: Appearance; tra
       <div className="settings-preview-heading"><p className="overline">Предпросмотр</p><span>{THEMES[appearance.theme].name}</span></div>
       <div className="settings-preview-window" aria-hidden="true">
         <div className="settings-preview-chrome"><AudioLines size={13} /><span>Luma Player</span><i /><i /><i /></div>
-        <div className={`settings-preview-hero settings-preview-${appearance.hero}`} style={{ '--sample-tone': tint } as CSSProperties}>
-          {picture && appearance.hero !== 'vinyl' && <img src={picture} alt="" />}
+        <div className={`settings-preview-hero settings-preview-${appearance.hero}${appearance.effect !== 'off' ? ' settings-preview-has-effect' : ''}`} style={{ '--sample-tone': tint, '--scene-tone': tint } as CSSProperties}>
+          <SceneBackground effect={appearance.effect} strength={appearance.effectStrength} />
+          {picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
+          {appearance.hero === 'center' && <Artwork track={track} className="settings-preview-center-art" />}
           {appearance.hero === 'vinyl' && <div className="settings-preview-record"><Artwork track={track} /></div>}
           <div><small>СЕЙЧАС ИГРАЕТ</small><strong>{track?.title ?? 'Ваша музыка'}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
         </div>
@@ -84,7 +83,7 @@ interface SettingsProps {
 
 const SECTIONS = [
   { id: 'look', label: 'Внешний вид', detail: 'Тема, акцент и анимации', icon: Palette },
-  { id: 'now', label: 'Сейчас играет', detail: 'Обложка, размытие или винил', icon: Headphones },
+  { id: 'now', label: 'Сейчас играет', detail: 'Компоновка, эффекты и яркость фона', icon: Headphones },
   { id: 'playback', label: 'Воспроизведение', detail: 'Стартовая страница, перемотка и автопереход', icon: SlidersHorizontal },
   { id: 'library', label: 'Медиатека', detail: 'Вид списка треков и демоколлекция', icon: Music2 },
 ] as const;
@@ -96,7 +95,6 @@ export function SettingsPage(props: SettingsProps) {
   const root = useRef<HTMLDivElement>(null);
   const color = appearance.accent ?? THEMES[appearance.theme].accent;
   const accent = accentFor(appearance);
-  const onHero = (hero: HeroStyle) => changeAppearance({ ...appearance, hero });
   useEffect(() => { root.current?.parentElement?.scrollTo({ top: 0 }); }, [section]);
   const back = () => section ? setSection(undefined) : props.goToMenu();
   return (
@@ -126,15 +124,12 @@ export function SettingsPage(props: SettingsProps) {
                 {appearance.accent && <button className="text-button" type="button" onClick={() => changeAppearance({ ...appearance, accent: null })}>Цвет темы</button>}
               </div>
               {accent !== color && <p className="setting-hint">Акцент слегка осветлён, чтобы текст был читаемым.</p>}
-              <ToggleRow title="Анимации" detail="Плавные переходы и анимация индикатора звука." enabled={appearance.motion} change={() => changeAppearance({ ...appearance, motion: !appearance.motion })} />
+              <ToggleRow title="Компактная боковая панель" detail="Оставить только иконки на широком экране." enabled={appearance.compactSidebar} change={() => changeAppearance({ ...appearance, compactSidebar: !appearance.compactSidebar })} />
+              <ToggleRow title="Анимации" detail="Плавные переходы, живые фоны и индикатор звука." enabled={appearance.motion} change={() => changeAppearance({ ...appearance, motion: !appearance.motion })} />
             </SettingCard>
           </>}
           {section?.id === 'now' && <SettingCard title="Экран «Сейчас играет»">
-            <div className="hero-style-grid" role="group" aria-label="Вид экрана Сейчас играет">
-              {HERO_OPTIONS.map(({ id, label, detail, icon: Icon }) => <button key={id} type="button" className="hero-style-option" aria-pressed={appearance.hero === id} onClick={() => onHero(id)}>
-                <Icon size={17} /><span><strong>{label}</strong><small>{detail}</small></span>
-              </button>)}
-            </div>
+            <NowPlayingOptions appearance={appearance} change={changeAppearance} />
             <ToggleRow title="Цвет фона из обложки" detail="Если выключено, фон использует акцент темы." enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
           </SettingCard>}
           {section?.id === 'playback' && <>
