@@ -31,7 +31,4 @@ nsis:
   createStartMenuShortcut: true
   artifactName: 'Luma-Player-Setup-${version}-${arch}.${ext}'
 portable:
-  installerLanguages:
-    - ru_RU
-  language: '1049'
   artifactName: 'Luma-Player-Portable-${version}-${arch}.${ext}'
