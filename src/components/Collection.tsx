@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, Disc3, Headphones, Heart, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
@@ -110,7 +110,7 @@ export function PlayerPage(props: PlayerPageProps) {
         </div>
       </header>
       <section aria-label="Текущий трек" className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
-        <SceneBackground effect={effect} strength={effectStrength} animate={motion && playing && props.sceneVisible} sample={props.readSpectrum} />
+        <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive ? props.readSpectrum : undefined} />
         {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
           onError={() => { if (!fallback) setFailedPicture(source); }} />}
         {!showPicture && !centered && hero !== 'blur' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
@@ -154,7 +154,7 @@ interface LibraryPageProps {
   playing: boolean;
   showDemos: boolean;
   busy: boolean;
-  mode: 'library' | 'search' | 'favorites';
+  mode: 'library' | 'search' | 'favorites' | 'recent';
   favorites: ReadonlySet<string>;
   toggleFavorite(id: string): void;
   goToLibrary(): void;
@@ -175,6 +175,7 @@ export function LibraryPage(props: LibraryPageProps) {
   const isLibrary = props.mode === 'library';
   const isSearch = props.mode === 'search';
   const isFavorites = props.mode === 'favorites';
+  const isRecent = props.mode === 'recent';
   const [search, setSearch] = useState('');
   const [onlyFiles, setOnlyFiles] = useState(false);
   const files = useMemo(() => props.tracks.filter(({ demo }) => !demo), [props.tracks]);
@@ -186,9 +187,10 @@ export function LibraryPage(props: LibraryPageProps) {
   return (
     <div className="page library-page">
       <header className="page-header">
-        <div><p className="overline page-kicker"><span />{isSearch ? 'Найти трек' : 'Коллекция Luma'}</p><h1>{isFavorites ? 'Избранное' : isSearch ? 'Поиск' : 'Медиатека'}</h1></div>
+        <div><p className="overline page-kicker"><span />{isSearch ? 'Найти трек' : 'Коллекция Luma'}</p><h1>{isRecent ? 'Недавно слушали' : isFavorites ? 'Избранное' : isSearch ? 'Поиск' : 'Медиатека'}</h1></div>
         {isLibrary && <button type="button" className="button primary-button" onClick={props.addMusic} disabled={props.busy}><Plus size={18} /> Добавить музыку</button>}
       </header>
+      {isRecent && <p className="recent-intro">Порядок прослушивания локальных треков. История не синхронизируется с VK.</p>}
       {isLibrary && <div className="collection-tabs" role="group" aria-label="Разделы медиатеки">
         <button type="button" aria-pressed={!onlyFiles} onClick={() => setOnlyFiles(false)}>Все треки <small>{props.tracks.length}</small></button>
         <button type="button" aria-pressed={onlyFiles} onClick={() => setOnlyFiles(true)}>С устройства <small>{files.length}</small></button>
@@ -221,9 +223,9 @@ export function LibraryPage(props: LibraryPageProps) {
         {results.map((track) => <TrackCard key={track.id} track={track} active={track.id === props.currentId} playing={props.playing} row={isList}
           play={props.play} add={props.add} editCover={props.editCover} editDetails={props.editDetails} remove={props.remove} favorite={props.favorites.has(track.id)} toggleFavorite={props.toggleFavorite} />)}
       </div> : <div className="empty-library">
-        <div>{isFavorites ? <Heart size={27} /> : <Music2 size={27} />}</div><h2>{term ? 'Ничего не нашлось' : isFavorites ? 'Сохраните любимые треки' : 'Здесь будет ваша музыка'}</h2>
-        <p>{term ? 'Попробуйте поискать по части названия или имени исполнителя.' : isFavorites ? 'Нажмите на сердце рядом с треком или на экране «Сейчас играет».' : 'Перетащите аудиофайлы в окно или выберите их на компьютере.'}</p>
-        {!term && (isFavorites ? <button type="button" className="button outline-button" onClick={props.goToLibrary}>Открыть медиатеку <ArrowRight size={16} /></button>
+        <div>{isRecent ? <History size={27} /> : isFavorites ? <Heart size={27} /> : <Music2 size={27} />}</div><h2>{term ? 'Ничего не нашлось' : isRecent ? 'История пока пуста' : isFavorites ? 'Сохраните любимые треки' : 'Здесь будет ваша музыка'}</h2>
+        <p>{term ? 'Попробуйте поискать по части названия или имени исполнителя.' : isRecent ? 'Прослушанные треки появятся здесь, если в настройках включена история.' : isFavorites ? 'Нажмите на сердце рядом с треком или на экране «Сейчас играет».' : 'Перетащите аудиофайлы в окно или выберите их на компьютере.'}</p>
+        {!term && (isFavorites || isRecent ? <button type="button" className="button outline-button" onClick={props.goToLibrary}>Открыть медиатеку <ArrowRight size={16} /></button>
           : <button type="button" className="button outline-button" onClick={props.addMusic} disabled={props.busy}><Plus size={17} /> Выбрать файлы</button>)}
       </div>}
     </div>

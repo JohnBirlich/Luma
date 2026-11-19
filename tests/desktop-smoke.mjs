@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, session } from 'electron';
+import { app, BrowserWindow, dialog, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
 import { VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
 import { VK_SESSION } from '../dist-electron/electron/vk-window.js';
@@ -30,7 +30,7 @@ async function waitFor(label, check) {
   throw new Error(`Timed out: ${label}`);
 }
 
-const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), 80_000);
+const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), 100_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
 const cover = await readFile(join(root, 'public/artwork/afterimage.webp'));
@@ -104,13 +104,45 @@ async function smoke() {
   // layout and transport identity independent of those settings; playing vinyl is covered in Chromium.
   await waitFor('seekable audio', () => run(`Number.isFinite(document.querySelector('audio').duration)`));
   await run(`window.testAudio = document.querySelector('audio'); window.testAudio.pause(); window.testAudio.currentTime = 4;`);
-  await run(`document.querySelector('.hero-fullscreen').click()`);
-  await waitFor('expanded player dialog', () => run(`!!document.querySelector('.immersive-player[open]')`));
+  const waitForDialog = () => waitFor('expanded player dialog', () => run(`!!document.querySelector('.immersive-player[open]')`));
+  const expand = () => run(`document.querySelector('.hero-fullscreen').focus(); document.querySelector('.hero-fullscreen').click()`);
+  async function collapseWithPointer() {
+    const point = await run(`(() => {
+      const button = document.querySelector('.immersive-collapse');
+      const { left, top, width, height } = button.getBoundingClientRect();
+      const x = Math.round(left + width / 2), y = Math.round(top + height / 2);
+      return { x, y, hit: document.elementFromPoint(x, y)?.closest('button') === button,
+        drag: getComputedStyle(document.querySelector('.native-title-bar')).getPropertyValue('app-region') };
+    })()`);
+    assert.equal(point.hit, true);
+    assert.equal(point.drag, 'no-drag');
+    const { x, y } = point;
+    window.focus();
+    window.webContents.sendInputEvent({ type: 'mouseMove', x, y });
+    window.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, x, y });
+    window.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, x, y });
+    await waitFor('pointer exit and opener focus', () => run(`!document.querySelector('.immersive-player') && !document.fullscreenElement && document.activeElement?.matches('.hero-fullscreen')`));
+  }
+  await expand();
+  await waitForDialog();
   assert.equal(await run(`document.querySelector('.immersive-player h1')?.textContent`), "Ty Zdes'");
   assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused && Math.abs(window.testAudio.currentTime - 4) < .2`), true);
   assert.equal(await run(`!!document.querySelector('.immersive-player .record-platter')`), true);
-  await run(`document.querySelector('.immersive-collapse').click()`);
-  await waitFor('player collapsed', () => run(`!document.querySelector('.immersive-player') && !document.fullscreenElement`));
+  assert.deepEqual(await run(`[...document.querySelectorAll('.upcoming-copy strong')].map((item) => item.textContent)`), ['Отблеск', 'Отлив', 'Фиолетовый час', 'Бумажные спутники', 'Синий меридиан']);
+  await collapseWithPointer();
+  // Simulate a host that never settles its request, without waiting to show or close the player.
+  await run(`window.lumaRequestFullscreen = HTMLElement.prototype.requestFullscreen;
+    HTMLElement.prototype.requestFullscreen = () => new Promise(() => {});`);
+  try {
+    await expand();
+    await waitForDialog();
+    await collapseWithPointer();
+    assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused && Math.abs(window.testAudio.currentTime - 4) < .2`), true);
+  } finally { await run(`HTMLElement.prototype.requestFullscreen = window.lumaRequestFullscreen;`); }
+  await run(`document.querySelector('.title-settings').click()`);
+  await waitFor('settings page', () => run(`!!document.querySelector('.settings-page [aria-label="Обновления приложения"]')`));
+  await run(`document.querySelector('.settings-page [aria-label="Обновления приложения"]').click()`);
+  await waitFor('settings show package version', () => run(`document.querySelector('.settings-page .setting-card header')?.textContent.includes(${JSON.stringify(`Установлена версия ${version}.`)})`));
   await go('Меню');
   await waitFor('about action', () => run(`!!document.querySelector('[aria-label="О приложении"]')`));
   await run(`document.querySelector('[aria-label="О приложении"]').click()`);
@@ -125,8 +157,22 @@ async function smoke() {
   });
   try {
     await go('VK Музыка');
-    await waitFor('VK account entry', () => run(`!!document.querySelector('button.vk-account-open')`));
-    await run(`document.querySelector('button.vk-account-open').click()`);
+    await waitFor('VK account entry', () => run(`!!document.querySelector('a.vk-account-open')`));
+    const launch = shell.openExternal;
+    const openedUrls = [];
+    try {
+      shell.openExternal = async (url) => { openedUrls.push(url); };
+      assert.equal(await run(`document.querySelector('a.vk-account-open').href`), VK_MUSIC_URL);
+      await run(`document.querySelector('a.vk-account-open').click()`);
+      await waitFor('official VK URL handed to desktop browser', () => openedUrls.length);
+      assert.deepEqual(openedUrls, [VK_MUSIC_URL]);
+      assert.equal(BrowserWindow.getAllWindows().length, 1, 'sign-in should not default to the isolated window');
+      shell.openExternal = async () => { throw new Error('fixture: browser handler unavailable'); };
+      await run(`document.querySelector('a.vk-account-open').click()`);
+      await waitFor('visible browser launch error', () => run(`document.querySelector('.vk-link-error')?.textContent.includes(${JSON.stringify(VK_MUSIC_URL)})`));
+    } finally { shell.openExternal = launch; }
+    await run(`document.querySelector('.vk-window-option summary').click();`);
+    await run(`document.querySelector('button.vk-open-window').click();`);
     const account = await waitFor('official sign-in in separate window', () => BrowserWindow.getAllWindows().find((item) => item !== window && item.webContents.getURL() === `${authOrigin}/luma-smoke`));
     await waitFor('VK test page loaded', () => account.webContents.executeJavaScript(`document.body?.textContent.includes('Official sign-in fixture')`));
     assert.equal(account.webContents.session, vkSession);
@@ -139,7 +185,7 @@ async function smoke() {
     vkSession.protocol.unhandle('https');
     session.defaultSession.protocol.unhandle('https');
   }
-  console.log('Desktop smoke: consistent package/About version, immersive vinyl and an isolated VK sign-in window.');
+  console.log('Desktop smoke: package version, repeatable fullscreen pointer exit, upcoming queue, and browser-first VK with isolated fallback.');
   const journalFile = join(profile, 'Luma Player', 'logs', 'diagnostics.json');
   const snapshot = await waitFor('desktop and renderer startup events', async () => {
     const data = await run('window.luma.diagnostics.snapshot()');

@@ -1,6 +1,6 @@
 {
   "name": "luma-player",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "A Windows audio player with a local library and VK playlists",

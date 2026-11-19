@@ -23,7 +23,7 @@ import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
 import type { TrackDetails } from './data/track-details';
 import { useMediaSession } from './player/mediaSession';
-import { readPreferences, savePreferences } from './player/preferences';
+import { readPreferences, rememberTrack, savePreferences } from './player/preferences';
 import { useAudio } from './player/useAudio';
 import { usePresentation } from './player/usePresentation';
 import { usePalette } from './player/usePalette';
@@ -82,17 +82,24 @@ export default function App() {
   const byId = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
   const favoriteIds = useMemo(() => new Set(preferences.favorites), [preferences.favorites]);
   const favorites = useMemo(() => tracks.filter(({ id }) => favoriteIds.has(id)), [tracks, favoriteIds]);
+  const recent = useMemo(() => preferences.recent.flatMap((id) => byId.get(id) ?? []), [byId, preferences.recent]);
   const current = byId.get(queue.currentId ?? '') ?? null;
   const detailsTrack = detailsId ? byId.get(detailsId) : undefined;
   const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance);
-  const { open: presentationOpen, show: showPresentation, close: closePresentation, stage: presentationStage } = usePresentation();
-  const player = useAudio(preferences.volume, preferences.equalizer, ended);
+  const { open: presentationOpen, show: showPresentation, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
+  const trackStarted = useCallback((id: string) => setPreferences((data) => {
+    if (!data.playback.rememberRecent) return data;
+    const recent = rememberTrack(data.recent, id);
+    return recent === data.recent ? data : { ...data, recent };
+  }), []);
+  const player = useAudio(preferences.volume, preferences.equalizer, ended, trackStarted);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
   const sampledTone = usePalette(appearance.coverColors ? current : null);
   const tint = appearance.coverColors ? sampledTone : theme['--accent'];
   const localPlaybackError = isVkPage ? '' : player.error;
-  const queued = queue.order.flatMap((id) => byId.get(id) ?? []);
-  const upcoming = upcomingIds(queue).flatMap((id) => byId.get(id) ?? []);
+  const queued = useMemo(() => queue.order.flatMap((id) => byId.get(id) ?? []), [queue.order, byId]);
+  const upcoming = useMemo(() => upcomingIds(queue).flatMap((id) => byId.get(id) ?? []), [queue, byId]);
+  const visibleNotice = notice && (notice.error || playback.successNotices) ? notice : undefined;
 
   useEffect(() => {
     let ignored = false;
@@ -160,7 +167,7 @@ export default function App() {
     seekforward: ({ seekOffset }: MediaSessionActionDetails) => seek(seekOffset ?? playback.seekStep, true),
     seekbackward: ({ seekOffset }: MediaSessionActionDetails) => seek(-(seekOffset ?? playback.seekStep), true),
   }), [next, previous, play, pause, seek, playback.seekStep]);
-  useMediaSession(isVkPage ? null : current, player.playing, player.elapsed, player.duration, isVkPage ? noMediaActions : mediaActions);
+  useMediaSession(isVkPage ? null : current, player.playing, player.elapsed, player.duration, isVkPage ? noMediaActions : mediaActions, playback.publishTrack);
 
   const setVolume = useCallback((value: number) => {
     const volume = clamp(value, 0, 1);
@@ -273,7 +280,7 @@ export default function App() {
       removeQueued(id);
       void updateCover(trackCoverKey(id));
       updateDetails(id);
-      setPreferences((data) => ({ ...data, favorites: data.favorites.filter((favorite) => favorite !== id) }));
+      setPreferences((data) => ({ ...data, favorites: data.favorites.filter((favorite) => favorite !== id), recent: data.recent.filter((recentId) => recentId !== id) }));
       setNotice({ message: 'Трек убран из медиатеки', detail: 'Исходный файл не удалён.' });
     } catch {
       setNotice({ message: 'Не удалось убрать трек из медиатеки.', error: true });
@@ -352,7 +359,7 @@ export default function App() {
   };
 
   return (
-    <div data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${isVkPage ? ' vk-mode' : queueOpen ? ' queue-visible' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
+    <div data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${isVkPage ? ' vk-mode' : queueOpen ? ' queue-visible' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
       onDragEnter={(event) => {
         if (modalOpen || presentationOpen || !filesDragged(event)) return;
         event.preventDefault();
@@ -380,16 +387,18 @@ export default function App() {
         {isVkPage ? <VkMusicPage covers={covers} editCover={setCoverTarget} discardCover={(key) => { void updateCover(key); }} /> :
           page === 'diagnostics' ? <DiagnosticsPage back={backToMenu} /> :
           page === 'settings' ? <SettingsPage appearance={appearance} playback={playback} showDemos={preferences.showDemos} libraryReady={ready && !working}
-            previewTrack={current} tint={tint} changeAppearance={changeAppearance}
+            previewTrack={current} tint={tint} localCount={localTracks.length} recentCount={preferences.recent.length}
+            volumeControls={localControls} eqEnabled={preferences.equalizer.enabled} openEqualizer={openEqualizer} openRecent={() => navigate('recent')}
+            clearRecent={() => setPreferences((data) => ({ ...data, recent: [] }))} openDiagnostics={() => navigate('diagnostics')} changeAppearance={changeAppearance}
             changePlayback={(playback) => setPreferences((data) => ({ ...data, playback }))} toggleDemos={toggleDemos} reset={resetCustomization} goToMenu={() => navigate('menu')} /> :
           page === 'menu' ? <MenuPage localCount={localTracks.length} ready={ready && !working} eqEnabled={preferences.equalizer.enabled}
-            openSettings={() => navigate('settings')} openEqualizer={openEqualizer} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openDiagnostics={() => navigate('diagnostics')} openVk={() => navigate('vk')} addMusic={choose} /> :
+            openSettings={() => navigate('settings')} openEqualizer={openEqualizer} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openDiagnostics={() => navigate('diagnostics')} openVk={() => navigate('vk')} addMusic={choose} /> :
           page === 'player' ? <PlayerPage track={current} tracks={tracks} tint={tint} appearance={appearance} playing={player.playing} position={queue.order.indexOf(current?.id ?? '') + 1}
             count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle} play={(id) => playTrack(id, true)} goToLibrary={goToLibrary}
             favorite={Boolean(current && favoriteIds.has(current.id))} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)} openPresentation={showPresentation} sceneVisible={!presentationOpen && !modalOpen} readSpectrum={player.readSpectrum}
             openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} /> :
-          <LibraryPage key={page} tracks={page === 'favorites' ? favorites : tracks} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
-            mode={page === 'favorites' || page === 'search' ? page : 'library'} favorites={favoriteIds} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={(id) => void removeLocal(id)} />}
+          <LibraryPage key={page} tracks={page === 'favorites' ? favorites : page === 'recent' ? recent : tracks} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
+            mode={page === 'favorites' || page === 'search' || page === 'recent' ? page : 'library'} favorites={favoriteIds} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={(id) => void removeLocal(id)} />}
       </main>
       {!isVkPage && queueOpen && <>
         <button type="button" className="queue-scrim" onClick={closeQueue} aria-label="Закрыть панель очереди" />
@@ -398,7 +407,7 @@ export default function App() {
       </>}
       {isVkPage ? <VkModeBar goToPlayer={() => setPage('player')} /> : <PlayerBar {...localControls} track={current}
         goToPlayer={() => setPage('player')} openPresentation={showPresentation} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
-      {presentationOpen && current && !isVkPage && <FullscreenPlayer {...localControls} stage={presentationStage} track={current} tint={tint} appearance={appearance}
+      {presentationOpen && current && !isVkPage && <FullscreenPlayer {...localControls} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={appearance}
         favorite={favoriteIds.has(current.id)} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
         openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} />}
       <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />
@@ -408,15 +417,15 @@ export default function App() {
       }} />
       {dropActive && <div className="drop-overlay" aria-hidden="true"><div><FileAudio size={30} /><strong>Отпустите файлы</strong><span>Добавим аудио в вашу медиатеку</span></div></div>}
       <div className="notifications" aria-live="polite">
-        {(notice || localPlaybackError) && <div className={`toast${notice?.error || (!notice && localPlaybackError) ? ' toast-error' : ''}`}>
-          {notice?.error || (!notice && localPlaybackError) ? <CircleAlert size={20} /> : <CircleCheck size={20} />}
-          <div><strong>{notice?.message ?? localPlaybackError}</strong>{notice?.detail && <small>{notice.detail}</small>}</div>
-          {notice && <button type="button" className="icon-button" onClick={() => setNotice(undefined)} aria-label="Скрыть уведомление"><X size={17} /></button>}
+        {(visibleNotice || localPlaybackError) && <div className={`toast${visibleNotice?.error || (!visibleNotice && localPlaybackError) ? ' toast-error' : ''}`}>
+          {visibleNotice?.error || (!visibleNotice && localPlaybackError) ? <CircleAlert size={20} /> : <CircleCheck size={20} />}
+          <div><strong>{visibleNotice?.message ?? localPlaybackError}</strong>{visibleNotice?.detail && <small>{visibleNotice.detail}</small>}</div>
+          {visibleNotice && <button type="button" className="icon-button" onClick={() => setNotice(undefined)} aria-label="Скрыть уведомление"><X size={17} /></button>}
         </div>}
       </div>
       {coverTarget && <CoverEditor key={coverTarget.key} target={coverTarget} currentUrl={covers.get(coverTarget.key)} update={saveCover} close={() => setCoverTarget(undefined)} />}
       {detailsTrack && <TrackDetailsEditor key={detailsTrack.id} track={detailsTrack} edited={details.has(detailsTrack.id)} save={saveDetails} close={() => setDetailsId(undefined)} />}
-      {showAppearance && <NowPlayingDialog appearance={appearance} tint={tint} track={current} sample={player.playing ? player.readSpectrum : undefined} change={changeAppearance} close={() => setShowAppearance(false)} />}
+      {showAppearance && <NowPlayingDialog appearance={appearance} tint={tint} track={current} playing={player.playing} sample={player.playing ? player.readSpectrum : undefined} change={changeAppearance} close={() => setShowAppearance(false)} />}
       {showEqualizer && <Equalizer settings={preferences.equalizer} change={(equalizer) => setPreferences((data) => ({ ...data, equalizer }))} close={() => setShowEqualizer(false)} />}
     </div>
   );

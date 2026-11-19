@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import type { BackgroundEffect } from '../shared/customization';
+import { EFFECT_TEMPOS } from '../shared/customization';
+import type { BackgroundEffect, EffectTempo } from '../shared/customization';
 import type { ReadSpectrum } from '../player/useAudio';
 import { useVisualMotion } from '../player/useVisualMotion';
 
@@ -8,6 +9,7 @@ interface SceneProps {
   effect: BackgroundEffect;
   strength?: number;
   animate?: boolean;
+  tempo?: EffectTempo;
   sample?: ReadSpectrum;
 }
 
@@ -25,9 +27,9 @@ function energy(data: Uint8Array, start: number, end: number) {
   return (0.5 * peak + 0.5 * total / (end - start)) / 255;
 }
 
-export const SceneBackground = memo(function SceneBackground({ effect, strength = 0.75, animate = false, sample }: SceneProps) {
+export const SceneBackground = memo(function SceneBackground({ effect, strength = 0.75, animate = false, tempo = 'normal', sample }: SceneProps) {
   const element = useRef<HTMLDivElement>(null);
-  const moving = useVisualMotion(animate && effect !== 'off');
+  const moving = useVisualMotion(animate && strength > 0 && effect !== 'off');
   useEffect(() => {
     const target = element.current;
     if (!target || !moving || !sample) return;
@@ -73,13 +75,15 @@ export const SceneBackground = memo(function SceneBackground({ effect, strength 
 
   if (effect === 'off') return null;
   return (
-    <div className={`scene-background scene-${effect}${moving ? ' scene-moving' : ''}`} ref={element} style={{ '--strength': strength } as CSSProperties} aria-hidden="true">
+    <div className={`scene-background scene-${effect}${moving ? ' scene-moving' : ''}`} ref={element} style={{ '--strength': strength, '--scene-tempo': EFFECT_TEMPOS[tempo].factor } as CSSProperties} aria-hidden="true">
       {effect === 'aurora' && <div className="aurora-clouds"><i /><i /><i /></div>}
       {effect === 'waves' && <svg className="scene-ribbons" viewBox="0 0 1000 450" preserveAspectRatio="xMidYMid slice" fill="none">
-        {Array.from({ length: 16 }, (_, i) => <path key={i} d={wavePath} transform={`translate(${i * 4} ${i * 13 - 86})`} opacity={0.15 + i * 0.045} />)}
+        {Array.from({ length: 18 }, (_, i) => <path key={i} d={wavePath} transform={`translate(${i * 4} ${i * 13 - 86})`} opacity={0.22 + i * 0.039} />)}
       </svg>}
       {effect === 'stars' && <div className="star-field"><i /><i /><i /></div>}
       {effect === 'spectrum' && <div className="scene-bars">{idle.map((height, index) => <i key={index} style={{ '--idle': height } as CSSProperties} />)}</div>}
+      {effect === 'pulse' && <div className="scene-pulse-rings"><i /><i /><i /><i /><i /></div>}
+      {effect === 'nebula' && <div className="scene-dust"><i /><i /><i /></div>}
       {effect === 'orbits' && <div className="orbit-lines"><i /><i /><i /></div>}
       {effect === 'prism' && <div className="scene-prism-beams"><i /><i /><i /></div>}
     </div>

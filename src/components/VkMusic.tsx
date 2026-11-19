@@ -21,15 +21,19 @@ function VkLink({ href, children, className }: { href: string; children: ReactNo
       setFailed(false);
       void window.luma.openVkLink(href).catch(() => setFailed(true));
     }}>{children}</a>
-    {failed && <span className="vk-link-error" role="alert">Не удалось открыть браузер. Скопируйте адрес ссылки.</span>}
+    {failed && <span className="vk-link-error" role="alert">Не удалось запустить браузер. Откройте <code>{href}</code> вручную.</span>}
   </>;
+}
+
+export function VkBrowserLink() {
+  return <VkLink href={VK_MUSIC_URL} className="button vk-account-open"><LogIn size={17} /> Войти в VK в браузере <ArrowUpRight size={15} /></VkLink>;
 }
 
 function VkAccount() {
   const desktop = window.luma;
   const [opening, setOpening] = useState(false);
   const [failed, setFailed] = useState(false);
-  async function open() {
+  async function openWindow() {
     if (!desktop || opening) return;
     setOpening(true);
     setFailed(false);
@@ -43,14 +47,15 @@ function VkAccount() {
     <div className="vk-account-copy">
       <p className="overline">Официальная страница VK</p>
       <h2 id="vk-account-title">Ваша музыка в VK</h2>
-      <p>Войдите в аккаунт на сайте VK и откройте свою коллекцию, рекомендации или VK Микс. Вход и воспроизведение остаются на стороне VK.</p>
+      <p>Откройте VK в обычном браузере и войдите на его сайте. Там доступны «Моя музыка», рекомендации и VK Микс. Пароль вводится только на сайте VK. Личная библиотека и рекомендации не переносятся в Luma.</p>
       <ul aria-label="Разделы на сайте VK"><li><Heart size={14} /> Моя музыка</li><li><Sparkles size={14} /> Для вас</li><li><Radio size={14} /> VK Микс</li></ul>
-      <div className="vk-account-actions">
-        {desktop ? <><button type="button" className="button vk-account-open" disabled={opening} onClick={() => void open()}><LogIn size={17} />{opening ? 'Открываем VK…' : 'Войти или открыть VK Музыку'}</button>
-          <VkLink href={VK_MUSIC_URL} className="text-button">В браузере <ArrowUpRight size={15} /></VkLink></>
-          : <VkLink href={VK_MUSIC_URL} className="button vk-account-open"><LogIn size={17} /> Войти или открыть VK Музыку <ArrowUpRight size={15} /></VkLink>}
-      </div>
-      {failed && <p className="vk-link-error" role="alert">Не удалось открыть отдельное окно VK. Попробуйте открыть его в браузере.</p>}
+      <div className="vk-account-actions"><VkBrowserLink /></div>
+      {desktop && <details className="vk-window-option">
+        <summary>Отдельное окно сайта</summary>
+        <p>У окна Luma своя сессия сайта VK. Вход из браузера не переносится в это окно или виджеты. Если VK не пускает в аккаунт в окне, используйте кнопку выше.</p>
+        <button type="button" className="button outline-button vk-open-window" disabled={opening} onClick={() => void openWindow()}>{opening ? 'Открываем VK…' : 'Открыть в отдельном окне'} <ArrowUpRight size={15} /></button>
+        {failed && <p className="vk-link-error" role="alert">Окно VK не открылось. Попробуйте открыть VK в браузере.</p>}
+      </details>}
     </div>
   </section>;
 }

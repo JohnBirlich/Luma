@@ -13,13 +13,18 @@ export interface Preferences {
   playback: PlaybackPreferences;
   queue?: QueueState;
   favorites: string[];
+  recent: string[];
 }
 
 const KEY = 'luma-player:v1';
-const defaults: Preferences = { volume: 0.75, lastVolume: 0.75, showDemos: true, equalizer: defaultEqualizer, appearance: defaultAppearance, playback: defaultPlayback, favorites: [] };
+export const RECENT_LIMIT = 60;
+const defaults: Preferences = { volume: 0.75, lastVolume: 0.75, showDemos: true, equalizer: defaultEqualizer, appearance: defaultAppearance, playback: defaultPlayback, favorites: [], recent: [] };
 const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.every((id) => typeof id === 'string');
 export function readFavorites(value: unknown): string[] {
   return Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128))] : [];
+}
+export function rememberTrack(ids: string[], id: string): string[] {
+  return ids[0] === id ? ids : [id, ...ids.filter((item) => item !== id)].slice(0, RECENT_LIMIT);
 }
 const numeric = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? clamp(value, min, max) : fallback;
@@ -37,6 +42,7 @@ export function decodePreferences(value: string | null): Preferences {
       showDemos: data.showDemos !== false,
       appearance: readAppearance(data.appearance),
       favorites: readFavorites(data.favorites),
+      recent: readFavorites(data.recent).slice(0, RECENT_LIMIT),
       playback: readPlayback(data.playback),
       equalizer: {
         enabled: eq?.enabled === true,

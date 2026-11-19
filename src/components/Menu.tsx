@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, Info, Music2, Radio, Settings2, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, History, Info, Music2, Radio, Settings2, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
 import { About } from './About';
@@ -37,6 +37,7 @@ interface MenuPageProps {
   openEqualizer(): void;
   openLibrary(): void;
   openFavorites(): void;
+  openRecent(): void;
   openDiagnostics(): void;
   openVk(): void;
   addMusic(): void;
@@ -57,9 +58,10 @@ export function MenuPage(props: MenuPageProps) {
             <div><h2>Luma Player</h2><p>{trackCount(props.localCount)} с устройства</p></div>
             <span className="menu-profile-status"><i /> Локальный профиль</span>
           </section>
-          <MenuGroup label="Музыка">
+          <MenuGroup label="Коллекция">
             <MenuItem icon={Music2} title="Моя медиатека" detail="Файлы с устройства и встроенные демотреки" select={props.openLibrary} />
             <MenuItem icon={Heart} title="Избранное" detail="Треки, отмеченные сердцем" select={props.openFavorites} />
+            <MenuItem icon={History} title="Недавно слушали" detail="История воспроизведения на этом устройстве" select={props.openRecent} />
             <MenuItem icon={FolderOpen} title="Импортировать треки" detail="Добавьте аудиофайлы или перетащите их в окно" select={props.addMusic} disabled={!props.ready} />
             <MenuItem icon={Radio} title="VK Музыка" detail="Вход на сайте VK и сохранённые виджеты" select={props.openVk} />
           </MenuGroup>

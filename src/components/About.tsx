@@ -4,14 +4,31 @@ import { getAppInfo } from '../data/app-info';
 import { RELEASES_URL, runtimeMode } from '../shared/app-info';
 import type { AppInfo } from '../shared/app-info';
 
-export function About() {
+export function useInstalledBuild() {
   const [info, setInfo] = useState<AppInfo | null>();
-  const [linkFailed, setLinkFailed] = useState(false);
   useEffect(() => {
     let active = true;
     void getAppInfo().then((data) => { if (active) setInfo(data); }, () => { if (active) setInfo(null); });
     return () => { active = false; };
   }, []);
+  return info;
+}
+
+export function ReleaseLink({ className = 'text-button' }: { className?: string }) {
+  const [failed, setFailed] = useState(false);
+  return <>
+    <a className={className} href={RELEASES_URL} target="_blank" rel="noopener noreferrer" onClick={(event) => {
+      if (!window.luma) return;
+      event.preventDefault();
+      setFailed(false);
+      void window.luma.openReleases().catch(() => setFailed(true));
+    }}>Релизы Luma <ArrowUpRight size={15} /></a>
+    {failed && <span className="setting-hint" role="status">Не удалось открыть страницу релизов.</span>}
+  </>;
+}
+
+export function About() {
+  const info = useInstalledBuild();
 
   return <>
     <section className="menu-profile about-identity" aria-label="Версия и сведения о Luma Player">
@@ -23,14 +40,8 @@ export function About() {
       <div><FolderClosed size={18} /><div><h2>Своя музыка, даже без сети</h2><p>Слушайте файлы с устройства, собирайте очередь и избранное, настраивайте эквалайзер и экран «Сейчас играет».</p></div></div>
       <div><ShieldCheck size={18} /><div><h2>Ваши данные остаются у вас</h2><p>Локальная медиатека, обложки и настройки не отправляются на сервер. Для VK используются официальный сайт и виджет. Luma не запрашивает пароль или токен VK.</p></div></div>
       <footer><span>Открытый исходный код · GPL‑3.0</span>
-        <a className="text-button" href={RELEASES_URL} target="_blank" rel="noopener noreferrer" onClick={(event) => {
-          if (!window.luma) return;
-          event.preventDefault();
-          setLinkFailed(false);
-          void window.luma.openReleases().catch(() => setLinkFailed(true));
-        }}>Релизы Luma <ArrowUpRight size={15} /></a>
+        <ReleaseLink />
       </footer>
-      {linkFailed && <p role="status">Не удалось открыть страницу релизов.</p>}
     </section>
   </>;
 }

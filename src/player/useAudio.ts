@@ -55,7 +55,7 @@ class AudioGraph {
 
 const unavailable = 'Не удалось воспроизвести трек. Проверьте, не перемещён ли файл и поддерживается ли его формат.';
 
-export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject<() => void>) {
+export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject<() => void>, trackStarted: (id: string) => void) {
   const ref = useRef<HTMLAudioElement>(null);
   const graph = useRef<AudioGraph | null>(null);
   const graphUnavailable = useRef(false);
@@ -79,6 +79,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
         recordDiagnostic('audio.play');
         setSnapshot((previous) => ({ ...previous, playing: true }));
       },
+      playing: () => { if (active.current && !audio.paused) trackStarted(active.current.id); },
       pause: () => {
         recordDiagnostic('audio.pause');
         setSnapshot((previous) => ({ ...previous, playing: false }));
@@ -104,7 +105,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
       audio.pause();
       if (graph.current) void graph.current.context.close().catch(() => undefined);
     };
-  }, [ended]);
+  }, [ended, trackStarted]);
 
   const play = useCallback(() => {
     const audio = ref.current;
