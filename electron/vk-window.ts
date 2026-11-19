@@ -52,7 +52,7 @@ export class VkWebsite {
       label: 'VK Музыка', submenu: [
         { label: 'Назад', accelerator: 'Alt+Left', click: () => { if (contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack(); } },
         { label: 'Обновить', accelerator: 'Ctrl+R', click: () => contents.reload() },
-        { label: 'Открыть музыку в браузере', click: () => { void shell.openExternal(VK_MUSIC_URL).catch(() => this.logs.main('vk.websiteFailed')); } },
+        { label: 'Войти или слушать в браузере', click: () => { void shell.openExternal(VK_MUSIC_URL).then(() => this.logs.main('vk.browserOpened'), () => this.logs.main('vk.browserFailed')); } },
         { type: 'separator' }, { label: 'Закрыть окно', role: 'close' },
       ],
     }]));

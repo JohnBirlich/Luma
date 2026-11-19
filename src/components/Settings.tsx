@@ -1,16 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { ArrowLeft, AudioLines, Check, Headphones, Music2, Palette, Play, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
-import { ACCENTS, accentFor, SEEK_STEPS, THEMES } from '../shared/customization';
-import type { Appearance, LibraryLayout, PlaybackPreferences, SeekStep, StartPage, ThemeName } from '../shared/customization';
+import { ArrowLeft, ArrowUpCircle, AudioLines, Bell, Check, HardDrive, Headphones, Keyboard, Music2, Palette, Play, Plug, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
+import { ACCENTS, accentFor, EFFECT_TEMPOS, SEEK_STEPS, THEMES } from '../shared/customization';
+import type { Appearance, EffectTempo, LibraryLayout, PlaybackPreferences, SeekStep, StartPage, ThemeName } from '../shared/customization';
 import type { Track } from '../shared/media';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
+import { ReleaseLink, useInstalledBuild } from './About';
 import { Artwork } from './Artwork';
 import { MenuGroup, MenuItem } from './Menu';
+import { VolumeControl } from './PlaybackControls';
+import type { VolumeProps } from './PlaybackControls';
+import { VkBrowserLink } from './VkMusic';
 import { NowPlayingOptions } from './NowPlayingOptions';
 import { SceneBackground } from './SceneBackground';
 import { VinylRecord } from './VinylRecord';
 
+
+function ReleaseSettings() {
+  const info = useInstalledBuild();
+  return <SettingCard title="Версия Luma" detail={info ? `Установлена версия ${info.version}.` : info === null ? 'Не удалось прочитать версию.' : 'Читаем версию сборки…'}>
+    <p className="setting-body-copy">На GitHub доступны примечания к версиям, установщик и portable. Загрузка и установка запускаются вручную.</p>
+    <div className="settings-actions"><ReleaseLink className="button outline-button" /></div>
+  </SettingCard>;
+}
 
 function ToggleRow({ title, detail, enabled, change, disabled }: {
   title: string; detail: string; enabled: boolean; change(): void; disabled?: boolean;
@@ -55,7 +67,7 @@ function ThemePreview({ appearance, track, tint }: { appearance: Appearance; tra
       <div className="settings-preview-window" aria-hidden="true">
         <div className="settings-preview-chrome"><AudioLines size={13} /><span>Luma Player</span><i /><i /><i /></div>
         <div className={`settings-preview-hero settings-preview-${appearance.hero}${appearance.effect !== 'off' ? ' settings-preview-has-effect' : ''}`} style={{ '--sample-tone': tint, '--scene-tone': tint } as CSSProperties}>
-          <SceneBackground effect={appearance.effect} strength={appearance.effectStrength} />
+          <SceneBackground effect={appearance.effect} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} />
           {picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
           {appearance.hero === 'center' && <Artwork track={track} className="settings-preview-center-art" />}
           {appearance.hero === 'vinyl' && <VinylRecord className="settings-preview-record" track={track} animate={appearance.motion} />}
@@ -75,6 +87,14 @@ interface SettingsProps {
   libraryReady: boolean;
   previewTrack: Track | null;
   tint: string;
+  localCount: number;
+  recentCount: number;
+  eqEnabled: boolean;
+  volumeControls: VolumeProps;
+  openEqualizer(): void;
+  openRecent(): void;
+  clearRecent(): void;
+  openDiagnostics(): void;
   changeAppearance(appearance: Appearance): void;
   changePlayback(playback: PlaybackPreferences): void;
   toggleDemos(): void;
@@ -85,19 +105,37 @@ interface SettingsProps {
 const SECTIONS = [
   { id: 'look', label: 'Внешний вид', detail: 'Тема, акцент и анимации', icon: Palette },
   { id: 'now', label: 'Сейчас играет', detail: 'Компоновка, эффекты и яркость фона', icon: Headphones },
+  { id: 'sound', label: 'Звук и эквалайзер', detail: 'Громкость, пресеты и оригинальное качество файлов', icon: AudioLines },
   { id: 'playback', label: 'Воспроизведение', detail: 'Стартовая страница, перемотка и автопереход', icon: SlidersHorizontal },
   { id: 'library', label: 'Медиатека', detail: 'Вид списка треков и демоколлекция', icon: Music2 },
 ] as const;
-type Section = typeof SECTIONS[number];
+const APP_SECTIONS = [
+  { id: 'notices', label: 'Уведомления', detail: 'Подсказки в интерфейсе и ошибки', icon: Bell },
+  { id: 'integrations', label: 'Интеграции', detail: 'Системная медиапанель и VK', icon: Plug },
+  { id: 'storage', label: 'Хранилище', detail: 'Локальная коллекция, история и журнал', icon: HardDrive },
+  { id: 'keys', label: 'Горячие клавиши', detail: 'Управление плеером с клавиатуры', icon: Keyboard },
+  { id: 'updates', label: 'Обновления приложения', detail: 'Версия сборки и переход к релизам', icon: ArrowUpCircle },
+] as const;
+type Section = typeof SECTIONS[number] | typeof APP_SECTIONS[number];
+const shortcuts = [
+  ['Пробел / K', 'Воспроизведение и пауза'], ['← / →', 'Перемотка'], ['F / Esc', 'Развернуть трек / выйти из большого плеера'],
+  ['M', 'Выключить или вернуть звук'], ['Q', 'Очередь в обычном плеере'], ['Ctrl + O', 'Добавить музыку'],
+  ['Ctrl + ,', 'Настройки'], ['Ctrl + Shift + L', 'Диагностика'],
+];
 
 export function SettingsPage(props: SettingsProps) {
   const { appearance, playback, changeAppearance, changePlayback } = props;
   const [section, setSection] = useState<Section>();
+  const [confirmClear, setConfirmClear] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const color = appearance.accent ?? THEMES[appearance.theme].accent;
   const accent = accentFor(appearance);
   useEffect(() => { root.current?.parentElement?.scrollTo({ top: 0 }); }, [section]);
-  const back = () => section ? setSection(undefined) : props.goToMenu();
+  const back = () => {
+    setConfirmClear(false);
+    if (section) setSection(undefined);
+    else props.goToMenu();
+  };
   return (
     <div className="page settings-page" ref={root}>
       <header className="page-header settings-header">
@@ -108,9 +146,10 @@ export function SettingsPage(props: SettingsProps) {
       <p className="settings-intro">{section?.detail ?? 'Выберите раздел, чтобы настроить Luma под себя.'}</p>
       <div className="settings-layout">
         <div className="settings-stack">
-          {!section && <MenuGroup label="Разделы настроек">
-            {SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={item.label} detail={item.detail} select={() => setSection(item)} />)}
-          </MenuGroup>}
+          {!section && <>
+            <MenuGroup label="Плеер">{SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={item.label} detail={item.detail} select={() => setSection(item)} />)}</MenuGroup>
+            <MenuGroup label="Приложение">{APP_SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={item.label} detail={item.detail} select={() => setSection(item)} />)}</MenuGroup>
+          </>}
           {section?.id === 'look' && <>
             <SettingCard title="Тема" detail="Меняет фон, панели и цвет элементов управления.">
               <ThemeSelect value={appearance.theme} change={(theme) => changeAppearance({ ...appearance, theme })} />
@@ -129,9 +168,27 @@ export function SettingsPage(props: SettingsProps) {
               <ToggleRow title="Анимации" detail="Плавные переходы, живые фоны и индикатор звука." enabled={appearance.motion} change={() => changeAppearance({ ...appearance, motion: !appearance.motion })} />
             </SettingCard>
           </>}
-          {section?.id === 'now' && <SettingCard title="Экран «Сейчас играет»">
-            <NowPlayingOptions appearance={appearance} change={changeAppearance} />
-            <ToggleRow title="Цвет фона из обложки" detail="Если выключено, фон использует акцент темы." enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
+          {section?.id === 'now' && <>
+            <SettingCard title="Экран «Сейчас играет»">
+              <NowPlayingOptions appearance={appearance} change={changeAppearance} />
+              <ToggleRow title="Цвет фона из обложки" detail="Если выключено, фон использует акцент темы." enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
+              <ToggleRow title="Реакция на музыку" detail="Фон откликается на частоты локального трека. При отключении остаётся обычная анимация." enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
+              <label className="setting-row select-row"><span><strong>Темп фона</strong><small>Скорость анимации, не скорость песни.</small></span>
+                <select value={appearance.effectTempo} disabled={appearance.effect === 'off'} onChange={(event) => changeAppearance({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
+                  {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{label}</option>)}
+                </select>
+              </label>
+            </SettingCard>
+            <SettingCard title="Полноэкранный плеер">
+              <ToggleRow title="Разворачивать на весь монитор" detail="Если выключено, большой плеер открывается внутри окна Luma." enabled={appearance.nativeFullscreen} change={() => changeAppearance({ ...appearance, nativeFullscreen: !appearance.nativeFullscreen })} />
+              <ToggleRow title="Показывать следующие треки" detail="Открывать очередь «Далее» вместе с большим плеером." enabled={appearance.fullscreenQueue} change={() => changeAppearance({ ...appearance, fullscreenQueue: !appearance.fullscreenQueue })} />
+            </SettingCard>
+          </>}
+          {section?.id === 'sound' && <SettingCard title="Локальный звук" detail="Luma читает оригинальные файлы и не перекодирует их. Качество зависит от файла и устройства вывода.">
+            <div className="setting-row settings-volume"><span><strong>Громкость плеера</strong><small>Меняется и в нижней панели.</small></span><VolumeControl {...props.volumeControls} /></div>
+            <div className="setting-row"><span><strong>Эквалайзер</strong><small>{props.eqEnabled ? 'Включён' : 'Выключен'} · пять полос, пресеты и предусиление.</small></span>
+              <button type="button" className="button outline-button" onClick={props.openEqualizer} aria-haspopup="dialog">Настроить</button>
+            </div>
           </SettingCard>}
           {section?.id === 'playback' && <>
             <SettingCard title="Запуск приложения">
@@ -159,6 +216,38 @@ export function SettingsPage(props: SettingsProps) {
             </label>
             <ToggleRow title="Встроенные демотреки" detail="Показывать демотреки в локальной медиатеке." enabled={props.showDemos} change={props.toggleDemos} disabled={!props.libraryReady} />
           </SettingCard>}
+          {section?.id === 'notices' && <SettingCard title="Подсказки Luma">
+            <ToggleRow title="Показывать уведомления об успехе" detail="Сообщения об импорте, очереди и сохранении. Ошибки видны всегда." enabled={playback.successNotices} change={() => changePlayback({ ...playback, successNotices: !playback.successNotices })} />
+          </SettingCard>}
+          {section?.id === 'integrations' && <>
+            <SettingCard title="Системная медиапанель">
+              <ToggleRow title="Передавать данные трека системе" detail="Название, исполнитель и обложка для медиапанели. Медиаклавиши работают отдельно." enabled={playback.publishTrack} change={() => changePlayback({ ...playback, publishTrack: !playback.publishTrack })} />
+            </SettingCard>
+            <SettingCard title="VK Музыка" detail="Вход и личная музыка открываются на официальном сайте. Luma не читает пароль или данные аккаунта.">
+              <div className="settings-actions"><VkBrowserLink /></div>
+            </SettingCard>
+          </>}
+          {section?.id === 'storage' && <>
+            <SettingCard title="Локальный профиль" detail="Настройки, обложки и история остаются на устройстве; на Windows исходные аудиофайлы не копируются при добавлении.">
+              <dl className="settings-storage"><div><dt>Треков с устройства</dt><dd>{props.localCount}</dd></div><div><dt>Недавних треков</dt><dd>{props.recentCount}</dd></div></dl>
+              <ToggleRow title="Запоминать прослушанные треки" detail="Хранить локально до 60 последних треков. При отключении новая история не записывается." enabled={playback.rememberRecent} change={() => changePlayback({ ...playback, rememberRecent: !playback.rememberRecent })} />
+              <div className="settings-actions">
+                <button type="button" className="button outline-button" onClick={props.openRecent}>Недавно слушали</button>
+                <button type="button" className="button outline-button" disabled={!props.recentCount} onClick={() => setConfirmClear((value) => !value)} aria-expanded={confirmClear}>Очистить историю</button>
+              </div>
+              {confirmClear && <div className="settings-confirm"><p>Очистить список прослушанного? Музыка и избранное останутся.</p>
+                <button type="button" className="text-button" onClick={() => { props.clearRecent(); setConfirmClear(false); }}>Удалить историю</button>
+                <button type="button" className="text-button" onClick={() => setConfirmClear(false)}>Отмена</button>
+              </div>}
+            </SettingCard>
+            <SettingCard title="Журнал диагностики" detail="До 300 событий запуска и воспроизведения. Здесь нет названий песен, паролей или путей к файлам.">
+              <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openDiagnostics}>Открыть диагностику</button></div>
+            </SettingCard>
+          </>}
+          {section?.id === 'keys' && <SettingCard title="Клавиатура" detail="Команды треков действуют при локальном воспроизведении.">
+            <dl className="settings-shortcuts">{shortcuts.map(([key, label]) => <div key={key}><dt><kbd>{key}</kbd></dt><dd>{label}</dd></div>)}</dl>
+          </SettingCard>}
+          {section?.id === 'updates' && <ReleaseSettings />}
         </div>
         {(!section || section.id === 'look' || section.id === 'now') && <ThemePreview appearance={appearance} track={props.previewTrack} tint={props.tint} />}
       </div>

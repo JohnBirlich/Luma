@@ -1,0 +1,32 @@
+import { memo } from 'react';
+import { ListMusic, Play } from 'lucide-react';
+import { formatTime, trackCount } from '../shared/media';
+import type { Track } from '../shared/media';
+import type { Repeat } from '../shared/queue';
+import { Artwork } from './Artwork';
+
+export const UpcomingTracks = memo(function UpcomingTracks({ tracks, repeat, autoNext, play }: {
+  tracks: Track[]; repeat: Repeat; autoNext: boolean; play(id: string): void;
+}) {
+  const note = repeat === 'one' ? 'Сейчас включён повтор текущего трека.'
+    : !autoNext ? 'Автопереход выключен. Можно выбрать трек вручную.'
+      : repeat === 'all' && !tracks.length ? 'В очереди один трек. Он начнётся сначала.' : '';
+  return <section className="immersive-upcoming" id="immersive-upcoming" aria-labelledby="immersive-upcoming-title" tabIndex={-1}>
+    <header><div><p className="overline">Очередь воспроизведения</p><h2 id="immersive-upcoming-title">Далее</h2></div><span>{trackCount(tracks.length)}</span></header>
+    {note && <p className="upcoming-note">{note}</p>}
+    {tracks.length ? <ol className="upcoming-list">
+      {tracks.map((track, index) => <li key={track.id}>
+        <button className="upcoming-track" type="button" onClick={(event) => {
+          // The activated row leaves the upcoming list when it becomes the current track.
+          event.currentTarget.closest('section')?.focus({ preventScroll: true });
+          play(track.id);
+        }} title={`${track.title} — ${track.artist}`} aria-label={`Воспроизвести из очереди: ${track.title}`}>
+          <span className="upcoming-index"><span>{String(index + 1).padStart(2, '0')}</span><Play size={13} fill="currentColor" aria-hidden="true" /></span>
+          <Artwork track={track} />
+          <span className="upcoming-copy"><strong>{track.title}</strong><small>{track.artist}</small></span>
+          <span className="upcoming-time">{formatTime(track.duration)}</span>
+        </button>
+      </li>)}
+    </ol> : <div className="upcoming-empty"><ListMusic size={21} /><p>Следующих треков нет</p><small>Добавьте музыку в очередь из медиатеки.</small></div>}
+  </section>;
+});

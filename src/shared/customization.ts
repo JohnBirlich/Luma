@@ -12,12 +12,14 @@ export const ACCENTS = [
 ] as const;
 
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
-export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism'] as const;
+export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula'] as const;
+export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
 export const START_PAGES = ['player', 'library', 'vk'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
 export type ThemeName = keyof typeof THEMES;
 export type HeroStyle = typeof HERO_STYLES[number];
 export type BackgroundEffect = typeof BACKGROUND_EFFECTS[number];
+export type EffectTempo = keyof typeof EFFECT_TEMPOS;
 export type StartPage = typeof START_PAGES[number];
 export type SeekStep = typeof SEEK_STEPS[number];
 export type LibraryLayout = 'list' | 'grid';
@@ -28,6 +30,10 @@ export interface Appearance {
   hero: HeroStyle;
   effect: BackgroundEffect;
   effectStrength: number;
+  effectTempo: EffectTempo;
+  audioReactive: boolean;
+  nativeFullscreen: boolean;
+  fullscreenQueue: boolean;
   compactSidebar: boolean;
   coverColors: boolean;
   motion: boolean;
@@ -38,10 +44,13 @@ export interface PlaybackPreferences {
   startPage: StartPage;
   seekStep: SeekStep;
   autoNext: boolean;
+  rememberRecent: boolean;
+  publishTrack: boolean;
+  successNotices: boolean;
 }
 
-export const defaultAppearance: Appearance = { theme: 'amber', accent: null, hero: 'cover', effect: 'aurora', effectStrength: 0.75, compactSidebar: false, coverColors: true, motion: true, libraryLayout: 'list' };
-export const defaultPlayback: PlaybackPreferences = { startPage: 'player', seekStep: 5, autoNext: true };
+export const defaultAppearance: Appearance = { theme: 'amber', accent: null, hero: 'cover', effect: 'aurora', effectStrength: 0.75, effectTempo: 'normal', audioReactive: true, nativeFullscreen: true, fullscreenQueue: true, compactSidebar: false, coverColors: true, motion: true, libraryLayout: 'list' };
+export const defaultPlayback: PlaybackPreferences = { startPage: 'player', seekStep: 5, autoNext: true, rememberRecent: true, publishTrack: true, successNotices: true };
 export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 
 export function readAppearance(value: unknown): Appearance {
@@ -53,6 +62,10 @@ export function readAppearance(value: unknown): Appearance {
     hero: data?.hero && HERO_STYLES.includes(data.hero) ? data.hero : defaultAppearance.hero,
     effect: data?.effect && BACKGROUND_EFFECTS.includes(data.effect) ? data.effect : oldAppearance ? 'off' : defaultAppearance.effect,
     effectStrength: typeof data?.effectStrength === 'number' && Number.isFinite(data.effectStrength) ? Math.max(0.25, Math.min(1, data.effectStrength)) : defaultAppearance.effectStrength,
+    effectTempo: typeof data?.effectTempo === 'string' && Object.hasOwn(EFFECT_TEMPOS, data.effectTempo) ? data.effectTempo : defaultAppearance.effectTempo,
+    audioReactive: data?.audioReactive !== false,
+    nativeFullscreen: data?.nativeFullscreen !== false,
+    fullscreenQueue: data?.fullscreenQueue !== false,
     compactSidebar: data?.compactSidebar === true,
     coverColors: data?.coverColors !== false,
     motion: data?.motion !== false,
@@ -66,6 +79,9 @@ export function readPlayback(value: unknown): PlaybackPreferences {
     startPage: data?.startPage && START_PAGES.includes(data.startPage) ? data.startPage : defaultPlayback.startPage,
     seekStep: data?.seekStep && SEEK_STEPS.includes(data.seekStep) ? data.seekStep : defaultPlayback.seekStep,
     autoNext: data?.autoNext !== false,
+    rememberRecent: data?.rememberRecent !== false,
+    publishTrack: data?.publishTrack !== false,
+    successNotices: data?.successNotices !== false,
   };
 }
 

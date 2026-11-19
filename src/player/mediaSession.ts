@@ -8,14 +8,15 @@ export function useMediaSession(
   elapsed: number,
   duration: number,
   actions: Partial<Record<MediaSessionAction, MediaSessionActionHandler>>,
+  publishTrack = true,
 ) {
   const session = navigator.mediaSession;
   const { id, title, artist, album, artworkUrl } = track ?? {};
   useEffect(() => {
     // Window title is also used by taskbar thumbnails and some desktop media widgets.
-    document.title = title ? `${title} — Luma Player` : 'Luma Player';
+    document.title = publishTrack && title ? `${title} — Luma Player` : 'Luma Player';
     if (!session || typeof MediaMetadata === 'undefined') return;
-    if (!id) { session.metadata = null; return; }
+    if (!publishTrack || !id) { session.metadata = null; return; }
     const metadata = new MediaMetadata({ title, artist, album });
     session.metadata = metadata;
     let cancelled = false;
@@ -24,7 +25,7 @@ export function useMediaSession(
       if (!cancelled && image) metadata.artwork = [image];
     });
     return () => { cancelled = true; };
-  }, [session, id, title, artist, album, artworkUrl]);
+  }, [session, id, title, artist, album, artworkUrl, publishTrack]);
 
   useEffect(() => () => { if (session) session.metadata = null; }, [session]);
 

@@ -10,7 +10,7 @@ import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js'
 import { DesktopDiagnostics } from './diagnostics.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
-import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
+import { isVkExternalUrl, isVkWidgetFrameUrl, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { createProtocolHandler } from './protocol.js';
 import { fetchVkCover } from './vk-artwork.js';
@@ -105,10 +105,16 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   });
   const website = vkWebsite = new VkWebsite(logs);
   ipcMain.handle('vk:open-website', (event) => { appWindow(event); return website.open(); });
-  ipcMain.handle('vk:open-link', (event, url: unknown) => {
+  ipcMain.handle('vk:open-link', async (event, url: unknown) => {
     appWindow(event);
     if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
-    return shell.openExternal(url);
+    try {
+      await shell.openExternal(url);
+      if (url === VK_MUSIC_URL) logs.main('vk.browserOpened');
+    } catch {
+      if (url === VK_MUSIC_URL) logs.main('vk.browserFailed');
+      throw new Error('VK browser launch failed');
+    }
   });
   ipcMain.handle('vk:cover', async (event, playlist: unknown) => {
     appWindow(event);

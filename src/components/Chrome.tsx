@@ -3,7 +3,7 @@ import { AudioLines, Bug, Copy, Heart, House, ListMusic, Menu, Minus, Music2, Pa
 
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 
-export type Page = 'player' | 'search' | 'vk' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics';
+export type Page = 'player' | 'search' | 'vk' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent';
 
 interface TitleBarProps {
   openSettings(): void;
@@ -71,7 +71,7 @@ interface SidebarProps {
 export function Sidebar(props: SidebarProps) {
   const { page, navigate, addMusic, busy, count, favoriteCount, queued, queueOpen, toggleQueue, openEqualizer, compact, toggleCompact } = props;
   const online = useSyncExternalStore(subscribeConnection, connectionState);
-  const active = page === 'settings' || page === 'diagnostics' || page === 'favorites' ? 'menu' : page;
+  const active = page === 'settings' || page === 'diagnostics' || page === 'favorites' || page === 'recent' ? 'menu' : page;
   const expandLabel = compact ? 'Развернуть боковую панель' : 'Свернуть боковую панель';
   return (
     <aside className="sidebar" aria-label="Навигация">
