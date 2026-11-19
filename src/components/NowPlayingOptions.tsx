@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Activity, AudioLines, Check, CircleSlash, Disc3, Focus, Image, LayoutTemplate, Orbit, Palette, Wind, Sparkles, Triangle, Waves, X } from 'lucide-react';
+import { Activity, AudioLines, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Sparkles, Sunset, Triangle, Waves, X } from 'lucide-react';
 import type { Track } from '../shared/media';
 import type { ReadSpectrum } from '../player/useAudio';
-import type { Appearance } from '../shared/customization';
+import { EFFECT_TEMPOS } from '../shared/customization';
+import type { Appearance, EffectTempo } from '../shared/customization';
 import { Artwork } from './Artwork';
 import { SceneBackground } from './SceneBackground';
 import { VinylRecord } from './VinylRecord';
@@ -16,14 +17,17 @@ const LAYOUTS = [
 ] as const;
 const EFFECTS = [
   { id: 'off', label: 'Без эффекта', description: 'Только оформление трека', icon: CircleSlash },
-  { id: 'aurora', label: 'Сияние', description: 'Мягкие переливы цвета', icon: Sparkles },
+  { id: 'aurora', label: 'Сияние', description: 'Северное сияние и переливы', icon: Sparkles },
   { id: 'waves', label: 'Волны', description: 'Световые линии в такт музыке', icon: Waves },
-  { id: 'stars', label: 'Звёзды', description: 'Мерцающее звёздное поле', icon: Sparkles },
-  { id: 'spectrum', label: 'Спектр', description: 'Визуализация частот', icon: AudioLines },
-  { id: 'orbits', label: 'Орбиты', description: 'Светящиеся кольца и искры', icon: Orbit },
+  { id: 'stars', label: 'Звёзды', description: 'Созвездия и звёздное поле', icon: Sparkles },
+  { id: 'spectrum', label: 'Спектр', description: 'Световые полосы частот', icon: AudioLines },
+  { id: 'orbits', label: 'Орбиты', description: 'Планета и световые кольца', icon: Orbit },
   { id: 'prism', label: 'Призма', description: 'Переливы цветных лучей', icon: Triangle },
   { id: 'pulse', label: 'Импульс', description: 'Кольца в ритме баса', icon: Activity },
   { id: 'nebula', label: 'Туманность', description: 'Цветное облако и звёздная пыль', icon: Wind },
+  { id: 'horizon', label: 'Неон', description: 'Линии горизонта и синтвейв', icon: Sunset },
+  { id: 'kaleidoscope', label: 'Калейдоскоп', description: 'Вращение цветных граней', icon: Grid2X2 },
+  { id: 'rain', label: 'Дождь', description: 'Световые капли на стекле', icon: CloudRain },
 ] as const;
 
 export interface SceneOptionsProps { appearance: Appearance; change(value: Appearance): void }
@@ -80,6 +84,12 @@ export function NowPlayingDialog({ appearance, change, close, tint, track, playi
           <div className="scene-preview-copy"><p className="overline">Предпросмотр</p><strong>{track?.title ?? 'Ваша музыка'}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
         </div>
         <NowPlayingOptions appearance={appearance} change={change} />
+        <div className="scene-dialog-tuning">
+          <label>Темп фона <select aria-label="Темп фона" value={appearance.effectTempo} disabled={appearance.effect === 'off'} onChange={(event) => change({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
+            {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{label}</option>)}
+          </select></label>
+          <label><input type="checkbox" checked={appearance.audioReactive} disabled={appearance.effect === 'off'} onChange={(event) => change({ ...appearance, audioReactive: event.currentTarget.checked })} /> Реакция на локальный звук</label>
+        </div>
         <footer className="dialog-footer cover-footer">
           <span className="scene-dialog-hint">Применяется сразу и сохраняется автоматически.</span>
           <button type="button" className="button primary-button" onClick={dismiss}>Готово</button>

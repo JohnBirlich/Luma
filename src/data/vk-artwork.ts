@@ -24,12 +24,13 @@ function requestCover(playlist: VkPlaylist, key: string, refresh: boolean): Prom
 }
 
 /** Load only the opened playlist; already viewed covers remain on the shelf for this page. */
-export function useVkArtwork(playlist: VkPlaylist, refresh: number) {
+export function useVkArtwork(playlist: VkPlaylist | undefined, refresh: number) {
   const [urls, setUrls] = useState<ReadonlyMap<string, string>>(() => new Map());
   const live = useRef(new Map<string, string>());
   const previousRefresh = useRef(refresh);
-  const { ownerId, playlistId, hash } = playlist;
+  const { ownerId, playlistId, hash } = playlist ?? {};
   useEffect(() => {
+    if (!ownerId || !playlistId || !hash) return;
     const current = { ownerId, playlistId, hash };
     const key = vkPlaylistShareUrl(current);
     const retry = previousRefresh.current !== refresh;

@@ -57,6 +57,7 @@ const unavailable = 'Не удалось воспроизвести трек. П
 
 export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject<() => void>, trackStarted: (id: string) => void) {
   const ref = useRef<HTMLAudioElement>(null);
+  const streamRef = useRef<HTMLAudioElement>(null);
   const graph = useRef<AudioGraph | null>(null);
   const graphUnavailable = useRef(false);
   const active = useRef<Track | null>(null);
@@ -64,118 +65,158 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
   const loadStarted = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot>(stopped);
   const settings = useRef({ volume, eq });
+  const output = useCallback(() => active.current?.online ? streamRef.current : ref.current, []);
+  const errorText = useCallback(() => active.current?.online
+    ? 'Источник не воспроизводит этот трек. Проверьте сеть или откройте страницу записи.' : unavailable, []);
 
   useEffect(() => {
     settings.current = { volume, eq };
     if (graph.current) graph.current.update(eq, volume);
     else if (ref.current) ref.current.volume = volume;
+    if (streamRef.current) streamRef.current.volume = volume;
   }, [volume, eq]);
 
   useEffect(() => {
-    const audio = ref.current;
-    if (!audio) return;
-    const listeners: Record<string, EventListener> = {
-      play: () => {
-        recordDiagnostic('audio.play');
-        setSnapshot((previous) => ({ ...previous, playing: true }));
-      },
-      playing: () => { if (active.current && !audio.paused) trackStarted(active.current.id); },
-      pause: () => {
-        recordDiagnostic('audio.pause');
-        setSnapshot((previous) => ({ ...previous, playing: false }));
-      },
-      loadedmetadata: () => { if (active.current) recordDiagnostic('audio.ready', { ms: performance.now() - loadStarted.current }); },
-      timeupdate: () => setSnapshot((previous) => ({ ...previous, elapsed: audio.currentTime })),
-      durationchange: () => setSnapshot((previous) => ({
-        ...previous, duration: Number.isFinite(audio.duration) ? audio.duration : active.current?.duration ?? 0,
-      })),
-      ended: () => {
-        setSnapshot((previous) => ({ ...previous, playing: false }));
-        ended.current();
-      },
-      error: () => {
-        if (!active.current) return;
-        recordDiagnostic('audio.error', { code: audio.error?.code ?? 0 });
-        setSnapshot((previous) => ({ ...previous, playing: false, error: unavailable }));
-      },
-    };
-    Object.entries(listeners).forEach(([event, callback]) => audio.addEventListener(event, callback));
+    const cleanups = [ref.current, streamRef.current].flatMap((audio) => {
+      if (!audio) return [];
+      const listeners: Record<string, EventListener> = {
+        play: () => {
+          if (audio.paused) return;
+          recordDiagnostic('audio.play');
+          setSnapshot((previous) => ({ ...previous, playing: true }));
+        },
+        playing: () => { if (active.current && !audio.paused) trackStarted(active.current.id); },
+        pause: () => {
+          if (!audio.paused) return;
+          recordDiagnostic('audio.pause');
+          setSnapshot((previous) => ({ ...previous, playing: false }));
+        },
+        loadedmetadata: () => recordDiagnostic('audio.ready', { ms: performance.now() - loadStarted.current }),
+        timeupdate: () => setSnapshot((previous) => ({ ...previous, elapsed: audio.currentTime })),
+        durationchange: () => setSnapshot((previous) => ({
+          ...previous, duration: Number.isFinite(audio.duration) ? audio.duration : active.current?.duration ?? 0,
+        })),
+        ended: () => {
+          setSnapshot((previous) => ({ ...previous, playing: false }));
+          ended.current();
+        },
+        error: () => {
+          if (!audio.error) return;
+          recordDiagnostic('audio.error', { code: audio.error.code });
+          setSnapshot((previous) => ({ ...previous, playing: false, error: errorText() }));
+        },
+      };
+      const bindings = Object.entries(listeners).map(([event, callback]) => {
+        const guarded: EventListener = (value) => { if (active.current && output() === audio) callback(value); };
+        audio.addEventListener(event, guarded);
+        return () => audio.removeEventListener(event, guarded);
+      });
+      return [() => { bindings.forEach((unbind) => unbind()); audio.pause(); }];
+    });
     return () => {
-      Object.entries(listeners).forEach(([event, callback]) => audio.removeEventListener(event, callback));
-      audio.pause();
+      cleanups.forEach((cleanup) => cleanup());
       if (graph.current) void graph.current.context.close().catch(() => undefined);
     };
-  }, [ended, trackStarted]);
+  }, [ended, errorText, output, trackStarted]);
 
   const play = useCallback(() => {
-    const audio = ref.current;
-    if (!audio || !active.current) return;
-    if (!graph.current && !graphUnavailable.current) {
-      try {
-        const engine = new AudioGraph(audio);
-        engine.update(settings.current.eq, settings.current.volume, true);
-        audio.volume = 1;
-        graph.current = engine;
-      } catch {
-        // Playback is still available on platforms without a Web Audio graph.
-        graphUnavailable.current = true;
-        recordDiagnostic('audio.graphUnavailable');
+    const audio = output();
+    const track = active.current;
+    if (!audio || !track) return;
+    if (track.online && !audio.getAttribute('src')) {
+      if (!navigator.onLine) {
+        setSnapshot((previous) => ({ ...previous, playing: false, error: 'Устройство вне сети. Для онлайн-треков нужно подключение.' }));
+        return;
       }
+      loadStarted.current = performance.now();
+      recordDiagnostic('audio.loading');
+      // Start the external request only in response to actual playback, not a restored queue.
+      audio.src = track.audioUrl;
     }
-    if (graph.current?.context.state === 'suspended') void graph.current.context.resume().catch(() => undefined);
+    if (!track.online) {
+      if (!graph.current && !graphUnavailable.current) {
+        try {
+          const engine = new AudioGraph(audio);
+          engine.update(settings.current.eq, settings.current.volume, true);
+          audio.volume = 1;
+          graph.current = engine;
+        } catch {
+          graphUnavailable.current = true;
+          recordDiagnostic('audio.graphUnavailable');
+        }
+      }
+      if (graph.current?.context.state === 'suspended') void graph.current.context.resume().catch(() => undefined);
+    }
     if (audio.error) audio.load();
     if (audio.ended) audio.currentTime = 0;
     setSnapshot((previous) => ({ ...previous, error: '' }));
     const version = token.current;
+    const deadline = track.online ? window.setTimeout(() => {
+      if (version !== token.current || audio.paused || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      recordDiagnostic('audio.error', { code: 0 });
+      setSnapshot({ ...stopped, duration: track.duration, error: 'Источник не ответил вовремя. Повторите попытку или откройте страницу записи.' });
+    }, 15_000) : undefined;
     void audio.play().catch((error: unknown) => {
       if (version !== token.current || (error instanceof DOMException && error.name === 'AbortError')) return;
       const autoplayBlocked = error instanceof DOMException && error.name === 'NotAllowedError';
       recordDiagnostic(autoplayBlocked ? 'audio.blocked' : 'audio.error', { code: audio.error?.code ?? 0 });
       setSnapshot((previous) => ({
-        ...previous, playing: false, error: autoplayBlocked ? 'Нажмите «Воспроизвести», чтобы начать.' : unavailable,
+        ...previous, playing: false, error: autoplayBlocked ? 'Нажмите «Воспроизвести», чтобы начать.' : errorText(),
       }));
-    });
-  }, []);
+    }).finally(() => window.clearTimeout(deadline));
+  }, [errorText, output]);
 
   const load = useCallback((track: Track | null, autoplay = false) => {
-    const audio = ref.current;
-    if (!audio) return;
     if (track?.id !== active.current?.id || track?.audioUrl !== active.current?.audioUrl) {
       token.current++;
-      audio.pause();
+      const previous = output();
+      previous?.pause();
+      if (previous === streamRef.current && previous?.getAttribute('src')) {
+        previous.removeAttribute('src');
+        previous.load();
+      }
       active.current = track;
-      if (track) {
-        loadStarted.current = performance.now();
-        recordDiagnostic('audio.loading');
-        audio.src = track.audioUrl;
-      } else audio.removeAttribute('src');
+      const audio = output();
+      if (audio && !track?.online) {
+        if (track) {
+          loadStarted.current = performance.now();
+          recordDiagnostic('audio.loading');
+          audio.src = track.audioUrl;
+        } else audio.removeAttribute('src');
+        audio.load();
+      }
       setSnapshot({ ...stopped, duration: track?.duration ?? 0 });
-      audio.load();
     }
     if (track && autoplay) play();
-  }, [play]);
+  }, [output, play]);
 
-  const pause = useCallback(() => ref.current?.pause(), []);
+  const pause = useCallback(() => output()?.pause(), [output]);
   const toggle = useCallback(() => {
-    if (ref.current?.paused) play();
+    if (output()?.paused) play();
     else pause();
-  }, [play, pause]);
-  const isPlaying = useCallback(() => Boolean(ref.current && !ref.current.paused && !ref.current.ended), []);
+  }, [output, play, pause]);
+  const isPlaying = useCallback(() => {
+    const audio = output();
+    return Boolean(audio && !audio.paused && !audio.ended);
+  }, [output]);
   const seek = useCallback((seconds: number, relative = false) => {
-    const audio = ref.current;
+    const audio = output();
     if (!audio || !active.current || !Number.isFinite(seconds)) return;
     const duration = Number.isFinite(audio.duration) ? audio.duration : active.current.duration;
     if (duration <= 0) return;
     const time = clamp(relative ? audio.currentTime + seconds : seconds, 0, duration);
     audio.currentTime = time;
     setSnapshot((previous) => ({ ...previous, elapsed: time }));
-  }, []);
-  const position = useCallback(() => ref.current?.currentTime ?? 0, []);
+  }, [output]);
+  const position = useCallback(() => output()?.currentTime ?? 0, [output]);
   const readSpectrum = useCallback<ReadSpectrum>((buffer) => {
     const engine = graph.current;
-    if (!engine || engine.context.state !== 'running') return false;
+    if (active.current?.online || !engine || engine.context.state !== 'running') return false;
     engine.analyser.getByteFrequencyData(buffer);
     return true;
   }, []);
-  return { ...snapshot, ref, load, play, pause, toggle, seek, isPlaying, position, readSpectrum };
+  return { ...snapshot, ref, streamRef, load, play, pause, toggle, seek, isPlaying, position, readSpectrum };
 }

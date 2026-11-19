@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { APP_NAME } from '../shared/app-info';
 import { mediaArtwork } from './mediaArtwork';
 import type { Track } from '../shared/media';
 
@@ -14,7 +15,7 @@ export function useMediaSession(
   const { id, title, artist, album, artworkUrl } = track ?? {};
   useEffect(() => {
     // Window title is also used by taskbar thumbnails and some desktop media widgets.
-    document.title = publishTrack && title ? `${title} — Luma Player` : 'Luma Player';
+    document.title = publishTrack && title ? `${title} — ${APP_NAME}` : APP_NAME;
     if (!session || typeof MediaMetadata === 'undefined') return;
     if (!publishTrack || !id) { session.metadata = null; return; }
     const metadata = new MediaMetadata({ title, artist, album });

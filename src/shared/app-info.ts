@@ -1,3 +1,6 @@
+export const APP_NAME = 'Luma Player';
+export const APP_USER_MODEL_ID = 'app.lumaplayer.desktop';
+
 export interface AppInfo {
   version: string;
   mode: 'desktop' | 'dev' | 'web';

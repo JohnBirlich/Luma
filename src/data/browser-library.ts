@@ -1,4 +1,4 @@
-import { audioMime, emptyImport, trackInfo, usableArtwork } from '../shared/media';
+import { audioMime, emptyImport, readGenres, trackInfo, usableArtwork } from '../shared/media';
 import type { ImportResult, Track } from '../shared/media';
 import type { LibrarySource } from './library';
 import { recordDiagnostic } from './diagnostics';
@@ -56,8 +56,8 @@ async function writeRecord(write: (store: IDBObjectStore) => IDBRequest) {
 }
 
 function makeEntry(record: StoredTrack, persisted: boolean): SessionEntry {
-  const { id, audio, artwork, title, artist, album, duration, textVersion } = record;
-  const info = textVersion === 1 ? { title, artist, album, duration } : trackInfo(title, record, duration);
+  const { id, audio, artwork, title, artist, album, duration, textVersion, genres } = record;
+  const info = textVersion === 1 ? { title, artist, album, duration, genres: readGenres(genres) } : trackInfo(title, record, duration);
   return {
     persisted, record,
     track: { id, ...info, audioUrl: URL.createObjectURL(audio), artworkUrl: artwork && URL.createObjectURL(artwork) },

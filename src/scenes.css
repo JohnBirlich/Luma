@@ -1,0 +1,168 @@
+/* Effect layers are decorative and animate only with the scene-moving class. */
+.scene-background { --scene-tone: var(--accent); --energy: .17; --sparkle: .25; position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; opacity: var(--strength); }
+.hero > .scene-background, .settings-preview-hero > .scene-background { z-index: -3; --scene-tone: var(--hero-tone, var(--sample-tone, var(--accent))); }
+.scene-dialog-preview > .scene-background { --scene-tone: var(--preview-tone, var(--accent)); }
+.scene-aurora { background: radial-gradient(ellipse at 82% 66%, color-mix(in srgb, var(--scene-tone), #160924 38%), #0b101f 74%); }
+.aurora-clouds, .star-field { position: absolute; inset: 0; }
+.aurora-clouds { transform: scale(calc(1 + var(--energy) * .13)); }
+.scene-aurora::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 75% 60%, #fcbeed53, transparent 62%); opacity: calc(.2 + var(--sparkle) * .6); }
+.aurora-clouds > i { position: absolute; display: block; width: 95%; height: 158%; border-radius: 50%; background: radial-gradient(ellipse, color-mix(in srgb, var(--scene-tone), #ffe6c1 10%) 0%, color-mix(in srgb, var(--scene-tone), #853f99 43%) 25%, transparent 67%); }
+.aurora-clouds > i:nth-child(1) { left: 32%; top: -80%; opacity: calc(.72 + var(--energy) * .22); }
+.aurora-clouds > i:nth-child(2) { right: 11%; top: 8%; background: radial-gradient(ellipse, color-mix(in srgb, var(--scene-tone), #6053f5 54%) 0%, #473292 28%, transparent 69%); opacity: .8; }
+.aurora-clouds > i:nth-child(3) { left: 49%; top: -11%; width: 112%; background: radial-gradient(ellipse, color-mix(in srgb, var(--scene-tone), #f166a6 46%), transparent 67%); opacity: calc(.39 + var(--energy) * .44); }
+.scene-moving .aurora-clouds > i { animation: scene-drift calc(12s * var(--scene-tempo)) ease-in-out infinite alternate; }
+.scene-moving .aurora-clouds > i:nth-child(2) { animation-duration: calc(16s * var(--scene-tempo)); animation-direction: alternate-reverse; }
+.scene-moving .aurora-clouds > i:nth-child(3) { animation-duration: calc(10s * var(--scene-tempo)); animation-delay: -4s; }
+@keyframes scene-drift { from { transform: translate3d(-10%, -10%, 0) scale(.91, 1.12) rotate(-14deg); } to { transform: translate3d(12%, 12%, 0) scale(1.17, .91) rotate(17deg); } }
+.scene-waves { background: radial-gradient(ellipse at 84% 39%, color-mix(in srgb, var(--scene-tone), #241743 40%), transparent 69%), linear-gradient(128deg, #100e21, #25132f 58%, #1b1631); }
+.scene-ribbons { position: absolute; display: block; width: 115%; height: 135%; inset: -14% -11% auto auto; color: color-mix(in srgb, var(--scene-tone), #ffdfea 48%); opacity: calc(.47 + var(--energy) * .52); stroke: currentColor; stroke-width: 2.2; filter: drop-shadow(0 0 7px #dbbeff45); }
+.scene-ribbons path:nth-child(3n + 1) { stroke: #9fd3eb; stroke-width: 1.35; }
+.scene-ribbons path:nth-child(4n) { stroke: #ffbbcd; }
+.scene-moving .scene-ribbons { animation: ribbon-float calc(9s * var(--scene-tempo)) ease-in-out infinite alternate; }
+@keyframes ribbon-float { from { transform: translate3d(0, -4%, 0) rotate(-3deg) scale(1); } to { transform: translate3d(-6%, 7%, 0) rotate(5deg) scale(1.08); } }
+.scene-stars { background: radial-gradient(ellipse at 70% 36%, color-mix(in srgb, var(--scene-tone), #18133a 52%), transparent 67%), radial-gradient(ellipse at 94% 54%, #3e265b, #101124 66%); }
+.star-field > i { position: absolute; inset: -14%; background-image: radial-gradient(circle at 23% 44%, #fff9 0 1px, transparent 1.7px), radial-gradient(circle at 74% 19%, #ffdebb 0 .7px, transparent 1.3px), radial-gradient(circle at 68% 74%, #bfc5ff 0 .7px, transparent 1.4px); background-size: 62px 83px, 96px 73px, 137px 99px; opacity: .74; }
+.star-field > i:nth-child(2) { transform: rotate(14deg) scale(1.14); background-size: 113px 107px, 122px 109px, 133px 129px; opacity: .40; }
+.scene-moving .star-field > i { animation: star-travel calc(22s * var(--scene-tempo)) linear infinite alternate; }
+.star-field > i:nth-child(3) { opacity: calc(.24 + var(--sparkle) * .68); background-image: radial-gradient(circle at 48% 26%, #ffe4b8 0 .8px, #ffc79766 1px, transparent 3.8px); background-size: 139px 89px; }
+.scene-moving .star-field > i:nth-child(2) { animation-duration: calc(26s * var(--scene-tempo)); animation-direction: alternate-reverse; }
+.scene-moving .star-field > i:nth-child(3) { animation: stars-near calc(19s * var(--scene-tempo)) ease-in-out infinite alternate; }
+@keyframes stars-near { to { transform: translate3d(6%, 5%, 0) scale(1.07); } }
+@keyframes star-travel { from { transform: translate3d(-2%, -3%, 0); opacity: .42; } to { transform: translate3d(5%, 3%, 0); opacity: .85; } }
+.scene-spectrum { background: radial-gradient(ellipse at 67% 94%, color-mix(in srgb, var(--scene-tone), #484472 36%), transparent 72%), #161225; }
+.scene-bars { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.1%; position: absolute; inset: 17% 6% 0 6%; }
+.scene-bars > i { flex: 1; height: 100%; border-radius: 5px 5px 0 0; transform-origin: center bottom; transform: scaleY(var(--bar, var(--idle))); background: linear-gradient(0deg, #fae9ff06, color-mix(in srgb, var(--scene-tone), #b0a0ff 54%) 77%, #fcf9ffb3); opacity: .74; }
+.scene-bars > i:nth-child(3n+2) { background: linear-gradient(0deg, transparent, color-mix(in srgb, var(--scene-tone), #e4a9fd 48%) 86%, #fff9); }
+.scene-bars > i:nth-child(3n) { background: linear-gradient(0deg, transparent, color-mix(in srgb, var(--scene-tone), #7acfdb 52%) 86%, #fff9); }
+.scene-moving .scene-bars > i { transition: transform 65ms linear; }
+.scene-orbits { background: radial-gradient(ellipse at 71% 54%, color-mix(in srgb, var(--scene-tone), #2c2250 46%), transparent 61%), #0d0d20; }
+.scene-orbits > .orbit-lines { position: absolute; inset: 0; background: none; opacity: calc(.54 + var(--energy) * .45); }
+.scene-orbits > div > i { --orbit: color-mix(in srgb, var(--scene-tone), #ffe7b8 48%); position: absolute; left: 32%; top: 9%; width: 76%; height: 80%; border: 1px solid color-mix(in srgb, var(--orbit), transparent 50%); border-radius: 50%; transform: rotate(-24deg); box-shadow: inset 0 0 17px color-mix(in srgb, var(--orbit), transparent 78%), 0 0 22px color-mix(in srgb, var(--orbit), transparent 65%); }
+.scene-orbits > div > i:nth-child(2) { --orbit: #c8adff; left: 38%; top: 16%; width: 66%; height: 70%; transform: rotate(28deg); }
+.scene-orbits > div > i:nth-child(3) { --orbit: #93e5ef; left: 43%; top: 21%; width: 56%; height: 61%; transform: rotate(-9deg); }
+.scene-orbits > div > i::after { content: ''; position: absolute; left: 22%; top: 7.5%; width: max(3px, .55vw); aspect-ratio: 1; border-radius: 50%; background: #fff9f8; box-shadow: 0 0 13px 3px var(--orbit); }
+.scene-moving .orbit-lines > i { animation: orbit-turn calc(16s * var(--scene-tempo)) ease-in-out infinite alternate; }
+.scene-moving .orbit-lines > i:nth-child(2) { animation-direction: alternate-reverse; animation-duration: calc(20s * var(--scene-tempo)); }
+.scene-moving .orbit-lines > i:nth-child(3) { animation-delay: -7s; }
+@keyframes orbit-turn { from { transform: rotate(-29deg) scaleY(.74); } to { transform: rotate(38deg) scaleY(1.08); } }
+.scene-prism { background: radial-gradient(ellipse at 75% 70%, #5f2873, #0d0d1c 73%); }
+.scene-prism-beams { position: absolute; inset: 0; transform: scale(calc(1 + var(--energy) * .15)); }
+.scene-prism-beams > i { --prism: color-mix(in srgb, var(--scene-tone), #e998fa 51%); position: absolute; inset: -65% -28% -44% 22%; background: linear-gradient(133deg, transparent 27%, var(--prism) 54%, transparent 79%); clip-path: polygon(15% 100%, 62% 0, 81% 0, 63% 100%); transform: rotate(-12deg); opacity: calc(.46 + var(--sparkle) * .39); }
+.scene-prism-beams > i:nth-child(2) { --prism: #5cbdeb; transform: rotate(15deg) translateX(10%); }
+.scene-prism-beams > i:nth-child(3) { --prism: #ffad76; transform: rotate(-28deg) translateX(19%); opacity: .45; }
+.scene-moving .scene-prism-beams > i { animation: prism-shift calc(11s * var(--scene-tempo)) ease-in-out infinite alternate; }
+.scene-moving .scene-prism-beams > i:nth-child(2) { animation-duration: calc(14s * var(--scene-tempo)); animation-direction: alternate-reverse; }
+.scene-moving .scene-prism-beams > i:nth-child(3) { animation-delay: -5s; }
+@keyframes prism-shift { from { rotate: -9deg; translate: -9% 0; } to { rotate: 14deg; translate: 9% 2%; } }
+
+.scene-pulse { background: radial-gradient(ellipse at 65% 44%, color-mix(in srgb, var(--scene-tone), #342052 64%), #131021 68%); }
+.scene-pulse-rings { position: absolute; inset: 0; display: grid; place-items: center; padding-left: 28%; transform: scale(calc(1 + var(--energy) * .19)); }
+.scene-pulse-rings > i { grid-area: 1 / 1; --width: 26%; --rim: #ffe0a6; width: var(--width); aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--rim), transparent 34%); border-radius: 50%; box-shadow: 0 0 21px color-mix(in srgb, var(--rim), transparent 73%), inset 0 0 18px color-mix(in srgb, var(--rim), transparent 86%); opacity: calc(.37 + var(--sparkle) * .43); }
+.scene-pulse-rings > i:nth-child(2) { --width: 42%; --rim: #eabbf8; }
+.scene-pulse-rings > i:nth-child(3) { --width: 60%; --rim: #adbbff; }
+.scene-pulse-rings > i:nth-child(4) { --width: 79%; --rim: #79d2f2; }
+.scene-pulse-rings > i:nth-child(5) { --width: 98%; --rim: #83d7e5; }
+.scene-moving .scene-pulse-rings > i { animation: pulse-spread calc(6s * var(--scene-tempo)) ease-in-out infinite alternate; }
+.scene-moving .scene-pulse-rings > i:nth-child(even) { animation-delay: -3s; }
+@keyframes pulse-spread { from { transform: scale(.93); } to { transform: scale(1.08); } }
+.scene-nebula { background: radial-gradient(ellipse at 53% 41%, color-mix(in srgb, var(--scene-tone), #33214d 63%), #121125 70%); }
+.scene-dust { position: absolute; inset: -22%; }
+.scene-dust > i { position: absolute; inset: 12% 13%; transform: rotate(-25deg); opacity: calc(.52 + var(--energy) * .38); background: radial-gradient(ellipse at 31% 53%, #5dbbdb99, transparent 41%), radial-gradient(ellipse at 60% 62%, #f27da688, transparent 46%), radial-gradient(ellipse at 72% 41%, color-mix(in srgb, var(--scene-tone), #ac86db 68%), transparent 42%); }
+.scene-dust > i:nth-child(2) { transform: rotate(28deg) scale(.88); background: radial-gradient(ellipse at 58% 50%, #dec9d98b, #d5bdff40 24%, transparent 50%); mix-blend-mode: screen; }
+.scene-dust > i:nth-child(3) { inset: 0; opacity: calc(.19 + var(--sparkle) * .38); transform: rotate(13deg); background: radial-gradient(1px 1px at 16px 13px, #fff, transparent), radial-gradient(1.6px 1.6px at 41px 50px, #cad9ff, transparent); background-size: 67px 77px, 109px 103px; mask-image: radial-gradient(ellipse, #000, transparent 72%); }
+.scene-moving .scene-dust > i { animation: nebula-drift calc(15s * var(--scene-tempo)) ease-in-out infinite alternate; }
+.scene-moving .scene-dust > i:nth-child(2) { animation-direction: alternate-reverse; }
+.scene-moving .scene-dust > i:nth-child(3) { animation-duration: calc(34s * var(--scene-tempo)); }
+@keyframes nebula-drift { from { translate: -5% 2%; scale: .96; } to { translate: 6% -2%; scale: 1.07; } }
+
+/* Northern lights: translucent folds over deep, cool light instead of a single blur. */
+.scene-aurora { background: radial-gradient(ellipse at 79% 58%, #164352 0, #1d284d 43%, #0a1022 83%); }
+.aurora-clouds > i:nth-child(1) { background: radial-gradient(ellipse, #8ce6cbcc, #417eab99 33%, transparent 69%); }
+.aurora-clouds > i:nth-child(2) { background: radial-gradient(ellipse, color-mix(in srgb, var(--scene-tone), #6fb4ff 47%), #41357f99 42%, transparent 70%); }
+.aurora-clouds > i:nth-child(3) { background: radial-gradient(ellipse, color-mix(in srgb, var(--scene-tone), #bb8afe 73%), transparent 62%); }
+.aurora-curtains { position: absolute; inset: 0; opacity: calc(.46 + var(--energy) * .36); }
+.aurora-curtains > i { position: absolute; inset: -42% -8% 24% 16%; border-radius: 49% 48% 42% 48%; transform: rotate(-15deg); background: repeating-linear-gradient(95deg, transparent 0 4px, #c0ffe814 7px, transparent 11px 20px), linear-gradient(178deg, transparent 35%, #7398ff77 63%, #98ffca99 90%, #b8ffea61 97%, transparent); mask-image: radial-gradient(ellipse at 48% 51%, #000 24%, #0008 51%, transparent 76%); }
+.aurora-curtains > i + i { inset: -14% -14% 27% 36%; rotate: 28deg; opacity: .8; }
+.scene-moving .aurora-curtains > i { animation: curtain-drift calc(13s * var(--scene-tempo)) ease-in-out infinite alternate; }
+.scene-moving .aurora-curtains > i + i { animation-direction: alternate-reverse; animation-duration: calc(17s * var(--scene-tempo)); }
+@keyframes curtain-drift { from { translate: -6% -5%; scale: .93 1.03; } to { translate: 7% 7%; scale: 1.08 .96; } }
+
+/* Waves: luminous crest, layered contours, and a soft reflection below. */
+.scene-waves { background: radial-gradient(ellipse at 84% 67%, color-mix(in srgb, var(--scene-tone), #383d8e 55%), transparent 65%), linear-gradient(120deg, #130e26, #252040 71%, #141526); }
+.scene-ribbons { stroke-width: 2.45; opacity: calc(.53 + var(--energy) * .45); }
+.scene-ribbons .scene-wave-trail { stroke: #bda7fd; stroke-width: 22; opacity: calc(.13 + var(--sparkle) * .21); filter: blur(6px); }
+.scene-waterline { position: absolute; inset: 28% -18% -28% 20%; transform: rotate(-14deg); background: radial-gradient(ellipse at 54% 60%, #f994cf75, #4da7d53b 41%, transparent 71%); opacity: calc(.5 + var(--energy) * .38); }
+.scene-moving .scene-waterline { animation: ribbon-float calc(14s * var(--scene-tempo)) ease-in-out infinite alternate-reverse; }
+
+/* Sky map: capped star sizes and a line constellation over layered parallax. */
+.scene-stars { background: radial-gradient(ellipse at 80% 61%, #4f326a99, transparent 63%), radial-gradient(ellipse at 51% 29%, #274367, #0c1227 74%); }
+.scene-constellations { position: absolute; inset: 0; width: 100%; height: 100%; color: #d3dfef; opacity: calc(.46 + var(--sparkle) * .4); transform: scale(.89) translate(13%, -4%); filter: drop-shadow(0 0 3px #a4c3f9b0); }
+.scene-constellations path { stroke: currentColor; stroke-width: .8; opacity: .54; }
+.scene-constellations circle { fill: #fff2d7; }
+.scene-moving .scene-constellations { animation: constellations-drift calc(27s * var(--scene-tempo)) ease-in-out infinite alternate; }
+@keyframes constellations-drift { to { translate: -4% 6%; scale: 1.03; } }
+
+/* Spectrum: segmented glass bars, brighter peaks, and a mirror at their feet. */
+.scene-spectrum { background: radial-gradient(ellipse at 68% 76%, color-mix(in srgb, var(--scene-tone), #2c70a8 59%), transparent 73%), linear-gradient(145deg, #101328, #1b1b31); }
+.scene-spectrum::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent 0 16px, #dce8ff16 17px, transparent 18px); mask-image: linear-gradient(90deg, transparent, #000 43%, #0008); }
+.scene-bars { inset: 12% 6% 13% 6%; gap: 1.25%; }
+.scene-bars > i { position: relative; border: 1px solid #e1d4ff3a; opacity: .81; border-radius: 3px 3px 0 0; box-shadow: 0 0 10px #d2c2ff38; }
+.scene-bars > i::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent 0 13px, #17132f58 14px, transparent 15px); }
+.scene-bars > i::after { content: ''; position: absolute; inset: 100% 0 auto; height: 22%; background: linear-gradient(#ded2ff4e, transparent); }
+.scene-moving.scene-spectrum::before { animation: spectrum-shine calc(9s * var(--scene-tempo)) ease-in-out infinite alternate; }
+@keyframes spectrum-shine { from { opacity: .36; } to { opacity: 1; } }
+
+/* Orbits: a shaded planet with rings of different inclinations. */
+.scene-orbits { background: radial-gradient(ellipse at 72% 48%, color-mix(in srgb, var(--scene-tone), #2b456f 62%), transparent 59%), #101124; }
+.orbit-planet { position: absolute; top: 50%; left: 70%; width: min(28%, 215px); aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; background: radial-gradient(circle at 31% 28%, #edecfc9e, color-mix(in srgb, var(--scene-tone), #7d6eb2 50%) 29%, #2b294f 61%, #111022 83%); box-shadow: 0 0 28px #a1c7ff4d, inset 0 0 14px #edf4ff6b; opacity: calc(.57 + var(--energy) * .35); }
+.orbit-planet::after { content: ''; position: absolute; inset: 0; border: 1px solid #f4dfff67; border-radius: 50%; background: repeating-linear-gradient(168deg, #d3c3f700 0 7px, #d1b8f325 9px, #d3c3f700 11px 21px); }
+.scene-orbits .orbit-lines > i { border-color: color-mix(in srgb, var(--orbit) 69%, transparent); }
+.scene-orbits .orbit-lines > i:nth-child(2) { border-style: dashed; }
+.scene-orbits .orbit-lines > i::after { left: 75%; top: 12%; }
+
+/* Prism: sharply cut, overlapping shards with a warm/cool split. */
+.scene-prism { background: radial-gradient(ellipse at 77% 55%, #6e427d, #19132e 66%, #111223); }
+.scene-prism-beams > i { background: linear-gradient(143deg, transparent 20%, var(--prism) 54%, #eeeffcc4 57%, #ffffff35 63%, transparent 82%); clip-path: polygon(3% 100%, 58% 6%, 92% 19%, 64% 100%); }
+.scene-prism-beams > i:nth-child(2) { clip-path: polygon(24% 100%, 60% 8%, 83% 39%, 51% 95%); }
+.scene-prism-beams > i:nth-child(3) { clip-path: polygon(0 83%, 58% 7%, 81% 34%, 67% 100%); }
+.scene-prism::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 68% 50%, #fff6e35d, #d6bcfc39 23%, transparent 54%); opacity: calc(.38 + var(--sparkle) * .55); }
+
+/* Pulse: an illuminated center and thinner echo rings instead of a hard strobe. */
+.scene-pulse { background: radial-gradient(ellipse at 67% 49%, color-mix(in srgb, var(--scene-tone), #704394 64%), #17182d 69%); }
+.scene-pulse-rings > i { border-width: 1.5px; box-shadow: 0 0 17px color-mix(in srgb, var(--rim) 48%, transparent), inset 0 0 20px color-mix(in srgb, var(--rim) 21%, transparent); opacity: calc(.48 + var(--sparkle) * .4); }
+.scene-pulse-rings > i:first-child { background: radial-gradient(circle, #ffefc568 0%, #ffc7e92e 48%, transparent 70%); }
+.scene-pulse-rings > i:nth-child(3) { outline: 1px solid #a8a4ff57; outline-offset: 7px; }
+.scene-pulse-rings > i:nth-child(4) { border-style: dashed; }
+
+/* Nebula: textured clouds, diagonal dust band, and an illuminated core. */
+.scene-nebula { background: radial-gradient(ellipse at 74% 60%, #513871, #191733 53%, #0f1428 82%); }
+.scene-dust > i:first-child { background: radial-gradient(ellipse at 24% 58%, #73bafaad, transparent 39%), radial-gradient(ellipse at 51% 43%, #ed8bc5bb, transparent 43%), radial-gradient(ellipse at 76% 49%, color-mix(in srgb, var(--scene-tone), #8baaf0 60%), transparent 47%); }
+.scene-dust > i:nth-child(2) { background: radial-gradient(ellipse at 61% 41%, #fce2dda3, #cdadff47 23%, transparent 51%), radial-gradient(ellipse at 39% 66%, #98e7ef4f, transparent 47%); }
+.scene-dust > i:nth-child(3) { background-size: 31px 69px, 71px 103px; mask-image: radial-gradient(ellipse 67% 31%, #000 13%, #0008 62%, transparent); opacity: calc(.34 + var(--sparkle) * .46); }
+
+/* Neon horizon, rotating facets, and rain on glass. */
+.scene-horizon { background: radial-gradient(ellipse at 68% 53%, #9a5a8f, #322457 47%, #0a1525 84%); }
+.scene-horizon-layer { position: absolute; inset: 0; overflow: hidden; }
+.scene-horizon-layer > i { position: absolute; left: 68%; top: 50%; width: 31%; aspect-ratio: 1; translate: -50% -70%; scale: calc(.98 + var(--energy) * .19); border-radius: 50%; background: linear-gradient(#ffe6b4, #f292b3 61%, #b96be9); mask-image: repeating-linear-gradient(#000 0 13px, transparent 14px 16px); filter: saturate(1.12); opacity: .87; }
+.scene-horizon-layer > b { position: absolute; inset: 49% -35% -53%; transform: perspective(240px) rotateX(46deg); transform-origin: top; background: repeating-linear-gradient(90deg, transparent 0 29px, #92dafe66 30px, transparent 32px 62px), repeating-linear-gradient(0deg, #1e214b80 0 22px, #db94ec85 23px, #171e3b80 25px 31px); border-top: 2px solid #f6bfd6ae; }
+.scene-moving .scene-horizon-layer > b { animation: grid-flow calc(7s * var(--scene-tempo)) linear infinite; }
+@keyframes grid-flow { to { background-position: 0 0, 0 31px; } }
+.scene-kaleidoscope { background: radial-gradient(ellipse at 67% 46%, #4d3864, #10152a 72%); }
+.scene-facets { position: absolute; width: min(126%, 920px); aspect-ratio: 1; left: 67%; top: 50%; translate: -50% -50%; scale: calc(.93 + var(--energy) * .18); }
+.scene-facets > i { position: absolute; inset: 0; border-radius: 50%; background: repeating-conic-gradient(from 15deg, #7abee991 0 14deg, #6f519985 16deg 29deg, #e09db986 31deg 44deg, #f7d6986b 47deg 58deg, transparent 60deg); mask-image: radial-gradient(circle, #000 2%, #000 38%, transparent 70%); opacity: calc(.45 + var(--sparkle) * .38); }
+.scene-facets > i:nth-child(2) { inset: 16%; rotate: 28deg; clip-path: polygon(50% 0, 93% 24%, 93% 76%, 50% 100%, 7% 76%, 7% 24%); background: repeating-conic-gradient(#d7bcfb78 0 28deg, #8addf18a 33deg 59deg, #eec0dd7c 60deg 86deg, transparent 89deg 120deg); }
+.scene-facets > i:nth-child(3) { inset: 29%; rotate: 52deg; }
+.scene-moving .scene-facets > i { animation: facet-turn calc(38s * var(--scene-tempo)) linear infinite; }
+.scene-moving .scene-facets > i:nth-child(2) { animation-direction: reverse; animation-duration: calc(25s * var(--scene-tempo)); }
+.scene-moving .scene-facets > i:nth-child(3) { animation-duration: calc(42s * var(--scene-tempo)); }
+@keyframes facet-turn { to { transform: rotate(1turn); } }
+.scene-rain { background: radial-gradient(ellipse at 77% 19%, color-mix(in srgb, var(--scene-tone), #467ba8 65%), transparent 64%), linear-gradient(145deg, #0d152b, #21425e 65%, #141e35); }
+.scene-rain-layers { position: absolute; inset: -28% -16%; transform: rotate(-15deg); opacity: calc(.48 + var(--energy) * .43); }
+.scene-rain-layers > i { position: absolute; inset: 0; background-image: linear-gradient(180deg, transparent, #c4e5ffa0 71%, transparent), linear-gradient(180deg, transparent, #e9c8ff95 80%, transparent); background-size: 1px 38px, 1px 57px; background-repeat: repeat-y; background-position: 27% 0, 58% 27px; }
+.scene-rain-layers > i:nth-child(2) { opacity: .73; translate: 18% 0; background-size: 1.5px 58px, 1.5px 76px; background-position: 37% 0, 62% 42px; }
+.scene-rain-layers > i:nth-child(3) { background: radial-gradient(ellipse 2px 6px at 21px 29px, #d9f2ff91, #bcdbff25 60%, transparent), radial-gradient(ellipse 2.5px 7px at 51px 31px, #fbd1d993, transparent); background-size: 80px 141px, 111px 203px; opacity: calc(.63 + var(--sparkle) * .37); }
+.scene-moving .scene-rain-layers > i { animation: rain-pass calc(8s * var(--scene-tempo)) linear infinite; }
+.scene-moving .scene-rain-layers > i:nth-child(2) { animation-duration: calc(12s * var(--scene-tempo)); }
+.scene-moving .scene-rain-layers > i:nth-child(3) { animation-name: rain-beads; animation-duration: calc(15s * var(--scene-tempo)); }
+@keyframes rain-pass { to { transform: translateY(38px); } }
+@keyframes rain-beads { to { background-position: 0 141px, 0 203px; } }

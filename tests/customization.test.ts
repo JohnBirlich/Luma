@@ -9,7 +9,7 @@ test('customization reads old profiles without altering queue, volume or equaliz
     equalizer: { enabled: true, preset: 'custom', preamp: -2, gains: [1, 2, 3, 4, 5] },
     queue: { order: ['local-1'], currentId: 'local-1', beforeShuffle: null, repeat: 'one' },
   };
-  assert.deepEqual(decodePreferences(JSON.stringify(previous)), { ...previous, appearance: defaultAppearance, playback: defaultPlayback, favorites: [], recent: [] });
+  assert.deepEqual(decodePreferences(JSON.stringify(previous)), { ...previous, appearance: defaultAppearance, playback: defaultPlayback, favorites: [], recent: [], onlineTracks: [], onlineRefs: [] });
 });
 
 test('customization persists valid choices and validates each stored field', () => {
@@ -56,7 +56,7 @@ test('legacy layouts remain unchanged; effect intensity and favorite IDs are val
 });
 
 test('new audio-reactive scenes persist without replacing old settings', () => {
-  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'off']) {
+  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'off']) {
     const prefs = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl', effect, effectStrength: 0.6, motion: false }, volume: 0.17 }));
     assert.equal(prefs.appearance.effect, effect);
     assert.equal(prefs.appearance.hero, 'vinyl');

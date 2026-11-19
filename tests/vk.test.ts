@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  editorialPlaylist, isVkExternalUrl, isVkPlaylist, isVkWebsiteUrl, isVkWidgetFrameUrl, parseVkPlaylist, vkPlaylistUrl, vkWidgetUrl,
+  editorialPlaylist, isVkExternalUrl, isVkPlaylist, isVkWidgetFrameUrl, parseVkPlaylist, parseVkShareLink, vkPlaylistUrl, vkShelfUrl, vkWidgetUrl,
   VK_MUSIC_URL, VK_WIDGET_DOCS_URL,
 } from '../src/shared/vk.js';
 
@@ -45,14 +45,18 @@ test('VK navigation allows only the canonical frame and narrow external links', 
 });
 
 
-test('the isolated VK window is limited to first-party HTTPS music and sign-in pages', () => {
-  assert.equal(isVkWebsiteUrl(VK_MUSIC_URL), true);
-  assert.equal(isVkWebsiteUrl('https://vk.ru/?u=2'), true);
-  assert.equal(isVkWebsiteUrl('https://id.vk.ru/auth?state=example'), true);
-  assert.equal(isVkWebsiteUrl('https://login.vk.com/authorize'), true);
+test('VK share links are canonicalized and remain bookmarks until a widget hash is supplied', () => {
+  const url = 'https://vk.com/music/playlist/-14_5_Shared-Key?ref=copy#details';
+  const data = parseVkShareLink(url);
+  assert.deepEqual(data, { ownerId: -14, playlistId: 5, shareKey: 'Shared-Key' });
+  assert.equal(isVkPlaylist(data), false);
+  assert.equal(parseVkPlaylist(url), null);
+  assert.equal(vkShelfUrl({ ...data!, name: 'Вечер' }), 'https://vk.ru/music/playlist/-14_5_Shared-Key');
+  assert.equal(isVkExternalUrl(vkShelfUrl({ ...data!, name: 'Вечер' })), true);
   assert.equal(isVkWidgetFrameUrl(VK_MUSIC_URL), false);
-  for (const url of ['http://vk.ru/audio', 'https://vk.ru.example.test/audio', 'https://vk.ru@untrusted.test/',
-    'https://someone@vk.ru/audio', 'https://vk.ru:8080/audio', 'blob:https://vk.ru/id', 'file:///tmp/audio', 'luma://app/']) {
-    assert.equal(isVkWebsiteUrl(url), false, url);
+  for (const url of ['http://vk.ru/music/playlist/-14_5', 'https://vk.ru.example.test/music/playlist/-14_5',
+    'https://someone@vk.ru/music/playlist/-14_5', 'https://vk.ru:8080/music/playlist/-14_5', 'file:///music/playlist/-14_5',
+    'https://vk.ru/music/playlist/-14_5_abc%2f', 'https://vk.ru/music/playlist/-14_0']) {
+    assert.equal(parseVkShareLink(url), undefined, url);
   }
 });

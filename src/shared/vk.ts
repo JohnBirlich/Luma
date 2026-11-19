@@ -20,9 +20,13 @@ export interface VkCoverImage {
   bytes: Uint8Array;
 }
 
-export interface NamedVkPlaylist extends VkPlaylist {
+export interface VkShelfItem extends Pick<VkPlaylist, 'ownerId' | 'playlistId'> {
   name: string;
+  // A share key opens a public page only; it does not grant licensed widget playback.
+  shareKey?: string;
+  hash?: string;
 }
+export type NamedVkPlaylist = VkShelfItem & VkPlaylist;
 
 // Public editorial playlist used by the official widget generator's example.
 export const editorialPlaylist: NamedVkPlaylist = {
@@ -37,8 +41,8 @@ export function isVkPlaylist(value: unknown): value is VkPlaylist {
     && typeof hash === 'string' && hashPattern.test(hash);
 }
 
-export const vkPlaylistKey = ({ ownerId, playlistId }: VkPlaylist) => `${ownerId}_${playlistId}`;
-export const vkPlaylistUrl = (playlist: VkPlaylist) => `${VK_ORIGIN}${playlistPath}${vkPlaylistKey(playlist)}`;
+export const vkPlaylistKey = ({ ownerId, playlistId }: Pick<VkPlaylist, 'ownerId' | 'playlistId'>) => `${ownerId}_${playlistId}`;
+export const vkPlaylistUrl = (playlist: Pick<VkPlaylist, 'ownerId' | 'playlistId'>) => `${VK_ORIGIN}${playlistPath}${vkPlaylistKey(playlist)}`;
 export const vkPlaylistShareUrl = (playlist: VkPlaylist) => `${vkPlaylistUrl(playlist)}_${playlist.hash}`;
 
 export function vkWidgetUrl(playlist: VkPlaylist): string {
@@ -76,19 +80,25 @@ export function isVkWidgetFrameUrl(value: string): boolean {
   } catch { return false; }
 }
 
-/** The Electron bridge opens only these specific, user-facing VK destinations. */
-export function isVkExternalUrl(value: unknown): value is string {
-  if (typeof value !== 'string' || value !== value.trim()) return false;
-  return value === VK_MUSIC_URL || value === VK_WIDGET_DOCS_URL
-    || /^https:\/\/vk\.ru\/music\/playlist\/-?[1-9]\d{0,14}_[1-9]\d{0,14}$/.test(value);
+const sharePattern = /^\/music\/playlist\/(-?[1-9]\d{0,14})_([1-9]\d{0,14})(?:_([A-Za-z0-9_-]{1,128}))?\/?$/;
+
+export function parseVkShareLink(value: string): Omit<VkShelfItem, 'name' | 'hash'> | undefined {
+  try {
+    const url = new URL(value.trim());
+    if (!['https://vk.ru', 'https://vk.com'].includes(url.origin) || url.username || url.password) return;
+    const match = sharePattern.exec(url.pathname);
+    if (match) return { ownerId: Number(match[1]), playlistId: Number(match[2]), shareKey: match[3] };
+  } catch { /* Not an official playlist URL. */ }
 }
 
-const vkWebsiteOrigins = new Set(['https://vk.ru', 'https://vk.com', 'https://id.vk.ru', 'https://id.vk.com', 'https://login.vk.ru', 'https://login.vk.com']);
+export function vkShelfUrl(item: VkShelfItem) {
+  return `${vkPlaylistUrl(item)}${item.shareKey ? `_${item.shareKey}` : ''}`;
+}
 
-/** First-party pages for the isolated VK website window, not for the privileged Luma renderer. */
-export function isVkWebsiteUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password && vkWebsiteOrigins.has(url.origin);
-  } catch { return false; }
+/** The desktop bridge opens only canonical VK destinations selected by the user. */
+export function isVkExternalUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  if (value === VK_MUSIC_URL || value === VK_WIDGET_DOCS_URL) return true;
+  const item = parseVkShareLink(value);
+  return !!item && value === vkShelfUrl({ ...item, name: '' });
 }

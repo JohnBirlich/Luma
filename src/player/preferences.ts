@@ -1,3 +1,5 @@
+import { readOnlineShelf } from '../shared/online';
+import type { OnlineTrack } from '../shared/online';
 import { clamp, defaultEqualizer, PRESETS } from '../shared/equalizer';
 import type { EqualizerSettings } from '../shared/equalizer';
 import type { QueueState } from '../shared/queue';
@@ -14,11 +16,13 @@ export interface Preferences {
   queue?: QueueState;
   favorites: string[];
   recent: string[];
+  onlineTracks: OnlineTrack[];
+  onlineRefs: OnlineTrack[];
 }
 
 const KEY = 'luma-player:v1';
 export const RECENT_LIMIT = 60;
-const defaults: Preferences = { volume: 0.75, lastVolume: 0.75, showDemos: true, equalizer: defaultEqualizer, appearance: defaultAppearance, playback: defaultPlayback, favorites: [], recent: [] };
+const defaults: Preferences = { volume: 0.75, lastVolume: 0.75, showDemos: true, equalizer: defaultEqualizer, appearance: defaultAppearance, playback: defaultPlayback, favorites: [], recent: [], onlineTracks: [], onlineRefs: [] };
 const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.every((id) => typeof id === 'string');
 export function readFavorites(value: unknown): string[] {
   return Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128))] : [];
@@ -43,6 +47,8 @@ export function decodePreferences(value: string | null): Preferences {
       appearance: readAppearance(data.appearance),
       favorites: readFavorites(data.favorites),
       recent: readFavorites(data.recent).slice(0, RECENT_LIMIT),
+      onlineTracks: readOnlineShelf(data.onlineTracks),
+      onlineRefs: readOnlineShelf(data.onlineRefs),
       playback: readPlayback(data.playback),
       equalizer: {
         enabled: eq?.enabled === true,
@@ -64,6 +70,13 @@ export function readPreferences(): Preferences {
   try { return decodePreferences(localStorage.getItem(KEY)); } catch { return defaults; }
 }
 
+export function activeOnlineRefs({ onlineTracks, onlineRefs, recent, favorites, queue }: Preferences) {
+  const keep = new Set([...recent, ...favorites, ...(queue?.order ?? [])]);
+  const saved = new Set(onlineTracks.map(({ id }) => id));
+  return onlineRefs.filter(({ id }) => keep.has(id) && !saved.has(id));
+}
+
 export function savePreferences(preferences: Preferences) {
-  try { localStorage.setItem(KEY, JSON.stringify(preferences)); } catch { /* Private/embedded contexts can block storage. */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ ...preferences, onlineRefs: activeOnlineRefs(preferences) })); }
+  catch { /* Private/embedded contexts can block storage. */ }
 }
