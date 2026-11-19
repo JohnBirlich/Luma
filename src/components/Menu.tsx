@@ -1,8 +1,9 @@
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, AudioLines, ChevronRight, FolderOpen, Info, Music2, Radio, Settings2, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, Info, Music2, Radio, Settings2, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
+import { About } from './About';
 
 interface MenuItemProps {
   icon: LucideIcon;
@@ -35,6 +36,8 @@ interface MenuPageProps {
   openSettings(): void;
   openEqualizer(): void;
   openLibrary(): void;
+  openFavorites(): void;
+  openDiagnostics(): void;
   openVk(): void;
   addMusic(): void;
 }
@@ -48,24 +51,23 @@ export function MenuPage(props: MenuPageProps) {
         {about && <button type="button" className="button outline-button" onClick={() => setAbout(false)}><ArrowLeft size={16} /> В меню</button>}
       </header>
       <div className="menu-body">
-        <section className="menu-profile" aria-label="Профиль Luma">
-          <div className="menu-profile-logo"><AudioLines size={27} strokeWidth={1.85} /></div>
-          <div><h2>Luma Player</h2><p>{about ? 'Музыка с устройства и плейлисты VK.' : `${trackCount(props.localCount)} с устройства · локальный профиль`}</p></div>
-          {!about && <span className="menu-profile-status"><i /> Без входа</span>}
-        </section>
-        {about ? <section className="menu-about">
-          <h2>Ваши файлы остаются у вас</h2>
-          <p>Медиатека, обложки и настройки хранятся на устройстве. Для прослушивания музыки VK используется официальный виджет. Luma не запрашивает пароль или токен VK.</p>
-        </section> : <>
+        {about ? <About /> : <>
+          <section className="menu-profile" aria-label="Профиль Luma">
+            <div className="menu-profile-logo"><AudioLines size={27} strokeWidth={1.85} /></div>
+            <div><h2>Luma Player</h2><p>{trackCount(props.localCount)} с устройства</p></div>
+            <span className="menu-profile-status"><i /> Локальный профиль</span>
+          </section>
           <MenuGroup label="Музыка">
             <MenuItem icon={Music2} title="Моя медиатека" detail="Файлы с устройства и встроенные демотреки" select={props.openLibrary} />
+            <MenuItem icon={Heart} title="Избранное" detail="Треки, отмеченные сердцем" select={props.openFavorites} />
             <MenuItem icon={FolderOpen} title="Импортировать треки" detail="Добавьте аудиофайлы или перетащите их в окно" select={props.addMusic} disabled={!props.ready} />
-            <MenuItem icon={Radio} title="Плейлисты VK" detail="Подборка VK и сохранённые плейлисты" select={props.openVk} />
+            <MenuItem icon={Radio} title="VK Музыка" detail="Вход на сайте VK и сохранённые виджеты" select={props.openVk} />
           </MenuGroup>
           <MenuGroup label="Плеер">
             <MenuItem icon={Settings2} title="Настройки" detail="Внешний вид, медиатека и воспроизведение" select={props.openSettings} />
             <MenuItem icon={SlidersHorizontal} title="Эквалайзер" detail={props.eqEnabled ? 'Включён · пресеты и пять полос' : 'Выключен · пресеты и пять полос'} select={props.openEqualizer} dialog />
-            <MenuItem icon={Info} title="О приложении" detail="Источники и хранение данных" select={() => setAbout(true)} />
+            <MenuItem icon={Bug} title="Диагностика" detail="Журнал событий, подключение и сведения о системе" select={props.openDiagnostics} />
+            <MenuItem icon={Info} title="О приложении" detail="Версия Luma, возможности и релизы" select={() => setAbout(true)} />
           </MenuGroup>
         </>}
       </div>

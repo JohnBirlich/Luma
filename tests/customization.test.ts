@@ -9,11 +9,11 @@ test('customization reads old profiles without altering queue, volume or equaliz
     equalizer: { enabled: true, preset: 'custom', preamp: -2, gains: [1, 2, 3, 4, 5] },
     queue: { order: ['local-1'], currentId: 'local-1', beforeShuffle: null, repeat: 'one' },
   };
-  assert.deepEqual(decodePreferences(JSON.stringify(previous)), { ...previous, appearance: defaultAppearance, playback: defaultPlayback });
+  assert.deepEqual(decodePreferences(JSON.stringify(previous)), { ...previous, appearance: defaultAppearance, playback: defaultPlayback, favorites: [] });
 });
 
 test('customization persists valid choices and validates each stored field', () => {
-  const appearance = { theme: 'pine', accent: '#16b2a6', hero: 'vinyl', coverColors: false, motion: false, libraryLayout: 'grid' };
+  const appearance = { ...defaultAppearance, theme: 'pine', accent: '#16b2a6', hero: 'center', effect: 'spectrum', effectStrength: 0.55, compactSidebar: true, coverColors: false, motion: false, libraryLayout: 'grid' };
   const playback = { startPage: 'vk', seekStep: 15, autoNext: false };
   assert.deepEqual(decodePreferences(JSON.stringify({ appearance, playback })).appearance, appearance);
   assert.deepEqual(decodePreferences(JSON.stringify({ appearance, playback })).playback, playback);
@@ -42,4 +42,28 @@ test('autoplay preference can stop the queue but preserves explicit repeat-one',
   assert.equal(shouldAdvanceAfterEnd(off, 'all'), false);
   assert.equal(shouldAdvanceAfterEnd(off, 'one'), true);
   assert.equal(artworkTone('track-apple'), artworkTone('track-apple'));
+});
+
+
+test('legacy layouts remain unchanged; effect intensity and favorite IDs are validated independently', () => {
+  const old = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl' }, favorites: ['demo-afterimage', 5, 'demo-afterimage', '', 'local'] }));
+  assert.equal(old.appearance.hero, 'vinyl');
+  assert.equal(old.appearance.effect, 'off');
+  assert.deepEqual(old.favorites, ['demo-afterimage', 'local']);
+  const options = decodePreferences(JSON.stringify({ appearance: { effect: 'waves', effectStrength: 50, compactSidebar: true } }));
+  assert.equal(options.appearance.effect, 'waves');
+  assert.equal(options.appearance.effectStrength, 1);
+  assert.equal(options.appearance.compactSidebar, true);
+});
+
+
+test('new audio-reactive scenes persist without replacing old settings', () => {
+  for (const effect of ['orbits', 'prism', 'spectrum', 'off']) {
+    const prefs = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl', effect, effectStrength: 0.6, motion: false }, volume: 0.17 }));
+    assert.equal(prefs.appearance.effect, effect);
+    assert.equal(prefs.appearance.hero, 'vinyl');
+    assert.equal(prefs.appearance.motion, false);
+    assert.equal(prefs.appearance.effectStrength, 0.6);
+    assert.equal(prefs.volume, 0.17);
+  }
 });

@@ -3,6 +3,9 @@ import type { RefObject } from 'react';
 import { BANDS, clamp } from '../shared/equalizer';
 import type { EqualizerSettings } from '../shared/equalizer';
 import type { Track } from '../shared/media';
+import { recordDiagnostic } from '../data/diagnostics';
+
+export type ReadSpectrum = (buffer: Uint8Array<ArrayBuffer>) => boolean;
 
 interface Snapshot {
   playing: boolean;
@@ -15,6 +18,7 @@ const linear = (db: number) => 10 ** (db / 20);
 
 class AudioGraph {
   readonly context: AudioContext;
+  readonly analyser: AnalyserNode;
   private preamp: GainNode;
   private master: GainNode;
   private filters: BiquadFilterNode[];
@@ -24,6 +28,9 @@ class AudioGraph {
     const source = this.context.createMediaElementSource(audio);
     this.preamp = this.context.createGain();
     this.master = this.context.createGain();
+    this.analyser = this.context.createAnalyser();
+    this.analyser.fftSize = 256;
+    this.analyser.smoothingTimeConstant = 0.78;
     this.filters = BANDS.map(({ hz, type }) => {
       const filter = this.context.createBiquadFilter();
       filter.type = type;
@@ -31,7 +38,7 @@ class AudioGraph {
       filter.Q.value = 0.9;
       return filter;
     });
-    const chain: AudioNode[] = [source, this.preamp, ...this.filters, this.master, this.context.destination];
+    const chain: AudioNode[] = [source, this.preamp, ...this.filters, this.analyser, this.master, this.context.destination];
     chain.slice(1).forEach((node, index) => chain[index].connect(node));
   }
 
@@ -54,6 +61,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
   const graphUnavailable = useRef(false);
   const active = useRef<Track | null>(null);
   const token = useRef(0);
+  const loadStarted = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot>(stopped);
   const settings = useRef({ volume, eq });
 
@@ -67,8 +75,15 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
     const audio = ref.current;
     if (!audio) return;
     const listeners: Record<string, EventListener> = {
-      play: () => setSnapshot((previous) => ({ ...previous, playing: true })),
-      pause: () => setSnapshot((previous) => ({ ...previous, playing: false })),
+      play: () => {
+        recordDiagnostic('audio.play');
+        setSnapshot((previous) => ({ ...previous, playing: true }));
+      },
+      pause: () => {
+        recordDiagnostic('audio.pause');
+        setSnapshot((previous) => ({ ...previous, playing: false }));
+      },
+      loadedmetadata: () => { if (active.current) recordDiagnostic('audio.ready', { ms: performance.now() - loadStarted.current }); },
       timeupdate: () => setSnapshot((previous) => ({ ...previous, elapsed: audio.currentTime })),
       durationchange: () => setSnapshot((previous) => ({
         ...previous, duration: Number.isFinite(audio.duration) ? audio.duration : active.current?.duration ?? 0,
@@ -78,7 +93,9 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
         ended.current();
       },
       error: () => {
-        if (active.current) setSnapshot((previous) => ({ ...previous, playing: false, error: unavailable }));
+        if (!active.current) return;
+        recordDiagnostic('audio.error', { code: audio.error?.code ?? 0 });
+        setSnapshot((previous) => ({ ...previous, playing: false, error: unavailable }));
       },
     };
     Object.entries(listeners).forEach(([event, callback]) => audio.addEventListener(event, callback));
@@ -101,6 +118,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
       } catch {
         // Playback is still available on platforms without a Web Audio graph.
         graphUnavailable.current = true;
+        recordDiagnostic('audio.graphUnavailable');
       }
     }
     if (graph.current?.context.state === 'suspended') void graph.current.context.resume().catch(() => undefined);
@@ -111,6 +129,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
     void audio.play().catch((error: unknown) => {
       if (version !== token.current || (error instanceof DOMException && error.name === 'AbortError')) return;
       const autoplayBlocked = error instanceof DOMException && error.name === 'NotAllowedError';
+      recordDiagnostic(autoplayBlocked ? 'audio.blocked' : 'audio.error', { code: audio.error?.code ?? 0 });
       setSnapshot((previous) => ({
         ...previous, playing: false, error: autoplayBlocked ? 'Нажмите «Воспроизвести», чтобы начать.' : unavailable,
       }));
@@ -124,8 +143,11 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
       token.current++;
       audio.pause();
       active.current = track;
-      if (track) audio.src = track.audioUrl;
-      else audio.removeAttribute('src');
+      if (track) {
+        loadStarted.current = performance.now();
+        recordDiagnostic('audio.loading');
+        audio.src = track.audioUrl;
+      } else audio.removeAttribute('src');
       setSnapshot({ ...stopped, duration: track?.duration ?? 0 });
       audio.load();
     }
@@ -148,5 +170,11 @@ export function useAudio(volume: number, eq: EqualizerSettings, ended: RefObject
     setSnapshot((previous) => ({ ...previous, elapsed: time }));
   }, []);
   const position = useCallback(() => ref.current?.currentTime ?? 0, []);
-  return { ...snapshot, ref, load, play, pause, toggle, seek, isPlaying, position };
+  const readSpectrum = useCallback<ReadSpectrum>((buffer) => {
+    const engine = graph.current;
+    if (!engine || engine.context.state !== 'running') return false;
+    engine.analyser.getByteFrequencyData(buffer);
+    return true;
+  }, []);
+  return { ...snapshot, ref, load, play, pause, toggle, seek, isPlaying, position, readSpectrum };
 }

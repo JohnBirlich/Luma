@@ -1,13 +1,20 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { RELEASES_URL } from '../src/shared/app-info.js';
+import type { AppInfo } from '../src/shared/app-info.js';
+import { desktopAppInfo } from './app-info.js';
+import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js';
+import { DesktopDiagnostics } from './diagnostics.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
 import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { createProtocolHandler } from './protocol.js';
 import { fetchVkCover } from './vk-artwork.js';
+import { VkWebsite } from './vk-window.js';
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'luma',
@@ -20,6 +27,9 @@ app.setAppUserModelId('app.lumaplayer.desktop');
 const devUrl = getDevUrl();
 app.setPath('userData', join(app.getPath('appData'), devUrl ? 'Luma Player Dev' : 'Luma Player'));
 let window: BrowserWindow | null = null;
+let journal: DesktopDiagnostics | undefined;
+let vkWebsite: VkWebsite | undefined;
+const started = performance.now();
 
 function getDevUrl(): URL | undefined {
   const value = !app.isPackaged && process.env.LUMA_DEV_SERVER_URL;
@@ -50,7 +60,28 @@ function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
   return window;
 }
 
-function bindIpc(library: DesktopLibrary) {
+function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo) {
+  ipcMain.handle('app:info', (event) => { appWindow(event); return info; });
+  ipcMain.handle('app:releases', (event) => { appWindow(event); return shell.openExternal(RELEASES_URL); });
+  logs.onChange = () => {
+    if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('diagnostics:changed');
+  };
+  ipcMain.on('diagnostics:record', (event, name: unknown, values: unknown) => {
+    // Fire-and-forget from the isolated preload; ignore any non-app frame.
+    try { appWindow(event); } catch { return; }
+    logs.renderer(name, values);
+  });
+  ipcMain.handle('diagnostics:snapshot', (event) => { appWindow(event); return logs.snapshot(); });
+  ipcMain.handle('diagnostics:clear', (event) => { appWindow(event); return logs.clear(); });
+  ipcMain.handle('diagnostics:save', async (event) => {
+    const owner = appWindow(event);
+    const result = await dialog.showSaveDialog(owner, {
+      title: 'Сохранить журнал Luma', defaultPath: reportFilename(), filters: [{ name: 'Журнал', extensions: ['log'] }],
+    });
+    if (result.canceled || !result.filePath) return false;
+    await writeFile(result.filePath, diagnosticsReport(logs.snapshot()), 'utf8');
+    return true;
+  });
   let pendingCovers = 0;
   ipcMain.handle('library:list', (event) => { appWindow(event); return library.list(); });
   ipcMain.handle('library:choose', async (event) => {
@@ -72,6 +103,8 @@ function bindIpc(library: DesktopLibrary) {
     if (typeof id !== 'string') throw new TypeError('Expected track ID');
     return library.remove(id);
   });
+  const website = vkWebsite = new VkWebsite(logs);
+  ipcMain.handle('vk:open-website', (event) => { appWindow(event); return website.open(); });
   ipcMain.handle('vk:open-link', (event, url: unknown) => {
     appWindow(event);
     if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
@@ -81,7 +114,12 @@ function bindIpc(library: DesktopLibrary) {
     appWindow(event);
     if (pendingCovers >= 4) return null;
     pendingCovers++;
-    try { return await fetchVkCover(playlist); }
+    const start = performance.now();
+    try {
+      const cover = await fetchVkCover(playlist);
+      logs.main(cover ? 'vk.cover' : 'vk.noCover', { ms: performance.now() - start });
+      return cover;
+    }
     finally { pendingCovers--; }
   });
   ipcMain.handle('window:minimize', (event) => appWindow(event).minimize());
@@ -114,7 +152,15 @@ async function createWindow() {
     if (!allowed) event.preventDefault();
   });
   owner.webContents.on('will-attach-webview', (event) => event.preventDefault());
-  owner.on('closed', () => { if (window === owner) window = null; });
+  owner.webContents.on('did-fail-load', (_event, code, _description, url, mainFrame) => {
+    if (code === -3) return; // An intentional navigation, not a load failure.
+    if (mainFrame) journal?.main('desktop.pageFailed', { code });
+    else if (isVkWidgetFrameUrl(url)) journal?.main('vk.failed', { code });
+  });
+  owner.webContents.on('render-process-gone', (_event, { reason, exitCode }) => {
+    if (reason !== 'clean-exit') journal?.main('desktop.rendererExited', { code: exitCode });
+  });
+  owner.on('closed', () => { if (window === owner) { window = null; vkWebsite?.close(); } });
   const sendMaximized = () => owner.webContents.send('window:maximized', owner.isMaximized());
   owner.on('maximize', sendMaximized);
   owner.on('unmaximize', sendMaximized);
@@ -130,19 +176,33 @@ if (!app.requestSingleInstanceLock()) {
     window?.focus();
   });
   void app.whenReady().then(async () => {
+    const info = desktopAppInfo();
+    journal = await DesktopDiagnostics.open(app.getPath('userData'), info);
+    journal.main('desktop.start');
     Menu.setApplicationMenu(null);
     session.defaultSession.setUserAgent(session.defaultSession.getUserAgent(), `${RUSSIAN_LOCALE},ru`);
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, reply) => reply(false));
     session.defaultSession.setPermissionCheckHandler(() => false);
     const library = await DesktopLibrary.open(app.getPath('userData'));
     protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin));
-    bindIpc(library);
+    journal.main('desktop.protocol');
+    bindIpc(library, journal, info);
     await createWindow();
+    journal.main('desktop.ready', { ms: performance.now() - started });
     app.on('activate', () => { if (!window) void createWindow(); });
   }).catch((error: unknown) => {
+    journal?.main('desktop.failed');
     console.error(error);
     dialog.showErrorBox('Luma Player', 'Не удалось открыть плеер. При запуске из исходников сначала выполните npm run build или используйте npm run dev.');
     app.quit();
+  });
+  let flushing = false;
+  app.on('before-quit', (event) => {
+    if (!journal || flushing) return;
+    event.preventDefault();
+    flushing = true;
+    journal.main('desktop.stopped');
+    void journal.flush().finally(() => app.quit());
   });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }
