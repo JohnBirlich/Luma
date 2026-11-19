@@ -1,3 +1,4 @@
+import type { AppInfo } from './app-info.js';
 import type { DiagnosticsBridge } from './diagnostics.js';
 import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
 import { cleanTrackText, readTrackTag } from './russian.js';
@@ -41,10 +42,13 @@ export interface ImportResult {
 }
 
 export interface DesktopBridge {
+  getAppInfo(): Promise<AppInfo>;
+  openReleases(): Promise<void>;
   getTracks(): Promise<Track[]>;
   chooseTracks(): Promise<ImportResult>;
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
+  openVkWebsite(): Promise<void>;
   openVkLink(url: string): Promise<void>;
   getVkCover(playlist: VkPlaylist): Promise<VkCoverImage | null>;
   diagnostics: DiagnosticsBridge;

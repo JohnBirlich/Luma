@@ -1,7 +1,7 @@
 import type { CoverMime } from './artwork.js';
 
 const VK_ORIGIN = 'https://vk.ru';
-export const VK_MUSIC_URL = `${VK_ORIGIN}/music`;
+export const VK_MUSIC_URL = `${VK_ORIGIN}/audio`;
 export const VK_WIDGET_DOCS_URL = 'https://dev.vk.ru/ru/widgets/playlist';
 export const VK_WIDGET_URL = `${VK_ORIGIN}/widget_playlist.php`;
 const playlistPath = '/music/playlist/';
@@ -81,4 +81,14 @@ export function isVkExternalUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value !== value.trim()) return false;
   return value === VK_MUSIC_URL || value === VK_WIDGET_DOCS_URL
     || /^https:\/\/vk\.ru\/music\/playlist\/-?[1-9]\d{0,14}_[1-9]\d{0,14}$/.test(value);
+}
+
+const vkWebsiteOrigins = new Set(['https://vk.ru', 'https://vk.com', 'https://id.vk.ru', 'https://id.vk.com', 'https://login.vk.ru', 'https://login.vk.com']);
+
+/** First-party pages for the isolated VK website window, not for the privileged Luma renderer. */
+export function isVkWebsiteUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password && vkWebsiteOrigins.has(url.origin);
+  } catch { return false; }
 }

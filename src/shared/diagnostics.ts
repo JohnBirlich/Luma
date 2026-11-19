@@ -1,3 +1,6 @@
+import { runtimeMode } from './app-info.js';
+import type { AppInfo } from './app-info.js';
+
 export const MAX_LOG_ENTRIES = 300;
 export const MAX_LOG_FILE_BYTES = 192 * 1024;
 export const LOG_AREAS = { startup: 'Запуск', network: 'Подключение', library: 'Медиатека', playback: 'Воспроизведение', app: 'Интерфейс' } as const;
@@ -24,6 +27,9 @@ export const LOG_EVENTS = {
   'renderer.rejection': ['renderer', 'app', 'error', 'Необработанная ошибка фоновой операции'],
   'network.online': ['renderer', 'network', 'info', 'Устройство в сети'],
   'network.offline': ['renderer', 'network', 'warn', 'Устройство вне сети'],
+  'vk.websiteOpening': ['main', 'network', 'info', 'Открывается официальный сайт VK Музыки'],
+  'vk.websiteOpened': ['main', 'network', 'info', 'Страница VK загружена; вход и доступ проверяет VK'],
+  'vk.websiteFailed': ['main', 'network', 'warn', 'Не удалось загрузить страницу VK', 'code'],
   'vk.loading': ['renderer', 'network', 'info', 'Загружается виджет VK'],
   'vk.loaded': ['renderer', 'network', 'info', 'Фрейм VK загружен; доступ к трекам проверяет VK', 'ms'],
   'vk.frameError': ['renderer', 'network', 'warn', 'Браузер сообщил об ошибке виджета VK', 'ms'],
@@ -55,9 +61,7 @@ export type RendererLogEvent = { [K in LogEvent]: typeof LOG_EVENTS[K][0] extend
 export type MainLogEvent = Exclude<LogEvent, RendererLogEvent>;
 export type LogValues = Partial<Record<Field, number>>;
 export interface LogEntry { at: number; event: LogEvent; values: LogValues }
-export interface DiagnosticEnvironment {
-  version: string;
-  mode: 'desktop' | 'dev' | 'web';
+export interface DiagnosticEnvironment extends AppInfo {
   system: string;
   runtime: string;
   online: boolean;
@@ -112,7 +116,6 @@ export function displayValues({ values }: LogEntry): string[] {
 }
 
 export const reportFilename = () => `Luma-diagnostics-${new Date().toISOString().slice(0, 10)}.log`;
-export const runtimeMode = { desktop: 'Настольное приложение', dev: 'Настольная разработка', web: 'Веб-версия' } as const;
 
 export function diagnosticsReport({ entries, environment }: DiagnosticSnapshot): string {
   const info = [

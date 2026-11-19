@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  editorialPlaylist, isVkExternalUrl, isVkPlaylist, isVkWidgetFrameUrl, parseVkPlaylist, vkPlaylistUrl, vkWidgetUrl,
+  editorialPlaylist, isVkExternalUrl, isVkPlaylist, isVkWebsiteUrl, isVkWidgetFrameUrl, parseVkPlaylist, vkPlaylistUrl, vkWidgetUrl,
   VK_MUSIC_URL, VK_WIDGET_DOCS_URL,
 } from '../src/shared/vk.js';
 
@@ -42,4 +42,17 @@ test('VK navigation allows only the canonical frame and narrow external links', 
   assert.equal(isVkExternalUrl('https://vk.ru/away.php?to=https://example.com'), false);
   assert.equal(isVkExternalUrl('file:///C:/Windows'), false);
   assert.equal(isVkExternalUrl(frame), false);
+});
+
+
+test('the isolated VK window is limited to first-party HTTPS music and sign-in pages', () => {
+  assert.equal(isVkWebsiteUrl(VK_MUSIC_URL), true);
+  assert.equal(isVkWebsiteUrl('https://vk.ru/?u=2'), true);
+  assert.equal(isVkWebsiteUrl('https://id.vk.ru/auth?state=example'), true);
+  assert.equal(isVkWebsiteUrl('https://login.vk.com/authorize'), true);
+  assert.equal(isVkWidgetFrameUrl(VK_MUSIC_URL), false);
+  for (const url of ['http://vk.ru/audio', 'https://vk.ru.example.test/audio', 'https://vk.ru@untrusted.test/',
+    'https://someone@vk.ru/audio', 'https://vk.ru:8080/audio', 'blob:https://vk.ru/id', 'file:///tmp/audio', 'luma://app/']) {
+    assert.equal(isVkWebsiteUrl(url), false, url);
+  }
 });

@@ -55,3 +55,15 @@ test('legacy layouts remain unchanged; effect intensity and favorite IDs are val
   assert.equal(options.appearance.effectStrength, 1);
   assert.equal(options.appearance.compactSidebar, true);
 });
+
+
+test('new audio-reactive scenes persist without replacing old settings', () => {
+  for (const effect of ['orbits', 'prism', 'spectrum', 'off']) {
+    const prefs = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl', effect, effectStrength: 0.6, motion: false }, volume: 0.17 }));
+    assert.equal(prefs.appearance.effect, effect);
+    assert.equal(prefs.appearance.hero, 'vinyl');
+    assert.equal(prefs.appearance.motion, false);
+    assert.equal(prefs.appearance.effectStrength, 0.6);
+    assert.equal(prefs.volume, 0.17);
+  }
+});

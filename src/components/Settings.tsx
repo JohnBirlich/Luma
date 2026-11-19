@@ -9,6 +9,7 @@ import { Artwork } from './Artwork';
 import { MenuGroup, MenuItem } from './Menu';
 import { NowPlayingOptions } from './NowPlayingOptions';
 import { SceneBackground } from './SceneBackground';
+import { VinylRecord } from './VinylRecord';
 
 
 function ToggleRow({ title, detail, enabled, change, disabled }: {
@@ -57,7 +58,7 @@ function ThemePreview({ appearance, track, tint }: { appearance: Appearance; tra
           <SceneBackground effect={appearance.effect} strength={appearance.effectStrength} />
           {picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
           {appearance.hero === 'center' && <Artwork track={track} className="settings-preview-center-art" />}
-          {appearance.hero === 'vinyl' && <div className="settings-preview-record"><Artwork track={track} /></div>}
+          {appearance.hero === 'vinyl' && <VinylRecord className="settings-preview-record" track={track} animate={appearance.motion} />}
           <div><small>СЕЙЧАС ИГРАЕТ</small><strong>{track?.title ?? 'Ваша музыка'}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
         </div>
         <div className="settings-preview-controls"><i /><i /><b><Play size={12} fill="currentColor" /></b><i /><i /></div>

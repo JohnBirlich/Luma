@@ -1,3 +1,4 @@
+import { webAppInfo } from './app-info';
 import { appendLog, diagnosticsReport, logEntry, readLog, reportFilename } from '../shared/diagnostics';
 import type { DiagnosticSnapshot, LogValues, RendererLogEvent } from '../shared/diagnostics';
 
@@ -20,7 +21,7 @@ function browserSnapshot(): DiagnosticSnapshot {
   let storage: DiagnosticSnapshot['storage'] = 'browser';
   let entries: DiagnosticSnapshot['entries'] = [];
   try { entries = readLog(localStorage.getItem(KEY), 'renderer'); } catch { storage = 'session'; }
-  web = { entries, storage, environment: { version: __APP_VERSION__, mode: 'web', system, runtime: match ? `${engine} ${match[1]}` : engine, online } };
+  web = { entries, storage, environment: { ...webAppInfo, system, runtime: match ? `${engine} ${match[1]}` : engine, online } };
   return web;
 }
 

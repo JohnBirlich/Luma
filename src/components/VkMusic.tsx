@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { ArrowUpRight, Disc3, ImagePlus, Plus, Radio, RotateCw, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, AudioLines, Disc3, Heart, ImagePlus, LogIn, Plus, Radio, RotateCw, Sparkles, Trash2, X } from 'lucide-react';
 import { useVkArtwork } from '../data/vk-artwork';
 import { recordDiagnostic } from '../data/diagnostics';
 import { MAX_VK_PLAYLISTS, readVkShelf, saveVkShelf } from '../data/vk-playlists';
@@ -23,6 +23,36 @@ function VkLink({ href, children, className }: { href: string; children: ReactNo
     }}>{children}</a>
     {failed && <span className="vk-link-error" role="alert">Не удалось открыть браузер. Скопируйте адрес ссылки.</span>}
   </>;
+}
+
+function VkAccount() {
+  const desktop = window.luma;
+  const [opening, setOpening] = useState(false);
+  const [failed, setFailed] = useState(false);
+  async function open() {
+    if (!desktop || opening) return;
+    setOpening(true);
+    setFailed(false);
+    try { await desktop.openVkWebsite(); }
+    catch { setFailed(true); }
+    finally { setOpening(false); }
+  }
+
+  return <section className="vk-account" aria-labelledby="vk-account-title">
+    <div className="vk-account-decoration" aria-hidden="true"><AudioLines /></div>
+    <div className="vk-account-copy">
+      <p className="overline">Официальная страница VK</p>
+      <h2 id="vk-account-title">Ваша музыка в VK</h2>
+      <p>Войдите в аккаунт на сайте VK и откройте свою коллекцию, рекомендации или VK Микс. Вход и воспроизведение остаются на стороне VK.</p>
+      <ul aria-label="Разделы на сайте VK"><li><Heart size={14} /> Моя музыка</li><li><Sparkles size={14} /> Для вас</li><li><Radio size={14} /> VK Микс</li></ul>
+      <div className="vk-account-actions">
+        {desktop ? <><button type="button" className="button vk-account-open" disabled={opening} onClick={() => void open()}><LogIn size={17} />{opening ? 'Открываем VK…' : 'Войти или открыть VK Музыку'}</button>
+          <VkLink href={VK_MUSIC_URL} className="text-button">В браузере <ArrowUpRight size={15} /></VkLink></>
+          : <VkLink href={VK_MUSIC_URL} className="button vk-account-open"><LogIn size={17} /> Войти или открыть VK Музыку <ArrowUpRight size={15} /></VkLink>}
+      </div>
+      {failed && <p className="vk-link-error" role="alert">Не удалось открыть отдельное окно VK. Попробуйте открыть его в браузере.</p>}
+    </div>
+  </section>;
 }
 
 function VkFrame({ playlist }: { playlist: NamedVkPlaylist }) {
@@ -115,9 +145,9 @@ export function VkMusicPage({ covers, editCover, discardCover }: VkMusicPageProp
     <div className="page vk-page">
       <header className="page-header">
         <div><p className="overline page-kicker"><span />Онлайн-источник</p><h1>VK Музыка</h1></div>
-        <VkLink href={VK_MUSIC_URL} className="button outline-button vk-open-music">Открыть VK <ArrowUpRight size={16} /></VkLink>
       </header>
-      <p className="vk-intro">Слушайте плейлисты VK в официальном виджете. Для всей коллекции и поиска откройте VK в браузере.</p>
+      <VkAccount />
+      <h2 className="vk-widgets-heading">Плейлисты в виджетах</h2>
       <div className="vk-layout">
         <section className="vk-panel" aria-labelledby="vk-playlist-title">
           <header className="vk-panel-header">
@@ -180,7 +210,7 @@ export function VkMusicPage({ covers, editCover, discardCover }: VkMusicPageProp
 export function VkModeBar({ goToPlayer }: { goToPlayer(): void }) {
   return (
     <footer className="player-bar vk-mode-bar" aria-label="Источник воспроизведения">
-      <div className="vk-mode-label"><Radio size={19} /><span><strong>VK Музыка</strong><small>Управление звуком — в виджете VK</small></span></div>
+      <div className="vk-mode-label"><Radio size={19} /><span><strong>VK Музыка</strong><small>Воспроизведение — на сайте или в виджете VK</small></span></div>
       <button className="button outline-button" type="button" onClick={goToPlayer}><Disc3 size={17} /> Локальный плеер</button>
     </footer>
   );

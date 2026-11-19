@@ -12,7 +12,7 @@ export const ACCENTS = [
 ] as const;
 
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
-export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum'] as const;
+export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism'] as const;
 export const START_PAGES = ['player', 'library', 'vk'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
 export type ThemeName = keyof typeof THEMES;

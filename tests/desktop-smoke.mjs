@@ -1,16 +1,24 @@
 // Run with Electron after `npm run build`. Uses a temporary profile, not the user's library.
 import assert from 'node:assert/strict';
-import { rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, dialog, session } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
+import { VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
+import { VK_SESSION } from '../dist-electron/electron/vk-window.js';
 import { taggedMp3 } from './fixtures/mp3.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
+const archive = join(root, 'release', 'win-unpacked', 'resources', 'app.asar');
+if (existsSync(archive)) {
+  assert.equal(JSON.parse(await readFile(join(archive, 'package.json'), 'utf8')).version, version, 'packaged manifest version');
+  for (const target of ['Setup', 'Portable']) assert.ok(existsSync(join(root, 'release', `Luma-Player-${target}-${version}-x64.exe`)));
+}
 const profile = await mkdtemp(join(tmpdir(), 'luma-desktop-smoke-'));
 app.setAppPath(root);
 app.setPath('appData', profile);
@@ -27,7 +35,7 @@ async function waitFor(label, check) {
   throw new Error(`Timed out: ${label}`);
 }
 
-const timer = setTimeout(() => { console.error('Desktop smoke test did not finish'); app.exit(1); }, 55_000);
+const timer = setTimeout(() => { console.error('Desktop smoke test did not finish'); app.exit(1); }, 80_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
 const cover = await readFile(join(root, 'public/artwork/afterimage.webp'));
@@ -84,6 +92,50 @@ async function smoke() {
   assert.match(fallback.picture.src, /^data:image\/jpeg;base64,/);
   assert.notEqual(fallback.picture.src, first.picture.src, 'broken cover does not keep the previous track’s artwork');
   assert.equal(window.getTitle(), "Ty Zdes' — Luma Player");
+  assert.equal((await run('window.luma.getAppInfo()')).version, version);
+  const go = (name) => run(`[...document.querySelectorAll('nav .nav-item')].find((item) => item.getAttribute('aria-label') === ${JSON.stringify(name)}).click()`);
+  await go('Главная');
+  await waitFor('appearance button', () => run(`!!document.querySelector('.scene-open')`));
+  await run(`document.querySelector('.scene-open').click()`);
+  await waitFor('appearance dialog', () => run(`!!document.querySelector('.scene-dialog[open]')`));
+  await run(`[...document.querySelectorAll('.scene-layouts button')].find((item) => item.textContent === 'Винил').click();
+    document.querySelector('.scene-choice[aria-label="Призма"]').click();
+    document.querySelector('.scene-dialog .primary-button').click()`);
+  await waitFor('spinning record', () => run(`!!document.querySelector('.hero .record-rotating')`));
+  await run(`window.testAudio = document.querySelector('audio'); document.querySelector('.hero-fullscreen').click()`);
+  await waitFor('expanded player', () => run(`document.querySelector('.immersive-player[open] h1')?.textContent === "Ty Zdes'"`));
+  assert.equal(await run(`window.testAudio === document.querySelector('audio') && !window.testAudio.paused`), true);
+  await run(`document.querySelector('.immersive-collapse').click()`);
+  await waitFor('player collapsed', () => run(`!document.querySelector('.immersive-player') && !document.fullscreenElement`));
+  await go('Меню');
+  await waitFor('about action', () => run(`!!document.querySelector('[aria-label="О приложении"]')`));
+  await run(`document.querySelector('[aria-label="О приложении"]').click()`);
+  await waitFor('About has package version', () => run(`document.querySelector('.about-build strong')?.textContent === ${JSON.stringify(`Версия ${version}`)}`));
+
+  const vkSession = session.fromPartition(VK_SESSION);
+  session.defaultSession.protocol.handle('https', () => new Response('<!doctype html><title>Mock VK widget</title>', { headers: { 'Content-Type': 'text/html' } }));
+  const authOrigin = 'https://id.vk.ru';
+  vkSession.protocol.handle('https', (request) => {
+    if (request.url === VK_MUSIC_URL) return new Response(null, { status: 302, headers: { Location: `${authOrigin}/luma-smoke` } });
+    return new Response('<!doctype html><title>Stub sign-in</title><p>Official sign-in fixture</p>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  });
+  try {
+    await go('VK Музыка');
+    await waitFor('VK account entry', () => run(`!!document.querySelector('button.vk-account-open')`));
+    await run(`document.querySelector('button.vk-account-open').click()`);
+    const account = await waitFor('official sign-in in separate window', () => BrowserWindow.getAllWindows().find((item) => item !== window && item.webContents.getURL() === `${authOrigin}/luma-smoke`));
+    await waitFor('VK test page loaded', () => account.webContents.executeJavaScript(`document.body?.textContent.includes('Official sign-in fixture')`));
+    assert.equal(account.webContents.session, vkSession);
+    assert.notEqual(account.webContents.session, window.webContents.session);
+    assert.deepEqual(await account.webContents.executeJavaScript(`[typeof window.luma, typeof require]`), ['undefined', 'undefined']);
+    assert.equal(account.getTitle(), 'VK Музыка — id.vk.ru');
+    account.destroy();
+    await go('Главная');
+  } finally {
+    vkSession.protocol.unhandle('https');
+    session.defaultSession.protocol.unhandle('https');
+  }
+  console.log('Desktop smoke: consistent package/About version, immersive vinyl and an isolated VK sign-in window.');
   const journalFile = join(profile, 'Luma Player', 'logs', 'diagnostics.json');
   const snapshot = await waitFor('desktop and renderer startup events', async () => {
     const data = await run('window.luma.diagnostics.snapshot()');
@@ -91,6 +143,7 @@ async function smoke() {
     return ['desktop.start', 'desktop.ready', 'renderer.start', 'library.opened', 'audio.ready'].every((name) => names.includes(name)) ? data : undefined;
   });
   assert.match(snapshot.environment.runtime, /Electron .*Chromium/);
+  assert.equal(snapshot.environment.version, version);
   assert.equal(snapshot.storage, 'file');
   await run(`window.luma.diagnostics.record('audio.error', { code: 4, path: 'private-test-path.mp3', token: 'private-test-token' });
     window.luma.diagnostics.record('desktop.failed', { code: 1 });`);
@@ -108,7 +161,8 @@ async function smoke() {
     assert.equal(await run('window.luma.diagnostics.saveReport()'), true);
   } finally { dialog.showSaveDialog = saveDialog; }
   const report = await readFile(reportFile, 'utf8');
-  assert.match(report, /Luma Player .*Система: .*Electron/s);
+  assert.ok(report.startsWith(`Luma Player ${version} ·`));
+  assert.match(report, /Система: .*Electron/s);
   assert.match(report, /audio\.error/u);
   assert.doesNotMatch(report, /private-test/u);
   assert.deepEqual((await run('window.luma.diagnostics.clear()')).entries, []);

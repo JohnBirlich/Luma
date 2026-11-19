@@ -1,8 +1,12 @@
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { AudioLines, Check, CircleSlash, Disc3, Focus, Image, LayoutTemplate, Palette, Sparkles, Waves, X } from 'lucide-react';
+import { AudioLines, Check, CircleSlash, Disc3, Focus, Image, LayoutTemplate, Orbit, Palette, Sparkles, Triangle, Waves, X } from 'lucide-react';
+import type { Track } from '../shared/media';
+import type { ReadSpectrum } from '../player/useAudio';
 import type { Appearance } from '../shared/customization';
+import { Artwork } from './Artwork';
 import { SceneBackground } from './SceneBackground';
+import { VinylRecord } from './VinylRecord';
 
 const LAYOUTS = [
   { id: 'cover', label: 'Обложка', icon: Image },
@@ -16,6 +20,8 @@ const EFFECTS = [
   { id: 'waves', label: 'Волны', description: 'Световые линии в такт музыке', icon: Waves },
   { id: 'stars', label: 'Звёзды', description: 'Мерцающее звёздное поле', icon: Sparkles },
   { id: 'spectrum', label: 'Спектр', description: 'Визуализация частот', icon: AudioLines },
+  { id: 'orbits', label: 'Орбиты', description: 'Светящиеся кольца и искры', icon: Orbit },
+  { id: 'prism', label: 'Призма', description: 'Переливы цветных лучей', icon: Triangle },
 ] as const;
 
 export interface SceneOptionsProps { appearance: Appearance; change(value: Appearance): void }
@@ -52,7 +58,7 @@ export function NowPlayingOptions({ appearance, change }: SceneOptionsProps) {
   </div>;
 }
 
-export function NowPlayingDialog({ appearance, change, close, tint }: SceneOptionsProps & { close(): void; tint: string }) {
+export function NowPlayingDialog({ appearance, change, close, tint, track, sample }: SceneOptionsProps & { close(): void; tint: string; track: Track | null; sample?: ReadSpectrum }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); }, []);
   function dismiss() { ref.current?.close(); close(); }
@@ -65,9 +71,11 @@ export function NowPlayingDialog({ appearance, change, close, tint }: SceneOptio
           <div><p className="overline">Сейчас играет</p><h2 id="scene-dialog-title">Оформление</h2></div>
           <button type="button" className="icon-button" aria-label="Закрыть оформление" title="Закрыть" onClick={dismiss}><X size={20} /></button>
         </header>
-        <div className="scene-dialog-preview" style={{ '--preview-tone': tint } as CSSProperties} aria-hidden="true">
-          <SceneBackground effect={appearance.effect} strength={appearance.effectStrength} animate={appearance.motion} />
-          <span><AudioLines size={17} /> Предпросмотр</span>
+        <div className={`scene-dialog-preview scene-preview-${appearance.hero}`} style={{ '--preview-tone': tint } as CSSProperties} aria-hidden="true">
+          <SceneBackground effect={appearance.effect} strength={appearance.effectStrength} animate={appearance.motion} sample={sample} />
+          {appearance.hero === 'vinyl' ? <VinylRecord className="scene-preview-record" track={track} animate={appearance.motion} />
+            : <Artwork track={track} imageUrl={appearance.hero === 'blur' || appearance.hero === 'cover' ? track?.backdropUrl : undefined} className="scene-preview-art" />}
+          <div className="scene-preview-copy"><p className="overline">Предпросмотр</p><strong>{track?.title ?? 'Ваша музыка'}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
         </div>
         <NowPlayingOptions appearance={appearance} change={change} />
         <footer className="dialog-footer cover-footer">

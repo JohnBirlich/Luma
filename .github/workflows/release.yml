@@ -1,0 +1,67 @@
+name: Publish Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'ID of a successful Windows build for this main commit'
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: luma-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check that the build ran for this commit on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID" |
+            jq -e --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" '
+              .path == ".github/workflows/windows.yml" and .event == "push" and
+              .head_branch == "main" and .head_repository.full_name == $repo and
+              .head_sha == $sha and .status == "completed" and .conclusion == "success"'
+      - uses: actions/download-artifact@v4
+        with:
+          name: Luma-Player-Windows-x64
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+          path: release-assets
+      - name: Attach the verified installer and portable executable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$version" == "$(node -p 'require("./package-lock.json").packages[""].version')" ]]
+          tag="v$version"
+          if git show-ref --verify --quiet "refs/tags/$tag"; then
+            echo "Tag $tag already exists; select a new package version." >&2
+            exit 1
+          fi
+          setup="Luma-Player-Setup-$version-x64.exe"
+          portable="Luma-Player-Portable-$version-x64.exe"
+          test -s "release-assets/$setup"
+          test -s "release-assets/$portable"
+          (cd release-assets && sha256sum "$setup" "$portable" > SHA256SUMS.txt)
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Luma Player $version" --notes-file "docs/releases/$version.md" \
+            "release-assets/$setup" "release-assets/$portable" release-assets/SHA256SUMS.txt

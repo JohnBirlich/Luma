@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, Disc3, Headphones, Heart, ImagePlus, LayoutGrid, List, ListPlus, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowRight, Disc3, Headphones, Heart, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
@@ -9,6 +9,7 @@ import { musicSearchKey } from '../shared/russian';
 import { Artwork } from './Artwork';
 import { Signal } from './QueuePanel';
 import { SceneBackground } from './SceneBackground';
+import { VinylRecord } from './VinylRecord';
 import type { ReadSpectrum } from '../player/useAudio';
 
 interface TrackCardProps {
@@ -68,6 +69,8 @@ interface PlayerPageProps {
   toggleFavorite(id: string): void;
   readSpectrum: ReadSpectrum;
   openAppearance(): void;
+  openPresentation(): void;
+  sceneVisible: boolean;
   playing: boolean;
   position: number;
   count: number;
@@ -107,10 +110,10 @@ export function PlayerPage(props: PlayerPageProps) {
         </div>
       </header>
       <section aria-label="Текущий трек" className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
-        <SceneBackground effect={effect} strength={effectStrength} animate={motion && playing} sample={props.readSpectrum} />
+        <SceneBackground effect={effect} strength={effectStrength} animate={motion && playing && props.sceneVisible} sample={props.readSpectrum} />
         {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
           onError={() => { if (!fallback) setFailedPicture(source); }} />}
-        {!centered && hero !== 'blur' && !showPicture && <div className="hero-disc" aria-hidden="true"><Artwork track={track} className="hero-disc-label" /></div>}
+        {!showPicture && !centered && hero !== 'blur' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
         <div className="hero-scrim" aria-hidden="true" />
         {centered && <Artwork track={track} className="hero-center-art" />}
         <div className="hero-content">
@@ -124,7 +127,10 @@ export function PlayerPage(props: PlayerPageProps) {
               {track ? playing ? <Pause size={16} fill="currentColor" /> : <Play className="play-icon" size={16} fill="currentColor" /> : <Plus size={18} />}
               <span>{track ? playing ? 'Пауза' : 'Воспроизвести' : 'Добавить музыку'}</span>
             </button>
-            {track && <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />}
+            {track && <>
+              <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />
+              <button type="button" className="icon-button hero-fullscreen" onClick={props.openPresentation} aria-label="Развернуть текущий трек" title="Во весь экран (F)" aria-haspopup="dialog"><Maximize2 size={17} /></button>
+            </>}
           </div>
         </div>
         {track && <span className="hero-index" title="Позиция в очереди"><span>{String(props.position).padStart(2, '0')}</span><b>/</b>{String(props.count).padStart(2, '0')}</span>}

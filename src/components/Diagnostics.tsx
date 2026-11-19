@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowLeft, Bug, Copy, Monitor, Radio, Terminal, Trash2 } from 'lucide-react';
 import { clearDiagnostics, getDiagnostics, saveDiagnostics, subscribeDiagnostics } from '../data/diagnostics';
-import { diagnosticsReport, displayValues, LOG_AREAS, LOG_EVENTS, LOG_LEVELS, MAX_LOG_ENTRIES, runtimeMode } from '../shared/diagnostics';
+import { diagnosticsReport, displayValues, LOG_AREAS, LOG_EVENTS, LOG_LEVELS, MAX_LOG_ENTRIES } from '../shared/diagnostics';
+import { runtimeMode } from '../shared/app-info';
 import type { DiagnosticSnapshot, LogArea } from '../shared/diagnostics';
 
 const localTime = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });

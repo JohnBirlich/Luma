@@ -3,6 +3,9 @@ import type { IpcMainInvokeEvent } from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { RELEASES_URL } from '../src/shared/app-info.js';
+import type { AppInfo } from '../src/shared/app-info.js';
+import { desktopAppInfo } from './app-info.js';
 import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js';
 import { DesktopDiagnostics } from './diagnostics.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
@@ -11,6 +14,7 @@ import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { createProtocolHandler } from './protocol.js';
 import { fetchVkCover } from './vk-artwork.js';
+import { VkWebsite } from './vk-window.js';
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'luma',
@@ -24,6 +28,7 @@ const devUrl = getDevUrl();
 app.setPath('userData', join(app.getPath('appData'), devUrl ? 'Luma Player Dev' : 'Luma Player'));
 let window: BrowserWindow | null = null;
 let journal: DesktopDiagnostics | undefined;
+let vkWebsite: VkWebsite | undefined;
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -55,7 +60,9 @@ function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
   return window;
 }
 
-function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics) {
+function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo) {
+  ipcMain.handle('app:info', (event) => { appWindow(event); return info; });
+  ipcMain.handle('app:releases', (event) => { appWindow(event); return shell.openExternal(RELEASES_URL); });
   logs.onChange = () => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('diagnostics:changed');
   };
@@ -96,6 +103,8 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics) {
     if (typeof id !== 'string') throw new TypeError('Expected track ID');
     return library.remove(id);
   });
+  const website = vkWebsite = new VkWebsite(logs);
+  ipcMain.handle('vk:open-website', (event) => { appWindow(event); return website.open(); });
   ipcMain.handle('vk:open-link', (event, url: unknown) => {
     appWindow(event);
     if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
@@ -151,7 +160,7 @@ async function createWindow() {
   owner.webContents.on('render-process-gone', (_event, { reason, exitCode }) => {
     if (reason !== 'clean-exit') journal?.main('desktop.rendererExited', { code: exitCode });
   });
-  owner.on('closed', () => { if (window === owner) window = null; });
+  owner.on('closed', () => { if (window === owner) { window = null; vkWebsite?.close(); } });
   const sendMaximized = () => owner.webContents.send('window:maximized', owner.isMaximized());
   owner.on('maximize', sendMaximized);
   owner.on('unmaximize', sendMaximized);
@@ -167,7 +176,8 @@ if (!app.requestSingleInstanceLock()) {
     window?.focus();
   });
   void app.whenReady().then(async () => {
-    journal = await DesktopDiagnostics.open(app.getPath('userData'));
+    const info = desktopAppInfo();
+    journal = await DesktopDiagnostics.open(app.getPath('userData'), info);
     journal.main('desktop.start');
     Menu.setApplicationMenu(null);
     session.defaultSession.setUserAgent(session.defaultSession.getUserAgent(), `${RUSSIAN_LOCALE},ru`);
@@ -176,7 +186,7 @@ if (!app.requestSingleInstanceLock()) {
     const library = await DesktopLibrary.open(app.getPath('userData'));
     protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin));
     journal.main('desktop.protocol');
-    bindIpc(library, journal);
+    bindIpc(library, journal, info);
     await createWindow();
     journal.main('desktop.ready', { ms: performance.now() - started });
     app.on('activate', () => { if (!window) void createWindow(); });
