@@ -3,6 +3,10 @@ import type { ImportResult, Track } from '../shared/media';
 import type { LibrarySource } from './library';
 import { recordDiagnostic } from './diagnostics';
 
+import { readAudioFormat } from '../shared/audio-quality';
+import { readLocalLyrics } from '../shared/lyrics';
+import type { AudioFormat } from '../shared/audio-quality';
+
 type Info = ReturnType<typeof trackInfo>;
 interface StoredTrack extends Info {
   id: string;
@@ -10,6 +14,8 @@ interface StoredTrack extends Info {
   addedAt: number;
   audio: Blob;
   artwork?: Blob;
+  format?: AudioFormat;
+  embeddedLyrics?: string;
   textVersion?: 1;
 }
 interface SessionEntry {
@@ -60,7 +66,7 @@ function makeEntry(record: StoredTrack, persisted: boolean): SessionEntry {
   const info = textVersion === 1 ? { title, artist, album, duration, genres: readGenres(genres) } : trackInfo(title, record, duration);
   return {
     persisted, record,
-    track: { id, ...info, audioUrl: URL.createObjectURL(audio), artworkUrl: artwork && URL.createObjectURL(artwork) },
+    track: { id, ...info, format: readAudioFormat(record.format), embeddedLyrics: readLocalLyrics(record.embeddedLyrics)?.plain, audioUrl: URL.createObjectURL(audio), artworkUrl: artwork && URL.createObjectURL(artwork) },
   };
 }
 
@@ -95,6 +101,8 @@ async function add(files: File[]): Promise<ImportResult> {
       id: crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (v) => v.toString(16).padStart(2, '0')).join(''),
       signature, addedAt: Date.now(), textVersion: 1,
       ...trackInfo(file.name, metadata?.common, metadata?.format.duration),
+      format: readAudioFormat(metadata?.format),
+      embeddedLyrics: readLocalLyrics(metadata?.common.lyrics?.find(({ text }) => text)?.text)?.plain,
       audio: file.slice(0, file.size, mime),
       artwork: art ? new Blob([Uint8Array.from(art.image.data)], { type: art.mime }) : undefined,
     };

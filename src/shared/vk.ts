@@ -1,5 +1,4 @@
 import type { CoverMime } from './artwork.js';
-import { serviceSearchUrl } from './music-search.js';
 
 const VK_ORIGIN = 'https://vk.ru';
 export const VK_MUSIC_URL = `${VK_ORIGIN}/audio`;
@@ -15,6 +14,9 @@ export interface VkPlaylist {
   playlistId: number;
   hash: string;
 }
+
+export interface VkViewBounds { x: number; y: number; width: number; height: number }
+export interface VkWebsiteState { host: string; loading: boolean; failed: boolean; canGoBack: boolean }
 
 export interface VkCoverImage {
   mime: CoverMime;
@@ -108,12 +110,11 @@ export function isVkMusicDestination(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 8192) return false;
   if (value === VK_MUSIC_URL) return true;
   const item = parseVkShareLink(value);
-  if (item && value === vkShelfUrl({ ...item, name: '' })) return true;
-  try { return value === serviceSearchUrl('vk', new URL(value).searchParams.get('q')); } catch { return false; }
+  return !!item && value === vkShelfUrl({ ...item, name: '' });
 }
 
 export function isVkExternalUrl(value: unknown): value is string {
-  return value === VK_WIDGET_DOCS_URL || isVkMusicDestination(value);
+  return value === VK_WIDGET_DOCS_URL;
 }
 
 // The account surface is first-party VK web content, not a general browser or an OAuth client.

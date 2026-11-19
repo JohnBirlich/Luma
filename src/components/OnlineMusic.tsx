@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { CSSProperties, FormEvent, ReactNode } from 'react';
-import { ArrowUpRight, BookmarkPlus, Check, Cloud, CloudOff, Globe2, Link2, ListPlus, MonitorPlay, Play, Search } from 'lucide-react';
+import type { FormEvent, ReactNode } from 'react';
+import { ArrowUpRight, BookmarkPlus, Check, Cloud, CloudOff, Download, Globe2, Link2, ListPlus, Play, Search } from 'lucide-react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { findOnlineTracks, importOnlineTrack } from '../data/online';
 import { formatTime } from '../shared/media';
-import { MUSIC_SERVICES, serviceSearchUrl } from '../shared/music-search';
-import type { MusicService } from '../shared/music-search';
-import { ONLINE_SOURCES } from '../shared/online';
+import { commonsMp3Export, ONLINE_SOURCES } from '../shared/online';
 import type { OnlineFilter, OnlineTrack } from '../shared/online';
 import { Artwork } from './Artwork';
 
-export type OnlineAction = 'play' | 'queue' | 'save';
+export type OnlineAction = 'play' | 'queue' | 'save' | 'export';
 
 function SourceLink({ url, children }: { url: string; children: ReactNode }) {
   const [failed, setFailed] = useState(false);
@@ -31,44 +29,6 @@ export function OnlineCredit({ track, compact }: { track: { online: OnlineTrack[
 function message(error: unknown) {
   return error instanceof Error && !(error instanceof TypeError) && !(error instanceof SyntaxError) && error.name !== 'TimeoutError'
     ? error.message : 'Не удалось связаться с Openverse. Проверьте подключение и повторите попытку.';
-}
-
-export function MusicServiceSearch({ query, connected, openVk }: {
-  query: string; connected: boolean; openVk(url: string): Promise<void>;
-}) {
-  const [failed, setFailed] = useState<MusicService>();
-  const [busy, setBusy] = useState<MusicService>();
-  const [browserFailed, setBrowserFailed] = useState(false);
-  if (!serviceSearchUrl('vk', query)) return null;
-  return <section className="service-search" aria-labelledby="service-search-title">
-    <header><div className="service-search-mark"><Search size={20} /></div><div><p className="overline">Ваш запрос</p>
-      <h2 id="service-search-title">Найти в музыкальных сервисах</h2><p>Выберите площадку. Результаты и воспроизведение откроются в её плеере, не в очереди Luma.</p></div></header>
-    <div className="service-search-grid">
-      {(Object.keys(MUSIC_SERVICES) as MusicService[]).map((id) => {
-        const { name, mark, tone } = MUSIC_SERVICES[id];
-        const desktopVk = id === 'vk' && Boolean(window.luma);
-        const url = serviceSearchUrl(id, query);
-        return <a key={id} className="service-search-link" style={{ '--service-tone': tone } as CSSProperties}
-          href={connected ? url : undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!connected || busy === id || undefined} onClick={(event) => {
-            if (!connected || busy || !url) { event.preventDefault(); return; }
-            if (!window.luma) return;
-            event.preventDefault(); setFailed(undefined); setBrowserFailed(false); setBusy(id);
-            const request = desktopVk ? openVk(url) : window.luma.openMusicSearch(id, query);
-            void request.catch(() => setFailed(id)).finally(() => setBusy(undefined));
-          }}>
-          <span className="service-search-glyph" aria-hidden="true">{mark}</span>
-          <span><strong>{name}</strong><small>{busy === id ? 'Открываем…' : desktopVk ? 'Окно VK в Luma' : 'В браузере'}</small></span>
-          {desktopVk ? <MonitorPlay size={15} aria-hidden="true" /> : <ArrowUpRight size={15} aria-hidden="true" />}
-        </a>;
-      })}
-    </div>
-    {failed && <p className="online-message error" role="alert">Не удалось открыть {MUSIC_SERVICES[failed].name}.
-      {failed === 'vk' && window.luma && !browserFailed ? <> <button className="text-button service-search-fallback" type="button" onClick={() => {
-        void window.luma?.openMusicSearch('vk', query).catch(() => setBrowserFailed(true));
-      }}>Искать в браузере <ArrowUpRight size={13} /></button></> : ' Проверьте подключение и попробуйте снова.'}
-    </p>}
-    <p className="online-footnote">{connected ? 'Некоторые сервисы требуют входа, подписки или доступны не во всех регионах.' : 'Для поиска в сервисах нужно подключение к интернету.'}</p>
-  </section>;
 }
 
 export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
@@ -98,7 +58,7 @@ export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
 
   return <section className="online-panel" aria-labelledby="online-title" aria-busy={busy}>
     <header><div className="online-mark"><Globe2 size={20} /></div><div>
-      <p className="overline">Открытые записи</p><h2 id="online-title">Слушать в Luma</h2>
+      <p className="overline">Слушать в Luma</p><h2 id="online-title">Найти в музыкальных сервисах</h2>
       <p>{hasLocal ? 'Хотите больше вариантов? Проверьте онлайн-каталоги.' : 'Не нашли в медиатеке? Проверьте онлайн-каталоги.'} Запрос отправляется в Openverse только по кнопке.</p>
     </div></header>
     {!connected && <p className="online-offline" role="status"><CloudOff size={17} /> Устройство вне сети. Онлайн-поиск пока недоступен.</p>}
@@ -124,10 +84,11 @@ export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
           <button type="button" className="icon-button" disabled={disabled || saved.has(track.id)} aria-label={saved.has(track.id) ? `Сохранено: ${track.title}` : `Сохранить: ${track.title}`} title="Сохранить ссылку в медиатеке" onClick={() => choose(track, 'save')}>
             {saved.has(track.id) ? <Check size={17} /> : <BookmarkPlus size={17} />}
           </button>
+          {window.luma && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={`Скачать MP3: ${track.title}`} title="Сохранить копию MP3" onClick={() => choose(track, 'export')}><Download size={17} /></button>}
         </div>
       </li>)}
     </ul>}
-    <p className="online-footnote">Сохраняется ссылка, не аудиофайл. Для воспроизведения нужна сеть. Эквалайзер и реакция фона на звук работают с файлами.</p>
+    <p className="online-footnote">Закладка сохраняет ссылку. Загрузить файл можно отдельно, если источник разрешает. Для потоков нужна сеть. Эквалайзер и реакция фона на звук работают с файлами.</p>
   </section>;
 }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { makeMix, musicGroups, shuffledMix, tracksInGroup } from '../src/shared/mix.js';
+import { homeRecommendations, makeMix, musicGroups, shuffledMix, tracksInGroup } from '../src/shared/mix.js';
 import { trackInfo } from '../src/shared/media.js';
 import type { Track } from '../src/shared/media.js';
 import { decodeOpenverse } from '../src/shared/online.js';
@@ -33,4 +33,13 @@ test('mixes respect source, explicit group and offline settings, and have a boun
   assert.equal(makeMix(Array.from({ length: 30 }, (_, i) => ({ ...local[0], id: String(i) })), settings).length, 24);
   assert.deepEqual(shuffledMix(local, () => 0), [local[1], local[2], local[0]]);
   assert.equal(local[0].id, 'a');
+});
+
+test('home picks use listening history and real tracks, skip demos, favor similar musicians and stay usable offline', () => {
+  const [known, related, discovery] = local;
+  const demo = { ...known, id: 'demo', demo: true };
+  const picks = homeRecommendations([...all, demo], [demo, known], new Set(), true);
+  assert.deepEqual(picks, { recent: [known], related: [related], discoveries: [discovery] });
+  assert.deepEqual(homeRecommendations([demo], [demo], new Set(), false), { recent: [], related: [], discoveries: [] });
+  assert.deepEqual(homeRecommendations([...local, online], [], new Set([known.id]), true).discoveries, [related, discovery]);
 });

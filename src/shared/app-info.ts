@@ -3,6 +3,7 @@ export const APP_USER_MODEL_ID = 'app.lumaplayer.desktop';
 
 export interface AppInfo {
   version: string;
+  systemLocale?: string;
   mode: 'desktop' | 'dev' | 'web';
 }
 

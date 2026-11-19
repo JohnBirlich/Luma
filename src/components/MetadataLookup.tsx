@@ -9,8 +9,8 @@ import type { MetadataCandidate } from '../shared/recognition';
 import { musicSearchKey } from '../shared/russian';
 
 type Method = 'title' | 'sound';
-export function MetadataLookup({ track, artistHint, select }: {
-  track: Track; artistHint: string; select(candidate: MetadataCandidate, titleOnly: boolean): void;
+export function MetadataLookup({ track, artistHint, locale, select }: {
+  track: Track; locale: string; artistHint: string; select(candidate: MetadataCandidate, titleOnly: boolean): void;
 }) {
   const [query, setQuery] = useState(track.title.slice(0, 160));
   const [method, setMethod] = useState<Method>();
@@ -31,7 +31,7 @@ export function MetadataLookup({ track, artistHint, select }: {
     const controller = pending.current = new AbortController();
     setMethod(type); setError(''); setStatus(''); setCandidates(undefined);
     try {
-      const result = await (type === 'title' ? lookupByTitle(track, query, artistHint, controller.signal) : lookupBySound(track, controller.signal));
+      const result = await (type === 'title' ? lookupByTitle(track, query, artistHint, locale, controller.signal) : lookupBySound(track, controller.signal));
       if (!controller.signal.aborted) setCandidates(result);
     } catch {
       if (!controller.signal.aborted) setError(type === 'title' ? 'Не удалось получить данные Apple Music. Проверьте сеть или попробуйте позже.'

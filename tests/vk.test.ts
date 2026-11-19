@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  editorialPlaylist, isVkExternalUrl, isVkPlaylist, isVkWebsiteUrl, isVkWidgetFrameUrl, parseVkPlaylist, parseVkShareLink, vkPlaylistUrl, vkShelfUrl, vkWidgetUrl,
+  editorialPlaylist, isVkExternalUrl, isVkPlaylist, isVkMusicDestination, isVkWebsiteUrl, isVkWidgetFrameUrl, parseVkPlaylist, parseVkShareLink, vkPlaylistUrl, vkShelfUrl, vkWidgetUrl,
   VK_MUSIC_URL, VK_WIDGET_DOCS_URL,
 } from '../src/shared/vk.js';
 
@@ -34,9 +34,12 @@ test('VK navigation allows only the canonical frame and narrow external links', 
   assert.equal(isVkWidgetFrameUrl(`${frame}&url=https://example.com`), false);
   assert.equal(isVkWidgetFrameUrl(frame.replace('vk.ru', 'vk.ru:9999')), false);
   assert.equal(isVkWidgetFrameUrl(frame.replace('vk.ru', 'user@vk.ru')), false);
-  assert.equal(isVkExternalUrl(VK_MUSIC_URL), true);
+  assert.equal(isVkExternalUrl(VK_MUSIC_URL), false);
+  assert.equal(isVkMusicDestination(VK_MUSIC_URL), true);
   assert.equal(isVkExternalUrl(VK_WIDGET_DOCS_URL), true);
-  assert.equal(isVkExternalUrl(vkPlaylistUrl(playlist)), true);
+  assert.equal(isVkExternalUrl(vkPlaylistUrl(playlist)), false);
+  assert.equal(isVkMusicDestination(vkPlaylistUrl(playlist)), true);
+  assert.equal(isVkMusicDestination(`${VK_MUSIC_URL}?q=джаз`), false);
   assert.equal(isVkExternalUrl(`${vkPlaylistUrl(playlist)}?next=https://example.com`), false);
   assert.equal(isVkExternalUrl(`${vkPlaylistUrl(playlist)}\n`), false);
   assert.equal(isVkExternalUrl('https://vk.ru/away.php?to=https://example.com'), false);
@@ -52,7 +55,7 @@ test('VK share links are canonicalized and remain bookmarks until a widget hash 
   assert.equal(isVkPlaylist(data), false);
   assert.equal(parseVkPlaylist(url), null);
   assert.equal(vkShelfUrl({ ...data!, name: 'Вечер' }), 'https://vk.ru/music/playlist/-14_5_Shared-Key');
-  assert.equal(isVkExternalUrl(vkShelfUrl({ ...data!, name: 'Вечер' })), true);
+  assert.equal(isVkMusicDestination(vkShelfUrl({ ...data!, name: 'Вечер' })), true);
   assert.equal(isVkWidgetFrameUrl(VK_MUSIC_URL), false);
   for (const url of ['http://vk.ru/music/playlist/-14_5', 'https://vk.ru.example.test/music/playlist/-14_5',
     'https://someone@vk.ru/music/playlist/-14_5', 'https://vk.ru:8080/music/playlist/-14_5', 'file:///music/playlist/-14_5',

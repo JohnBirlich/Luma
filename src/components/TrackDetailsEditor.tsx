@@ -9,13 +9,14 @@ import { MetadataLookup } from './MetadataLookup';
 interface Props {
   track: Track;
   edited: boolean;
+  locale: string;
   save(value?: TrackDetails): void;
   close(): void;
 }
 
 const fields = [['title', 'Название'], ['artist', 'Исполнитель'], ['album', 'Альбом']] as const;
 
-export function TrackDetailsEditor({ track, edited, save, close }: Props) {
+export function TrackDetailsEditor({ track, edited, locale, save, close }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<TrackDetails>(() => ({
@@ -53,7 +54,7 @@ export function TrackDetailsEditor({ track, edited, save, close }: Props) {
           <label>Жанры<input type="text" value={genres} placeholder="Через запятую" maxLength={TRACK_DETAIL_LIMIT}
             onChange={(event) => setGenres(event.currentTarget.value)} /></label>
         </div>
-        <MetadataLookup track={track} artistHint={draft.artist} select={(candidate, titleOnly) => setDraft((draft) => ({
+        <MetadataLookup track={track} locale={locale} artistHint={draft.artist} select={(candidate, titleOnly) => setDraft((draft) => ({
           ...draft, title: candidate.title,
           ...(!titleOnly && { artist: candidate.artist, album: candidate.album ?? draft.album }),
         }))} />

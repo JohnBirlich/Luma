@@ -2,6 +2,7 @@ import electron = require('electron');
 const { contextBridge, ipcRenderer, webUtils } = electron;
 import type { IpcRendererEvent } from 'electron';
 import type { DesktopBridge } from '../src/shared/media.js';
+import type { VkWebsiteState } from '../src/shared/vk.js';
 
 const bridge: DesktopBridge = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
@@ -12,14 +13,21 @@ const bridge: DesktopBridge = {
   importDroppedFiles: (files) => ipcRenderer.invoke('library:drop', files.map((file) => webUtils.getPathForFile(file)).filter(Boolean)),
   removeTrack: (id) => ipcRenderer.invoke('library:remove', id),
   openVkLink: (url) => ipcRenderer.invoke('vk:open-link', url),
-  openVkWebsite: (url) => ipcRenderer.invoke('vk:open-website', url),
-  onVkWebsite: (callback) => {
-    const listener = (_event: IpcRendererEvent, open: boolean) => callback(open);
-    ipcRenderer.on('vk:website-state', listener);
-    return () => ipcRenderer.removeListener('vk:website-state', listener);
+  vk: {
+    open: (url, bounds) => ipcRenderer.invoke('vk:open-website', url, bounds),
+    layout: (bounds) => ipcRenderer.invoke('vk:layout', bounds),
+    command: (action) => ipcRenderer.invoke('vk:command', action),
+    close: () => ipcRenderer.invoke('vk:close'),
+    reset: () => ipcRenderer.invoke('vk:reset'),
+    onState: (callback) => {
+      const listener = (_event: IpcRendererEvent, state: VkWebsiteState) => callback(state);
+      ipcRenderer.on('vk:website-state', listener);
+      return () => ipcRenderer.removeListener('vk:website-state', listener);
+    },
   },
-  openMusicSearch: (service, query) => ipcRenderer.invoke('search:open-service', service, query),
   getVkCover: (playlist) => ipcRenderer.invoke('vk:cover', playlist),
+  lyrics: { lookup: (query) => ipcRenderer.invoke('lyrics:lookup', query), local: (id) => ipcRenderer.invoke('lyrics:local', id) },
+  exportMp3: (track, withLyrics) => ipcRenderer.invoke('online:export-mp3', track, withLyrics),
   recognition: {
     search: (query, locale) => ipcRenderer.invoke('metadata:search', query, locale),
     hasAcoustid: () => ipcRenderer.invoke('metadata:has-acoustid'),
@@ -42,6 +50,7 @@ const bridge: DesktopBridge = {
     toggleMaximize: () => { void ipcRenderer.invoke('window:toggle-maximize'); },
     close: () => { void ipcRenderer.invoke('window:close'); },
     isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+    setWidget: (enabled) => ipcRenderer.invoke('window:widget', enabled),
     setFullscreen: (fullscreen) => ipcRenderer.invoke('window:set-fullscreen', fullscreen),
     onFullscreen: (callback) => {
       const listener = (_event: IpcRendererEvent, fullscreen: boolean) => callback(fullscreen);

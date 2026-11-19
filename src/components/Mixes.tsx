@@ -1,5 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, AudioLines, ListPlus, Play, RotateCw, Shuffle, Sparkles } from 'lucide-react';
+import { formatCount } from '../shared/customization';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { formatTime, trackCount } from '../shared/media';
 import type { Track } from '../shared/media';
@@ -14,8 +15,8 @@ const TYPES = {
   recent: { name: 'Недавно слушали', detail: 'Микс из недавних прослушиваний в Luma.' },
 } as const;
 
-export function MixesPage({ tracks, favorites, favoriteTracks, recent, currentId, playing, playAll, addMix, goToLibrary }: {
-  tracks: Track[]; favorites: ReadonlySet<string>; favoriteTracks: Track[]; recent: Track[]; currentId: string | null; playing: boolean;
+export function MixesPage({ tracks, favorites, favoriteTracks, recent, currentId, playing, fullNumbers, playAll, addMix, goToLibrary }: {
+  tracks: Track[]; favorites: ReadonlySet<string>; favoriteTracks: Track[]; recent: Track[]; currentId: string | null; playing: boolean; fullNumbers: boolean;
   playAll(items: Track[], start?: string): void; addMix(items: Track[]): void; goToLibrary(): void;
 }) {
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
@@ -63,7 +64,7 @@ export function MixesPage({ tracks, favorites, favoriteTracks, recent, currentId
         {Object.entries(TYPES).map(([id, { name: label }]) => <option key={id} value={id}>{label}</option>)}
       </select></label>
       <label className="mix-offline"><input type="checkbox" checked={offline || !connected} disabled={!connected} onChange={(event) => setOffline(event.currentTarget.checked)} /> Только без сети</label>
-      <span>{trackCount(items.length)}</span>
+      <span>{trackCount(items.length, fullNumbers)}</span>
     </div>
     <div className="mix-filters">
       {(['artist', 'genre'] as const).map((kind) => groups[kind].length ? <section key={kind} aria-label={kind === 'artist' ? 'Топ исполнителей' : 'Топ жанров'}>
@@ -71,7 +72,7 @@ export function MixesPage({ tracks, favorites, favoriteTracks, recent, currentId
         <div className="mix-artists" role="group" aria-label={kind === 'artist' ? 'Миксы по исполнителям' : 'Миксы по жанрам'}>
           {groups[kind].map(({ id, label, count }) => {
             const active = group?.id === id && group.kind === kind;
-            return <button key={id} type="button" aria-pressed={active} onClick={() => setGroup(active ? undefined : { kind, id })}>{label} <small>{count}</small></button>;
+            return <button key={id} type="button" aria-pressed={active} onClick={() => setGroup(active ? undefined : { kind, id })}>{label} <small>{formatCount(count, fullNumbers)}</small></button>;
           })}
         </div>
       </section> : null)}

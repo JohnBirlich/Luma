@@ -9,12 +9,14 @@ import { desktopAppInfo } from './app-info.js';
 import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js';
 import { DesktopDiagnostics } from './diagnostics.js';
 import { isOnlineExternalUrl } from '../src/shared/online.js';
-import { serviceSearchUrl } from '../src/shared/music-search.js';
+import { createLyricsService } from '../src/shared/lyrics-service.js';
+import { createOnlineExporter } from './online-export.js';
+import { MAIN_MINIMUM, widgetController } from './desktop-widget.js';
 import { createMetadataService, validAcoustidClient } from '../src/shared/metadata-service.js';
 import { isMetadataPage } from '../src/shared/recognition.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
-import { isVkExternalUrl, isVkWidgetFrameUrl, VK_MUSIC_URL } from '../src/shared/vk.js';
+import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { createProtocolHandler } from './protocol.js';
 import { fetchVkCover } from './vk-artwork.js';
@@ -32,6 +34,7 @@ const devUrl = getDevUrl();
 app.setPath('userData', join(app.getPath('appData'), devUrl ? 'Luma Player Dev' : 'Luma Player'));
 let window: BrowserWindow | null = null;
 let journal: DesktopDiagnostics | undefined;
+let changeWidget: ((enabled: boolean) => boolean) | undefined;
 let changeFullscreen: ((fullscreen: boolean) => void) | undefined;
 const started = performance.now();
 
@@ -67,13 +70,19 @@ function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
 function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo) {
   ipcMain.handle('app:info', (event) => { appWindow(event); return info; });
   const vk = new VkWebsite(logs);
-  ipcMain.handle('vk:open-website', (event, url: unknown) => vk.open(appWindow(event), url));
-  ipcMain.handle('search:open-service', (event, service: unknown, query: unknown) => {
+  ipcMain.handle('vk:open-website', (event, url: unknown, bounds: unknown) => vk.open(appWindow(event), url, bounds));
+  ipcMain.handle('vk:layout', (event, bounds: unknown) => vk.layout(appWindow(event), bounds));
+  ipcMain.handle('vk:command', (event, action: unknown) => vk.command(appWindow(event), action));
+  ipcMain.handle('vk:close', (event) => { appWindow(event); vk.close(); });
+  ipcMain.handle('vk:reset', (event) => vk.reset(appWindow(event)));
+  const lookupLyrics = createLyricsService(net.fetch, true);
+  const exportMp3 = createOnlineExporter(lookupLyrics);
+  ipcMain.handle('lyrics:local', (event, id: unknown) => { appWindow(event); return library.lyrics(id); });
+  ipcMain.handle('lyrics:lookup', (event, query: unknown) => {
     appWindow(event);
-    const url = serviceSearchUrl(service, query);
-    if (!url) throw new Error('Unsupported search destination');
-    return shell.openExternal(url);
+    return lookupLyrics(query, AbortSignal.timeout(9000));
   });
+  ipcMain.handle('online:export-mp3', (event, track: unknown, withLyrics: unknown) => exportMp3(appWindow(event), track, withLyrics));
   const metadata = createMetadataService(net.fetch);
   const acoustidClient = process.env.LUMA_ACOUSTID_CLIENT;
   ipcMain.handle('metadata:search', (event, query: unknown, locale: unknown) => {
@@ -137,16 +146,10 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     if (typeof id !== 'string') throw new TypeError('Expected track ID');
     return library.remove(id);
   });
-  ipcMain.handle('vk:open-link', async (event, url: unknown) => {
+  ipcMain.handle('vk:open-link', (event, url: unknown) => {
     appWindow(event);
     if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
-    try {
-      await shell.openExternal(url);
-      if (url === VK_MUSIC_URL) logs.main('vk.browserOpened');
-    } catch {
-      if (url === VK_MUSIC_URL) logs.main('vk.browserFailed');
-      throw new Error('VK browser launch failed');
-    }
+    return shell.openExternal(url);
   });
   ipcMain.handle('vk:cover', async (event, playlist: unknown) => {
     appWindow(event);
@@ -172,19 +175,26 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     if (typeof fullscreen !== 'boolean') throw new TypeError('Expected a fullscreen state');
     changeFullscreen?.(fullscreen);
   });
+  ipcMain.handle('window:widget', (event, enabled: unknown) => {
+    appWindow(event);
+    if (typeof enabled !== 'boolean') throw new TypeError('Expected widget state');
+    return changeWidget?.(enabled) ?? false;
+  });
   ipcMain.handle('window:close', (event) => appWindow(event).close());
 }
 
 async function createWindow() {
   const owner = new BrowserWindow({
-    title: APP_NAME, width: 1440, height: 900, minWidth: 620, minHeight: 520,
+    title: APP_NAME, width: 1440, height: 900, minWidth: MAIN_MINIMUM[0], minHeight: MAIN_MINIMUM[1],
     frame: false, show: false, backgroundColor: '#101116',
     webPreferences: {
       preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)),
       nodeIntegration: false, nodeIntegrationInSubFrames: false, contextIsolation: true, sandbox: true,
+      autoplayPolicy: 'no-user-gesture-required', // App-controlled local autoplay, off by default.
     },
   });
   window = owner;
+  changeWidget = widgetController(owner);
   if (process.platform === 'win32' && app.isPackaged) {
     // Windows taskbar and native media clients can resolve the AppUserModelID to this name.
     // Keep the app origin unchanged so existing IndexedDB and localStorage survive updates.
@@ -234,7 +244,7 @@ async function createWindow() {
   owner.on('leave-full-screen', () => syncFullscreen(false));
   owner.on('closed', () => {
     clearTimeout(settle);
-    if (window === owner) { window = null; changeFullscreen = undefined; }
+    if (window === owner) { window = null; changeFullscreen = undefined; changeWidget = undefined; }
   });
   const sendMaximized = () => owner.webContents.send('window:maximized', owner.isMaximized());
   owner.on('maximize', sendMaximized);

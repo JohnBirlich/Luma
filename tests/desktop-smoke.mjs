@@ -6,13 +6,13 @@ import { release, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, screen, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, screen, session } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
-import { VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
 import { VK_SESSION } from '../dist-electron/electron/vk-window.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
+import { parseFile } from 'music-metadata';
 import { taggedMp3 } from './fixtures/mp3.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -78,6 +78,17 @@ async function smoke() {
     field.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
   const preferences = () => run(`JSON.parse(localStorage.getItem('luma-player:v1'))`);
+  const select = (selector, value) => run(`(() => {
+    const field = document.querySelector(${JSON.stringify(selector)});
+    field.value = ${JSON.stringify(value)};
+    field.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  const settings = async (label) => {
+    await click('.title-settings');
+    await waitFor('settings menu', () => run(`!!document.querySelector('.settings-page [aria-label="Внешний вид"]')`));
+    await click(`.settings-page [aria-label="${label}"]`);
+  };
+
   const withArt = (title) => waitFor(`metadata and artwork for ${title}`, async () => {
     const data = await readMetadata();
     return data?.title === title && data.picture ? data : undefined;
@@ -198,12 +209,42 @@ async function smoke() {
   await run(`document.querySelector('[aria-label="О приложении"]').click()`);
   await waitFor('About has package version', () => run(`document.querySelector('.about-build strong')?.textContent === ${JSON.stringify(`Версия ${version}`)}`));
 
+  await settings('Качество аудио');
+  await waitFor('file format', () => run(`document.querySelector('[aria-label="Текущий трек"]')?.textContent.includes('64 кбит/с')`));
+  await select('[aria-label="Качество воспроизведения"] select', 'metered');
+  await waitFor('configured network profile', async () => (await preferences()).audioQuality.network === 'metered');
+  await click('.settings-back');
+  await click('.settings-page [aria-label="Интеграции"]');
+  await waitFor('widget setting', () => run(`!!document.querySelector('[aria-label="Виджеты рабочего стола"] select')`));
+  await select('[aria-label="Виджеты рабочего стола"] select', 'white');
+  const widgetBounds = window.getBounds();
+  const widgetTime = await run('document.querySelector("audio").currentTime');
+  await click('[aria-label="Виджеты рабочего стола"] button');
+  await waitFor('floating widget opens without replacing the renderer', async () => window.isAlwaysOnTop() && window.getBounds().width < widgetBounds.width
+    && await run(`document.querySelector('.desktop-widget')?.dataset.widgetBackground === 'white' && window.testAudio === document.querySelector('audio')`));
+  assert.equal(BrowserWindow.getAllWindows().length, 1);
+  await click('.widget-window-buttons [aria-label="Вернуться в плеер"]');
+  await waitFor('widget restores the old window', async () => !window.isAlwaysOnTop() && !await run(`!!document.querySelector('.desktop-widget')`));
+  assert.deepEqual(window.getBounds(), widgetBounds);
+  assert.equal(await run('document.querySelector("audio").currentTime'), widgetTime);
+  await click('[aria-label="Сохранять текст с новым MP3"]');
+  await waitFor('opt-in to MP3 lyric tagging', async () => (await preferences()).exportLyrics);
+
   const catalogCalls = [];
   const streamCalls = [];
   const titleQueries = [];
   const fingerprints = [];
   const vkSession = session.fromPartition(VK_SESSION);
   const fixtureHeaders = { 'Access-Control-Allow-Origin': '*' };
+  const mp3Fixture = (id, title) => ({ ...commonsRecording, id, title, creator: 'Исполнитель', duration: 32000,
+    url: `https://upload.wikimedia.org/wikipedia/commons/e/e1/${encodeURIComponent(title)}.mp3` });
+  const synced = mp3Fixture('61a70211-e1f3-48a9-834b-b196122c5bc1', 'Запись с LRC');
+  const plain = mp3Fixture('61a70211-e1f3-48a9-834b-b196122c5bc2', 'Запись с тегом');
+  const lrcText = '[00:00.25] Первый куплет\n[00:01.25] Второй';
+  const plainText = 'Первый куплет\nВторой';
+  const lyricQueries = [];
+  const economyUrl = jamendoRecording.url.replace('format=mp32', 'format=mp31');
+
   session.defaultSession.protocol.handle('https', async (request) => {
     const url = new URL(request.url);
     if (url.origin === 'https://itunes.apple.com' && url.pathname === '/search') {
@@ -219,12 +260,18 @@ async function smoke() {
     if (url.pathname.endsWith('/thumb/') && url.origin === 'https://api.openverse.org') {
       return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
     }
+    if (url.origin === 'https://lrclib.net' && url.pathname === '/api/get') {
+      const title = url.searchParams.get('track_name');
+      lyricQueries.push(Object.fromEntries(url.searchParams));
+      return title === synced.title || title === plain.title ? Response.json({ trackName: title, artistName: 'Исполнитель', duration: 32,
+        plainLyrics: plainText, syncedLyrics: title === synced.title ? lrcText : null }) : new Response(null, { status: 404 });
+    }
     if (url.origin === 'https://api.openverse.org' && url.pathname.startsWith('/v1/audio/')) {
       catalogCalls.push(url);
-      const pair = [jamendoRecording, commonsRecording];
-      return Response.json(url.pathname === '/v1/audio/' ? { results: pair } : pair.find((item) => url.pathname.endsWith(`/${item.id}/`)), { headers: fixtureHeaders });
+      const rows = url.searchParams.get('q') === 'fixture-mp3' ? [synced, plain] : [jamendoRecording, commonsRecording];
+      return Response.json(url.pathname === '/v1/audio/' ? { results: rows } : [...rows, synced, plain].find((item) => url.pathname.endsWith(`/${item.id}/`)), { headers: fixtureHeaders });
     }
-    if ([jamendoRecording.url, commonsRecording.url].includes(url.href)) {
+    if ([jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url].includes(url.href)) {
       // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
       streamCalls.push(url.href);
       const range = request.headers.get('Range');
@@ -246,8 +293,8 @@ async function smoke() {
     if (url.origin === 'https://id.vk.ru') return html('<a id="signin" href="https://vk.ru/audio?signed=1">Sign in fixture</a>');
     if (url.origin !== 'https://vk.ru') return new Response('Untrusted destination', { status: 418 });
     if (url.searchParams.has('signed')) return html('<script>document.cookie = "lumaFixture=1; Max-Age=3600; Secure";</script><p>Signed-in fixture</p>');
-    if (url.pathname === '/audio') return html('<a id="vkid" href="https://id.vk.ru/auth">VK ID fixture</a>');
-    return html('<p>Playlist fixture</p><a id="outside" href="https://example.invalid/">Outside</a>');
+    if (url.pathname === '/audio') return html('<a id="vkid" target="_blank" href="https://id.vk.ru/auth">VK ID fixture</a>');
+    return html('<p>Playlist fixture</p><a id="outside" href="https://example.invalid/">Outside</a><a id="popup" href="https://example.invalid/" target="_blank">Outside popup</a>');
   });
   const onlineAudio = 'audio[data-online-audio]';
   const playOnline = '.online-result-actions button[aria-label="Слушать онлайн: All About Jazz"]';
@@ -285,15 +332,8 @@ async function smoke() {
     await fill('main input[type="search"]', 'jazz');
     await waitFor('online fallback prompt', () => run(`!!document.querySelector('.online-search-form button')`));
     assert.equal(catalogCalls.length, 0, 'typing stays local until the user opts in');
-    assert.equal(await run(`document.querySelectorAll('.service-search-link').length`), 8);
-    const realLaunch = shell.openExternal;
-    const launched = [];
-    try {
-      shell.openExternal = async (url) => { launched.push(url); };
-      await click('.service-search-link[href^="https://open.spotify.com/search/"]');
-      await waitFor('encoded Spotify search link', () => launched.length);
-      assert.deepEqual(launched, ['https://open.spotify.com/search/jazz']);
-    } finally { shell.openExternal = realLaunch; }
+    assert.equal(await run(`document.querySelectorAll('.service-search-link').length`), 0);
+    assert.deepEqual(await run(`[...document.querySelector('.online-search-form select').options].map(option => option.value)`), ['all', 'jamendo', 'wikimedia_audio']);
     await click('.online-search-form button');
     await waitFor('both online sources', () => run(`document.querySelectorAll('.online-results li').length === 2`));
     assert.equal(catalogCalls.length, 1);
@@ -304,7 +344,8 @@ async function smoke() {
     await click(playOnline);
     await waitFor('online audio decoded', () => run(`Number.isFinite(document.querySelector('${onlineAudio}').duration)`));
     await withArt('All About Jazz');
-    assert.ok(streamCalls.includes(jamendoRecording.url));
+    assert.ok(streamCalls.includes(economyUrl));
+    assert.ok(!streamCalls.includes(jamendoRecording.url), 'metered profile requests the actual MP3 96 variant');
     assert.equal(await run(`document.querySelector('audio').paused`), true);
     assert.equal((await preferences()).onlineTracks.length, 0, 'playing is not a library save');
     await click('button[aria-label="Сохранить: All About Jazz"]');
@@ -315,39 +356,54 @@ async function smoke() {
     await waitFor('native VK shelf', () => run(`!!document.querySelector('.vk-native-shelf')`));
     assert.equal(await run(`!!document.querySelector('iframe')`), false, 'the shelf does not open a website or a player automatically');
     assert.equal(BrowserWindow.getAllWindows().length, 1);
-    const childWindow = () => BrowserWindow.getAllWindows().find((item) => item !== window);
+    const childView = () => window.contentView.children.find((view) => view.webContents?.session === vkSession);
     await click('.vk-account-actions .primary-button');
-    const vk = await waitFor('VK native window', () => childWindow());
+    const vk = await waitFor('VK is attached to the main window', childView);
     const vkRun = (script) => vk.webContents.executeJavaScript(script, true);
     await waitFor('VK home fixture', () => vkRun(`!!document.getElementById('vkid')`));
     assert.equal(vk.webContents.session, vkSession);
-    assert.ok(vkSession.storagePath?.includes('luma-vk-web')); // persistent (not in-memory) partition
+    assert.ok(vkSession.storagePath?.includes('luma-vk-web'));
     assert.notEqual(vk.webContents.session, window.webContents.session);
-    assert.equal(vk.isModal(), true);
+    assert.equal(BrowserWindow.getAllWindows().length, 1);
+    const measured = () => run(`(() => { const { x, y, width, height } = document.querySelector('.vk-site-slot').getBoundingClientRect(); return { x, y, width, height }; })()`);
+    await waitFor('VK is bounded to the measured slot', async () => {
+      const bounds = vk.getBounds(), slot = await measured();
+      return slot.width > 0 && slot.height > 0 && Object.keys(slot).every((key) => Math.abs(slot[key] - bounds[key]) <= 1);
+    });
     assert.equal(await vkRun(`typeof window.luma === 'undefined' && typeof require === 'undefined' && typeof process === 'undefined'`), true);
     await vkRun(`document.getElementById('vkid').click(); void 0;`);
-    await waitFor('VK ID login stays in the same window', () => vk.webContents.getURL() === 'https://id.vk.ru/auth');
-    await waitFor('trusted hostname in native title', () => vk.getTitle() === 'VK Музыка — id.vk.ru');
+    await waitFor('VK ID stays inside the main window', () => vk.webContents.getURL() === 'https://id.vk.ru/auth');
+    await waitFor('trusted hostname in the toolbar', () => run(`document.querySelector('.vk-site-origin span').textContent === 'id.vk.ru'`));
     await vkRun(`document.getElementById('signin').click(); void 0;`);
     await waitFor('signed-in VK session fixture', () => vkRun(`document.cookie.includes('lumaFixture=1')`));
-    vk.close();
-    await waitFor('VK window closed', () => !childWindow());
+    await click('.vk-site-toolbar [aria-label="Закрыть сайт VK"]');
+    await waitFor('VK view closed', () => !childView());
     await click('.vk-add');
     await fill('#vk-widget-code', 'https://vk.com/audios-42?z=audio_playlist-42_7/Share-Key');
     await click('#vk-playlist-form button[type="submit"]');
-    await waitFor('copied playlist share canonicalized', () => run(`document.querySelector('.vk-original')?.href === 'https://vk.ru/music/playlist/-42_7_Share-Key'`));
+    await waitFor('copied playlist share canonicalized', () => run(`JSON.parse(localStorage.getItem('luma-player:vk-playlists:v1'))?.playlists[0]?.shareKey === 'Share-Key'`));
     assert.equal(await run(`!!document.querySelector('.vk-widget-toggle')`), false);
     await click('.vk-spotlight-actions .primary-button');
     const playlist = await waitFor('playlist opens in the signed-in VK partition', () => {
-      const child = childWindow();
+      const child = childView();
       return child?.webContents.getURL() === 'https://vk.ru/music/playlist/-42_7_Share-Key' ? child : undefined;
     });
     assert.equal(await playlist.webContents.executeJavaScript(`document.cookie.includes('lumaFixture=1')`), true);
     assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 0);
-    await playlist.webContents.executeJavaScript(`document.getElementById('outside').click(); void 0;`, true);
+    await playlist.webContents.executeJavaScript(`document.getElementById('outside').click(); document.getElementById('popup').click(); void 0;`, true);
     assert.equal(playlist.webContents.getURL(), 'https://vk.ru/music/playlist/-42_7_Share-Key');
-    playlist.close();
-    await waitFor('playlist window closed', () => !childWindow());
+    assert.equal(BrowserWindow.getAllWindows().length, 1);
+    await settings('Интеграции');
+    await waitFor('navigating away closes VK', () => !childView());
+    const originalMessage = dialog.showMessageBox;
+    try {
+      dialog.showMessageBox = async () => ({ response: 1 });
+      await click('[aria-label="VK Music"] .settings-actions button:last-child');
+      await waitFor('reset confirms local partition cleanup', () => run(`document.querySelector('[aria-label="VK Music"] [role="status"]')?.textContent.includes('очищены')`));
+    } finally { dialog.showMessageBox = originalMessage; }
+    assert.equal((await vkSession.cookies.get({ name: 'lumaFixture' })).length, 0);
+    await go('VK Музыка');
+    await waitFor('reset leaves the bookmark intact', () => run(`document.querySelector('#vk-playlist-title')?.textContent === 'Плейлист 7'`));
     await click('.vk-playlist-item');
     await waitFor('editorial widget available', () => run(`!!document.querySelector('.vk-widget-toggle')`));
     await click('.vk-widget-toggle');
@@ -357,29 +413,56 @@ async function smoke() {
     await waitFor('widget closed without opening browser windows', () => run(`!document.querySelector('iframe')`));
     await go('Главная');
     await withArt('All About Jazz');
+    await go('Поиск');
+    await fill('main input[type="search"]', 'fixture-mp3');
+    await waitFor('downloadable sources form', () => run(`!!document.querySelector('.online-search-form button')`));
+    await click('.online-search-form button');
+    await waitFor('only the two permitted MP3 downloads', () => run(`document.querySelectorAll('.online-result-actions [aria-label^="Скачать MP3"]').length === 2`));
+    const choosePath = dialog.showSaveDialog;
+    try {
+      const syncedPath = join(profile, 'new-synced.mp3');
+      const plainPath = join(profile, 'new-plain.mp3');
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: syncedPath });
+      await click(`button[aria-label="Скачать MP3: ${synced.title}"]`);
+      await waitFor('timed text saved outside MP3', () => run(`document.querySelector('.toast small')?.textContent.includes('сохранён в .lrc')`));
+      assert.equal((await readFile(syncedPath)).equals(sample), true, 'synced text does not re-tag the MP3');
+      assert.equal(await readFile(syncedPath.replace('.mp3', '.lrc'), 'utf8'), `${lrcText}\n`);
+      assert.match(await readFile(syncedPath.replace('.mp3', '.source.txt'), 'utf8'), /creativecommons.org/);
+      await delay(400); // Respect the lyrics provider's request spacing.
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: plainPath });
+      await click(`button[aria-label="Скачать MP3: ${plain.title}"]`);
+      await waitFor('plain text embedded in MP3', () => run(`document.querySelector('.toast small')?.textContent.includes('в тег MP3')`));
+      assert.equal((await parseFile(plainPath)).common.lyrics[0].text, plainText);
+      assert.deepEqual(lyricQueries.map(({ track_name, duration }) => [track_name, duration]), [[synced.title, '32'], [plain.title, '32']]);
+      await click(`button[aria-label="Скачать MP3: ${plain.title}"]`);
+      await waitFor('existing destination is not overwritten', () => run(`document.querySelector('.toast-error small')?.textContent.includes('Файл уже существует')`));
+      assert.equal((await parseFile(plainPath)).common.lyrics[0].text, plainText);
+    } finally { dialog.showSaveDialog = choosePath; }
   } finally {
     session.defaultSession.protocol.unhandle('https');
     vkSession.protocol.unhandle('https');
     await vkSession.clearStorageData();
   }
-  console.log('Desktop smoke: native monitor fullscreen and durable queue; Apple title / WASM fingerprint; online playback; VK session isolation, reopening and widget.');
+  console.log('Desktop smoke: monitor fullscreen; compact widget restores bounds; Apple/WASM; metered MP3; lyrics export; same-window VK and isolated reset.');
   if (liveServices) {
     const suggestions = await run(`window.luma.recognition.search('Madam Broshkina', 'ru-RU')`);
     assert.ok(suggestions.some(({ title }) => title === 'Мадам Брошкина'), 'live Apple Music transliteration lookup');
     console.log('::notice title=Live Apple Music::Cyrillic recording candidates returned for a transliterated title.');
     try {
-      await run(`window.luma.openVkWebsite(${JSON.stringify(VK_MUSIC_URL)})`);
-      const vk = BrowserWindow.getAllWindows().find((item) => item !== window);
-      assert.ok(vk);
+      await go('VK Музыка');
+      await waitFor('VK account action', () => run(`!!document.querySelector('.vk-account-actions .primary-button')`));
+      await click('.vk-account-actions .primary-button');
+      await waitFor('VK service finished navigating', () => run(`document.querySelector('.vk-site-origin small')?.textContent === 'Официальный сайт'`));
       await delay(2200); // Give VK's own SPA time to report an initialization error.
       console.log(externalRuntimeErrors
         ? '::warning title=Live VK navigation::First-party page loaded but reported a site script error. Account access and playback are unverified.'
-        : '::notice title=Live VK navigation::First-party page loaded; this does not verify login or playback.');
-      vk.destroy();
+        : '::notice title=Live VK navigation::First-party page loaded in the main window; this does not verify login or playback.');
+      await click('.vk-site-toolbar [aria-label="Закрыть сайт VK"]');
     } catch {
       console.log('::warning title=Live VK navigation::Public VK page did not load in this network. The deterministic session checks passed.');
     }
   }
+  if (await run(`!!document.querySelector('.vk-site-toolbar')`)) await click('.vk-site-toolbar [aria-label="Закрыть сайт VK"]');
   const journalFile = join(profile, 'Luma Player', 'logs', 'diagnostics.json');
   const snapshot = await waitFor('desktop and renderer startup events', async () => {
     const data = await run('window.luma.diagnostics.snapshot()');

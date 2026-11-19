@@ -5,10 +5,9 @@ import { diagnosticsReport, displayValues, LOG_AREAS, LOG_EVENTS, LOG_LEVELS, MA
 import { runtimeMode } from '../shared/app-info';
 import type { DiagnosticSnapshot, LogArea } from '../shared/diagnostics';
 
-const localTime = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const storageLabel = { file: 'Файл в профиле Luma', browser: 'Хранилище браузера', session: 'Только пока открыто приложение' } as const;
 
-export const DiagnosticsPage = memo(function DiagnosticsPage({ back }: { back(): void }) {
+export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: { back(): void; locale: string }) {
   const [snapshot, setSnapshot] = useState<DiagnosticSnapshot>();
   const [area, setArea] = useState<LogArea | 'all'>('all');
   const [problems, setProblems] = useState(false);
@@ -67,6 +66,7 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back }: { back():
     finally { setWorking(false); }
   }
 
+  const localTime = useMemo(() => new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }), [locale]);
   const system = snapshot?.environment;
   return <div className="page diagnostic-page">
     <header className="page-header settings-header">

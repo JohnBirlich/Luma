@@ -10,5 +10,5 @@ export function desktopAppInfo(): AppInfo {
   if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(version)) {
     throw new Error('The Luma package is missing a valid version.');
   }
-  return { version, mode: app.isPackaged ? 'desktop' : 'dev' };
+  return { version, systemLocale: app.getPreferredSystemLanguages()[0], mode: app.isPackaged ? 'desktop' : 'dev' };
 }

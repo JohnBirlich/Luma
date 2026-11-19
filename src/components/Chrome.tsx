@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AudioLines, Bug, Copy, Heart, House, ListMusic, Menu, Minus, Music2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Search, Settings2, SlidersHorizontal, Square, X } from 'lucide-react';
 
+import { formatCount } from '../shared/customization';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 
 export type Page = 'player' | 'search' | 'vk' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent' | 'mixes';
@@ -58,6 +59,8 @@ interface SidebarProps {
   addMusic(): void;
   busy: boolean;
   count: number;
+  fullNumbers: boolean;
+  vkWebsiteOpen: boolean;
   favoriteCount: number;
   queued: number;
   queueOpen: boolean;
@@ -87,20 +90,20 @@ export function Sidebar(props: SidebarProps) {
             {NAVIGATION.map(({ id, icon: Icon, label }) => <button key={id} type="button" className={`nav-item${id === 'vk' ? ' nav-vk' : ''}`}
               title={label} aria-label={label} aria-current={active === id ? 'page' : undefined} onClick={() => navigate(id)}>
               <span className="nav-glyph" aria-hidden="true"><Icon size={19} strokeWidth={1.8} /></span><span className="nav-copy">{label}</span>
-              {id === 'library' && <small className="nav-count" aria-hidden="true">{count}</small>}
+              {id === 'library' && <small className="nav-count" aria-hidden="true">{formatCount(count, props.fullNumbers)}</small>}
             </button>)}
           </div>
         </nav>
         <section className="sidebar-shortcuts" aria-label="Быстрый доступ">
           <p className="overline nav-label">Быстрый доступ</p>
           <button type="button" className="nav-item" title="Избранное" aria-label="Избранное" aria-current={page === 'favorites' ? 'page' : undefined} onClick={() => navigate('favorites')}>
-            <Heart className="nav-glyph" size={17} /><span className="nav-copy">Избранное</span>{favoriteCount > 0 && <small className="nav-count" aria-hidden="true">{favoriteCount}</small>}
+            <Heart className="nav-glyph" size={17} /><span className="nav-copy">Избранное</span>{favoriteCount > 0 && <small className="nav-count" aria-hidden="true">{formatCount(favoriteCount, props.fullNumbers)}</small>}
           </button>
-          <button type="button" className="nav-item" title={props.vkWidgetOpen ? 'Очередь Luma недоступна в виджете VK' : 'Очередь'} aria-label="Очередь из боковой панели"
+          <button type="button" className="nav-item" title={props.vkWidgetOpen ? 'Очередь Luma недоступна во время работы VK' : 'Очередь'} aria-label="Очередь из боковой панели"
             aria-pressed={queueOpen && !props.vkWidgetOpen} aria-controls={queueOpen && !props.vkWidgetOpen ? 'play-queue' : undefined} disabled={props.vkWidgetOpen} onClick={toggleQueue}>
-            <ListMusic className="nav-glyph" size={18} /><span className="nav-copy">Очередь</span>{queued > 0 && <small className="nav-count" aria-hidden="true">{queued}</small>}
+            <ListMusic className="nav-glyph" size={18} /><span className="nav-copy">Очередь</span>{queued > 0 && <small className="nav-count" aria-hidden="true">{formatCount(queued, props.fullNumbers)}</small>}
           </button>
-          <button type="button" className="nav-item" title="Эквалайзер" aria-label="Эквалайзер из боковой панели" aria-haspopup="dialog" onClick={openEqualizer}>
+          <button type="button" className="nav-item" title="Эквалайзер" aria-label="Эквалайзер из боковой панели" aria-haspopup="dialog" disabled={props.vkWebsiteOpen} onClick={openEqualizer}>
             <SlidersHorizontal className="nav-glyph" size={17} /><span className="nav-copy">Эквалайзер</span>{props.eqEnabled && <i className="enabled-dot" />}
           </button>
         </section>

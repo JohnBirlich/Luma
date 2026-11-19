@@ -58,3 +58,28 @@ export function shuffledMix(tracks: Track[], random = Math.random): Track[] {
   }
   return order;
 }
+
+/** Personalize from the actual Luma profile, not demo seeds or a remote listening profile. */
+export function homeRecommendations(collection: readonly Track[], recent: readonly Track[], favorites: ReadonlySet<string>, offline: boolean) {
+  const available = (track: Track) => !track.demo && !(offline && track.online);
+  const listened = new Set(recent.map(({ id }) => id));
+  const creators = new Set<string>();
+  const genres = new Set<string>();
+  for (const track of recent.filter((track) => !track.demo).slice(0, 12)) {
+    for (const { id } of labels(track, 'artist')) if (id) creators.add(id);
+    for (const { id } of labels(track, 'genre')) if (id) genres.add(id);
+  }
+  const candidates = collection.filter((track) => available(track) && !listened.has(track.id));
+  const related = candidates.map((track) => ({
+    track,
+    score: (labels(track, 'artist').some(({ id }) => creators.has(id)) ? 3 : 0)
+      + (labels(track, 'genre').some(({ id }) => genres.has(id)) ? 1 : 0),
+  })).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score || Number(favorites.has(b.track.id)) - Number(favorites.has(a.track.id)))
+    .slice(0, 4).map(({ track }) => track);
+  const similarIds = new Set(related.map(({ id }) => id));
+  return {
+    recent: recent.filter(available).slice(0, 4),
+    related,
+    discoveries: candidates.filter(({ id }) => !similarIds.has(id) && !favorites.has(id)).slice(0, 4),
+  };
+}

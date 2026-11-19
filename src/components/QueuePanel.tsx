@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, GripVertical, ListMusic, MoreHorizontal, X } from 'lucide-react';
+import { formatCount } from '../shared/customization';
 import { formatTime, trackCount } from '../shared/media';
 import type { Track } from '../shared/media';
 import { Artwork } from './Artwork';
@@ -14,6 +15,7 @@ interface QueuePanelProps {
   active: Track | null;
   upcoming: Track[];
   count: number;
+  fullNumbers: boolean;
   duration: number;
   playing: boolean;
   close(): void;
@@ -23,7 +25,7 @@ interface QueuePanelProps {
   goToLibrary(): void;
 }
 
-export function QueuePanel({ active, upcoming, count, duration, playing, close, play, remove, move, goToLibrary }: QueuePanelProps) {
+export function QueuePanel({ active, upcoming, count, fullNumbers, duration, playing, close, play, remove, move, goToLibrary }: QueuePanelProps) {
   const [drag, setDrag] = useState<string>();
   const [over, setOver] = useState<string>();
   const [menu, setMenu] = useState<string>();
@@ -34,7 +36,7 @@ export function QueuePanel({ active, upcoming, count, duration, playing, close, 
         <div>
           <p className="overline">Воспроизведение</p>
           <h2>Очередь</h2>
-          <p>{trackCount(count)} <span className="middle-dot">·</span> {formatTime(duration)}</p>
+          <p>{trackCount(count, fullNumbers)} <span className="middle-dot">·</span> {formatTime(duration)}</p>
         </div>
         <button type="button" className="icon-button queue-close" onClick={close} aria-label="Закрыть очередь" title="Закрыть очередь"><X size={18} /></button>
       </header>
@@ -50,7 +52,7 @@ export function QueuePanel({ active, upcoming, count, duration, playing, close, 
             <button type="button" className="icon-button current-remove" onClick={() => remove(active.id)} title="Убрать текущий трек из очереди" aria-label={`Убрать ${active.title} из очереди`}><X size={15} /></button>
           </div>
         </> : <div className="empty-queue"><ListMusic size={25} /><p>Очередь пока пуста</p><button className="text-button" type="button" onClick={goToLibrary}>К медиатеке</button></div>}
-        {active && <div className="queue-next-heading"><p className="overline queue-section">Далее</p><span>{String(upcoming.length).padStart(2, '0')}</span></div>}
+        {active && <div className="queue-next-heading"><p className="overline queue-section">Далее</p><span>{formatCount(upcoming.length, fullNumbers).padStart(2, '0')}</span></div>}
         {active && !upcoming.length && <p className="no-next">Следующих треков нет. Добавьте музыку из медиатеки.</p>}
         {upcoming.length > 0 && <ol className="queue-list">
           {upcoming.map((track, index) => (

@@ -26,36 +26,23 @@ function VkLink({ href, children, className }: { href: string; children: ReactNo
   </>;
 }
 
-export function VkBrowserLink() {
-  return <VkLink href={VK_MUSIC_URL} className="button vk-account-open"><LogIn size={17} /> Войти в VK в браузере <ArrowUpRight size={15} /></VkLink>;
-}
-
 function VkWebsiteAction({ href, open, connected, kind }: {
-  href: string; open(url: string): Promise<void>; connected: boolean; kind: 'account' | 'playlist';
+  href: string; open(url: string): void; connected: boolean; kind: 'account' | 'playlist';
 }) {
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  return <>
-    <button className="button primary-button" type="button" disabled={busy || !connected} onClick={() => {
-      setFailed(false); setBusy(true);
-      void open(href).catch(() => setFailed(true)).finally(() => setBusy(false));
-    }}><MonitorPlay size={17} /> {busy ? 'Открываем VK…' : kind === 'account' ? 'Открыть VK Музыку' : 'Слушать в VK'}</button>
-    {failed && <p className="vk-link-error" role="alert">Не удалось открыть окно VK. Попробуйте ещё раз или воспользуйтесь браузером.</p>}
-  </>;
+  return <button className="button primary-button" type="button" disabled={!connected} onClick={() => open(href)}>
+    <MonitorPlay size={17} /> {kind === 'account' ? 'Открыть сайт VK в Luma' : 'Слушать на сайте VK'}
+  </button>;
 }
 
-function VkAccount({ openWebsite, connected }: { openWebsite(url: string): Promise<void>; connected: boolean }) {
+function VkAccount({ openWebsite, connected }: { openWebsite(url: string): void; connected: boolean }) {
   return <section className="vk-native-account" aria-labelledby="vk-account-title">
     <div className="vk-account-icon"><LogIn size={21} aria-hidden="true" /></div>
     <div className="vk-account-copy"><p className="overline">Ваш аккаунт VK</p><h2 id="vk-account-title">Моя музыка и плейлисты</h2>
       <p>{window.luma
-        ? 'Войдите прямо на сайте VK в отдельном окне Luma. Плейлисты открываются в том же окне, вход сохраняется между запусками.'
-        : 'В веб-версии для личной библиотеки VK нужен обычный браузер. В приложении Windows есть отдельное окно VK со своим входом.'}</p>
+        ? 'Войдите на официальной странице VK внутри Luma. Вход сохраняется. Личная музыка, миксы и рекомендации остаются на стороне VK и не доступны в очереди Luma.'
+        : 'В веб-превью доступен публичный виджет. Личная музыка открывается на официальной странице внутри приложения Windows.'}</p>
     </div>
-    <div className="vk-account-actions">
-      {window.luma ? <><VkWebsiteAction href={VK_MUSIC_URL} open={openWebsite} connected={connected} kind="account" />
-        <VkLink className="text-button" href={VK_MUSIC_URL}>Открыть в браузере <ArrowUpRight size={13} /></VkLink></> : <VkBrowserLink />}
-    </div>
+    {window.luma && <div className="vk-account-actions"><VkWebsiteAction href={VK_MUSIC_URL} open={openWebsite} connected={connected} kind="account" /></div>}
   </section>;
 }
 
@@ -80,7 +67,7 @@ function VkFrame({ playlist }: { playlist: NamedVkPlaylist }) {
       {status !== 'loaded' && <div className="vk-frame-placeholder" role="status">
         <Radio size={27} />
         <strong>{status === 'timeout' ? 'VK пока не ответил' : status === 'error' ? 'Не удалось загрузить виджет VK' : 'Загружаем плейлист из VK'}</strong>
-        <span>{status === 'loading' ? 'Воспроизведение идёт через официальный плеер.' : 'Попробуйте обновить виджет или открыть плейлист в браузере.'}</span>
+        <span>{status === 'loading' ? 'Воспроизведение идёт через официальный плеер.' : 'Попробуйте обновить виджет или открыть его на странице VK в приложении Windows.'}</span>
       </div>}
       <iframe className={`vk-frame${status === 'loaded' ? ' vk-frame-loaded' : ''}`} src={vkWidgetUrl(playlist)}
         title={`Плейлист VK: ${playlist.name}`} sandbox="allow-scripts allow-same-origin" allow="autoplay; encrypted-media"
@@ -96,7 +83,7 @@ interface VkMusicPageProps {
   widgetOpen: boolean;
   connected: boolean;
   toggleWidget(open: boolean): void;
-  openWebsite(url: string): Promise<void>;
+  openWebsite(url: string): void;
 }
 
 export function VkMusicPage({ covers, editCover, discardCover, widgetOpen, connected, toggleWidget, openWebsite }: VkMusicPageProps) {
@@ -107,6 +94,7 @@ export function VkMusicPage({ covers, editCover, discardCover, widgetOpen, conne
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [copyStatus, setCopyStatus] = useState('');
   const playlists: VkShelfItem[] = [editorialPlaylist, ...shelf.playlists];
   const selected = playlists.find((playlist) => vkPlaylistKey(playlist) === shelf.selected) ?? editorialPlaylist;
   const widget = isVkPlaylist(selected) ? selected : undefined;
@@ -170,16 +158,19 @@ export function VkMusicPage({ covers, editCover, discardCover, widgetOpen, conne
           {window.luma && <VkWebsiteAction key={vkPlaylistKey(selected)} href={vkShelfUrl(selected)} open={openWebsite} connected={connected} kind="playlist" />}
           {widget && <button className={`button ${window.luma ? 'outline-button' : 'primary-button'} vk-widget-toggle`} type="button" disabled={!connected && !widgetOpen} onClick={() => toggleWidget(!widgetOpen)} aria-expanded={widgetOpen}>
             {widgetOpen ? <X size={16} /> : <Play size={16} fill="currentColor" />} {widgetOpen ? 'Закрыть виджет' : 'Публичный виджет'}</button>}
-          <VkLink href={vkShelfUrl(selected)} className="button outline-button vk-original">В браузере <ArrowUpRight size={16} /></VkLink>
+          <button type="button" className="button outline-button vk-copy" onClick={() => {
+            void navigator.clipboard.writeText(vkShelfUrl(selected)).then(() => setCopyStatus('Ссылка скопирована.'), () => setCopyStatus('Не удалось скопировать ссылку.'));
+          }}><Link2 size={16} /> Скопировать ссылку</button>
           <button type="button" className="icon-button vk-cover-button" title="Обложка плейлиста" aria-label="Редактировать обложку плейлиста" aria-haspopup="dialog"
             onClick={() => editCover({ key: currentCoverKey, title: selected.name, kind: 'playlist', originalUrl: original })}><ImagePlus size={17} /></button>
         </div>
+        {copyStatus && <small className="vk-copy-status" role="status">{copyStatus}</small>}
       </div>
     </section>
     {!connected && <p className="online-offline" role="status"><CloudOff size={17} /> Устройство вне сети. Закладки VK сохранены, для воспроизведения нужна сеть.</p>}
     {widgetOpen && widget && <section className="vk-panel" aria-label="Официальный плеер плейлиста VK">
       <VkFrame key={`${shelf.selected}:${widget.hash}:${attempt}`} playlist={widget} />
-      <footer className="vk-panel-footer"><span>Виджет не использует вход из окна VK; полная версия — по кнопке «Слушать в VK».</span>
+      <footer className="vk-panel-footer"><span>Виджет не использует данные входа. Полная версия — на сайте VK внутри Luma.</span>
         <button className="icon-button" type="button" onClick={() => setAttempt((value) => value + 1)} aria-label="Обновить виджет VK" title="Обновить виджет VK"><RotateCw size={17} /></button>
       </footer>
     </section>}
@@ -192,7 +183,7 @@ export function VkMusicPage({ covers, editCover, discardCover, widgetOpen, conne
           const art = covers.get(playlistCoverKey(key)) ?? (isVkPlaylist(playlist) ? automatic.get(vkPlaylistShareUrl(playlist)) : undefined);
           return <li className="vk-playlist-row" key={key}>
             <button className="vk-playlist-item" type="button" aria-pressed={key === shelf.selected} onClick={() => {
-              if (key !== shelf.selected) toggleWidget(false);
+              if (key !== shelf.selected) { toggleWidget(false); setCopyStatus(''); }
               setShelf((previous) => ({ ...previous, selected: key }));
             }}>
               <Artwork imageUrl={art} className="vk-shelf-cover" />
@@ -207,9 +198,9 @@ export function VkMusicPage({ covers, editCover, discardCover, widgetOpen, conne
   </div>;
 }
 
-export function VkModeBar({ closeWidget }: { closeWidget(): void }) {
+export function VkModeBar({ closeWidget, website }: { closeWidget(): void; website?: boolean }) {
   return <footer className="player-bar vk-mode-bar" aria-label="Источник воспроизведения">
-    <div className="vk-mode-label"><Radio size={19} /><span><strong>VK Музыка</strong><small>Управление в официальном виджете</small></span></div>
-    <button className="button outline-button" type="button" onClick={closeWidget}><X size={17} /> Закрыть виджет</button>
+    <div className="vk-mode-label"><Radio size={19} /><span><strong>VK Музыка</strong><small>Управление {website ? 'на сайте VK' : 'в официальном виджете'}</small></span></div>
+    <button className="button outline-button" type="button" onClick={closeWidget}><X size={17} /> {website ? 'Закрыть сайт VK' : 'Закрыть виджет'}</button>
   </footer>;
 }

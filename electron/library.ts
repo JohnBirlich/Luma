@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, isAbsolute, join } from 'node:path';
+import { lstat, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, extname, isAbsolute, join } from 'node:path';
 import { parseFile } from 'music-metadata';
+import { readLocalLyrics } from '../src/shared/lyrics.js';
 import { audioMime, emptyImport, readGenres, trackInfo, usableArtwork } from '../src/shared/media.js';
+import { readAudioFormat } from '../src/shared/audio-quality.js';
+import type { AudioFormat } from '../src/shared/audio-quality.js';
 import type { ImportResult, Track } from '../src/shared/media.js';
 
 const UUID = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
@@ -13,6 +16,7 @@ interface Entry extends ReturnType<typeof trackInfo> {
   id: string;
   path: string;
   coverExtension?: string;
+  format?: AudioFormat;
   textVersion?: 1;
 }
 
@@ -58,13 +62,13 @@ export class DesktopLibrary {
   }
 
   list(): Track[] {
-    return this.entries.map(({ id, path, title, artist, album, duration, coverExtension, textVersion, genres }) => {
+    return this.entries.map(({ id, path, title, artist, album, duration, coverExtension, textVersion, genres, format }) => {
       const tags = { title, artist, album };
       const tagsGenres = readGenres(genres);
       // Old profiles are repaired for display without rewriting their metadata or changing track IDs.
       const info = textVersion === 1 ? { ...tags, duration, ...(tagsGenres && { genres: tagsGenres }) } : trackInfo(basename(path), tags, duration);
       return {
-        id, ...info, audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
+        id, ...info, format: readAudioFormat(format), audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
         artworkUrl: coverExtension ? `${APP_ORIGIN}/media/cover/${id}` : undefined,
       };
     });
@@ -74,6 +78,20 @@ export class DesktopLibrary {
     const entry = this.entries.find((item) => item.id === id);
     if (!entry) return undefined;
     return kind === 'audio' ? entry.path : this.coverPath(entry);
+  }
+
+  async lyrics(id: unknown) {
+    const entry = typeof id === 'string' && UUID.test(id) ? this.entries.find((track) => track.id === id) : undefined;
+    if (!entry) return null;
+    const sidecar = `${entry.path.slice(0, -extname(entry.path).length)}.lrc`;
+    const info = await lstat(sidecar).catch(() => undefined);
+    if (info?.isFile() && info.size <= 128 * 1024) {
+      const synced = readLocalLyrics(undefined, await readFile(sidecar, 'utf8').catch(() => undefined));
+      if (synced) return synced;
+    }
+    if (extname(entry.path).toLowerCase() !== '.mp3') return null;
+    const tags = await parseFile(entry.path, { skipCovers: true }).catch(() => undefined);
+    return readLocalLyrics(tags?.common.lyrics?.find(({ text }) => text)?.text);
   }
 
   importPaths(paths: string[]): Promise<ImportResult> {
@@ -104,7 +122,7 @@ export class DesktopLibrary {
         // An untagged file (or one the tag parser cannot read) can still be playable.
         const metadata = await parseFile(path, { duration: true }).catch(() => undefined);
         const entry: Entry = {
-          id: randomUUID(), path, textVersion: 1,
+          id: randomUUID(), path, textVersion: 1, format: readAudioFormat(metadata?.format),
           ...trackInfo(name, metadata?.common, metadata?.format.duration),
         };
         const artwork = usableArtwork(metadata?.common.picture);

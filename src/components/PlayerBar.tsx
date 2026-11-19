@@ -7,6 +7,7 @@ import type { PlaybackProps } from './PlaybackControls';
 interface PlayerBarProps extends PlaybackProps {
   track: Track | null;
   queueOpen: boolean;
+  classic: boolean;
   goToPlayer(): void;
   openPresentation(): void;
   toggleQueue(): void;
@@ -15,7 +16,7 @@ interface PlayerBarProps extends PlaybackProps {
 export function PlayerBar(props: PlayerBarProps) {
   const { track } = props;
   return (
-    <footer className="player-bar" aria-label="Управление воспроизведением">
+    <footer className={`player-bar${props.classic ? ' classic-player-bar' : ''}`} aria-label="Управление воспроизведением">
       <button className="playing-mini" type="button" onClick={props.goToPlayer} aria-label="Открыть экран «Сейчас играет»">
         <Artwork track={track} />
         <span><strong>{track?.title ?? 'Нет трека'}</strong><small>{track?.artist ?? 'Добавьте музыку'}</small></span>

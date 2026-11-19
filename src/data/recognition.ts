@@ -5,10 +5,10 @@ import type { Track } from '../shared/media';
 const webCatalog = createMetadataService();
 const MAX_AUDIO_BYTES = 40 * 1024 * 1024;
 
-export async function lookupByTitle(track: Track, query: string, artist: string, signal: AbortSignal) {
+export async function lookupByTitle(track: Track, query: string, artist: string, locale: string, signal: AbortSignal) {
   const candidates = await (window.luma
-    ? window.luma.recognition.search(query, navigator.language)
-    : webCatalog.search(query, navigator.language, signal));
+    ? window.luma.recognition.search(query, locale)
+    : webCatalog.search(query, locale, signal));
   signal.throwIfAborted();
   return rankAppleCandidates(candidates, query, artist, track.duration);
 }
