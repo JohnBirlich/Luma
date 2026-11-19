@@ -1,3 +1,4 @@
+import { browserSystem } from '../shared/system';
 import { webAppInfo } from './app-info';
 import { appendLog, diagnosticsReport, logEntry, readLog, reportFilename } from '../shared/diagnostics';
 import type { DiagnosticSnapshot, LogValues, RendererLogEvent } from '../shared/diagnostics';
@@ -7,13 +8,19 @@ const listeners = new Set<() => void>();
 let started = false;
 let online = navigator.onLine;
 let web: DiagnosticSnapshot | undefined;
+let platformChecked = false;
+interface ClientPlatform {
+  platform: string;
+  getHighEntropyValues?(hints: ['platformVersion']): Promise<{ platformVersion?: string }>;
+}
+const userPlatform = () => (navigator as Navigator & { userAgentData?: ClientPlatform }).userAgentData;
 const desktop = () => window.luma?.diagnostics;
 const notify = () => listeners.forEach((listener) => listener());
 
 function browserSnapshot(): DiagnosticSnapshot {
   if (web) return web;
   const ua = navigator.userAgent;
-  const system = /Windows/i.test(ua) ? 'Windows' : /Android/i.test(ua) ? 'Android' : /iPhone|iPad/i.test(ua) ? 'iOS' : /Macintosh/i.test(ua) ? 'macOS' : /Linux/i.test(ua) ? 'Linux' : 'Не определена';
+  const system = browserSystem(ua, userPlatform()?.platform, undefined, navigator.maxTouchPoints);
   const match = /\bEdg\/(\d+)/u.exec(ua) ?? /\b(?:Headless)?Chrome\/(\d+)/u.exec(ua)
     ?? /\bFirefox\/(\d+)/u.exec(ua) ?? /\bVersion\/(\d+).*Safari\//u.exec(ua);
   const engine = match?.[0].startsWith('Edg') ? 'Edge' : match?.[0].includes('Chrome') ? 'Chrome'
@@ -41,10 +48,24 @@ export function recordDiagnostic(event: RendererLogEvent, values?: LogValues) {
   if (entry) writeWeb(appendLog(browserSnapshot().entries, entry));
 }
 
+function refineWebSystem() {
+  const hint = userPlatform();
+  if (platformChecked || hint?.platform !== 'Windows' || !hint.getHighEntropyValues) return;
+  platformChecked = true;
+  void hint.getHighEntropyValues(['platformVersion']).then(({ platformVersion }) => {
+    const snapshot = browserSnapshot();
+    const system = browserSystem(navigator.userAgent, hint.platform, platformVersion);
+    if (system === snapshot.environment.system) return;
+    web = { ...snapshot, environment: { ...snapshot.environment, system } };
+    notify();
+  }).catch(() => { /* A browser can withhold the version; never guess from Windows NT 10.0. */ });
+}
+
 export function startDiagnostics() {
   if (started) return;
   started = true;
   recordDiagnostic('renderer.start', { ms: performance.now() });
+  if (!desktop()) refineWebSystem();
   const logConnection = () => {
     online = navigator.onLine;
     recordDiagnostic(online ? 'network.online' : 'network.offline');

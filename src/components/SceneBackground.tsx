@@ -76,15 +76,25 @@ export const SceneBackground = memo(function SceneBackground({ effect, strength 
   if (effect === 'off') return null;
   return (
     <div className={`scene-background scene-${effect}${moving ? ' scene-moving' : ''}`} ref={element} style={{ '--strength': strength, '--scene-tempo': EFFECT_TEMPOS[tempo].factor } as CSSProperties} aria-hidden="true">
-      {effect === 'aurora' && <div className="aurora-clouds"><i /><i /><i /></div>}
-      {effect === 'waves' && <svg className="scene-ribbons" viewBox="0 0 1000 450" preserveAspectRatio="xMidYMid slice" fill="none">
-        {Array.from({ length: 18 }, (_, i) => <path key={i} d={wavePath} transform={`translate(${i * 4} ${i * 13 - 86})`} opacity={0.22 + i * 0.039} />)}
-      </svg>}
-      {effect === 'stars' && <div className="star-field"><i /><i /><i /></div>}
+      {effect === 'aurora' && <><div className="aurora-clouds"><i /><i /><i /></div><div className="aurora-curtains"><i /><i /></div></>}
+      {effect === 'waves' && <><i className="scene-waterline" /><svg className="scene-ribbons" viewBox="0 0 1000 450" preserveAspectRatio="xMidYMid slice" fill="none">
+        <path className="scene-wave-trail" d={wavePath} />
+        {Array.from({ length: 18 }, (_, i) => <path key={i} d={wavePath} transform={`translate(${i * 4} ${i * 12 - 92})`} opacity={0.24 + i * 0.041} />)}
+      </svg></>}
+      {effect === 'stars' && <>
+        <div className="star-field"><i /><i /><i /></div>
+        <svg className="scene-constellations" viewBox="0 0 720 380" preserveAspectRatio="xMidYMid slice" fill="none">
+          <path d="M57 265 174 193 255 234 338 111 434 143 513 73 623 98 M255 234 374 287 491 248 613 283" />
+          {[[57,265], [174,193], [255,234], [338,111], [434,143], [513,73], [623,98], [374,287], [491,248], [613,283]].map(([x,y]) => <circle key={x} cx={x} cy={y} r={2.1} />)}
+        </svg>
+      </>}
       {effect === 'spectrum' && <div className="scene-bars">{idle.map((height, index) => <i key={index} style={{ '--idle': height } as CSSProperties} />)}</div>}
       {effect === 'pulse' && <div className="scene-pulse-rings"><i /><i /><i /><i /><i /></div>}
       {effect === 'nebula' && <div className="scene-dust"><i /><i /><i /></div>}
-      {effect === 'orbits' && <div className="orbit-lines"><i /><i /><i /></div>}
+      {effect === 'orbits' && <><div className="orbit-planet" /><div className="orbit-lines"><i /><i /><i /></div></>}
+      {effect === 'horizon' && <div className="scene-horizon-layer"><i /><b /></div>}
+      {effect === 'kaleidoscope' && <div className="scene-facets"><i /><i /><i /></div>}
+      {effect === 'rain' && <div className="scene-rain-layers"><i /><i /><i /></div>}
       {effect === 'prism' && <div className="scene-prism-beams"><i /><i /><i /></div>}
     </div>
   );

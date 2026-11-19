@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, History, Info, Music2, Radio, Settings2, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, History, Info, Music2, Radio, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
 import { About } from './About';
@@ -38,6 +38,7 @@ interface MenuPageProps {
   openLibrary(): void;
   openFavorites(): void;
   openRecent(): void;
+  openMixes(): void;
   openDiagnostics(): void;
   openVk(): void;
   addMusic(): void;
@@ -59,11 +60,12 @@ export function MenuPage(props: MenuPageProps) {
             <span className="menu-profile-status"><i /> Локальный профиль</span>
           </section>
           <MenuGroup label="Коллекция">
-            <MenuItem icon={Music2} title="Моя медиатека" detail="Файлы с устройства и встроенные демотреки" select={props.openLibrary} />
+            <MenuItem icon={Music2} title="Моя медиатека" detail="Файлы, онлайн-ссылки и коллекции" select={props.openLibrary} />
             <MenuItem icon={Heart} title="Избранное" detail="Треки, отмеченные сердцем" select={props.openFavorites} />
+            <MenuItem icon={Sparkles} title="Миксы" detail="Подборки из медиатеки, избранного и истории" select={props.openMixes} />
             <MenuItem icon={History} title="Недавно слушали" detail="История воспроизведения на этом устройстве" select={props.openRecent} />
             <MenuItem icon={FolderOpen} title="Импортировать треки" detail="Добавьте аудиофайлы или перетащите их в окно" select={props.addMusic} disabled={!props.ready} />
-            <MenuItem icon={Radio} title="VK Музыка" detail="Вход на сайте VK и сохранённые виджеты" select={props.openVk} />
+            <MenuItem icon={Radio} title="VK Музыка" detail="Плейлисты, ссылки и официальный виджет" select={props.openVk} />
           </MenuGroup>
           <MenuGroup label="Плеер">
             <MenuItem icon={Settings2} title="Настройки" detail="Внешний вид, медиатека и воспроизведение" select={props.openSettings} />

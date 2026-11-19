@@ -21,6 +21,7 @@ export function TrackDetailsEditor({ track, edited, save, close }: Props) {
     artist: track.artist.slice(0, TRACK_DETAIL_LIMIT),
     album: track.album.slice(0, TRACK_DETAIL_LIMIT),
   }));
+  const [genres, setGenres] = useState(() => track.genres?.join(', ').slice(0, TRACK_DETAIL_LIMIT) ?? '');
   useEffect(() => { dialog.current?.showModal(); title.current?.focus(); }, []);
 
   function dismiss() {
@@ -34,7 +35,7 @@ export function TrackDetailsEditor({ track, edited, save, close }: Props) {
   return (
     <dialog ref={dialog} className="cover-dialog" aria-labelledby="track-details-title" aria-describedby="track-details-hint"
       onCancel={(event) => { event.preventDefault(); dismiss(); }} onClick={(event) => { if (event.target === event.currentTarget) dismiss(); }}>
-      <form className="cover-editor" onSubmit={(event) => { event.preventDefault(); if (cleanTrackText(draft.title)) apply(draft); }}>
+      <form className="cover-editor" onSubmit={(event) => { event.preventDefault(); if (cleanTrackText(draft.title)) apply({ ...draft, genres: genres.split(',') }); }}>
         <header className="dialog-header">
           <div className="dialog-mark"><Pencil size={20} /></div>
           <div><p className="overline">Медиатека</p><h2 id="track-details-title">Данные трека</h2></div>
@@ -47,6 +48,8 @@ export function TrackDetailsEditor({ track, edited, save, close }: Props) {
               maxLength={TRACK_DETAIL_LIMIT} required={field === 'title'} value={draft[field]}
               onChange={(event) => setDraft({ ...draft, [field]: event.currentTarget.value })} />
           </label>)}
+          <label>Жанры<input type="text" value={genres} placeholder="Через запятую" maxLength={TRACK_DETAIL_LIMIT}
+            onChange={(event) => setGenres(event.currentTarget.value)} /></label>
         </div>
         <footer className="dialog-footer cover-footer">
           <button type="button" className="button ghost-button" onClick={() => apply()} disabled={!edited}><RotateCcw size={15} /> Вернуть исходные</button>

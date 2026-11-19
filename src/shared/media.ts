@@ -1,7 +1,8 @@
 import type { AppInfo } from './app-info.js';
 import type { DiagnosticsBridge } from './diagnostics.js';
 import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
-import { cleanTrackText, readTrackTag } from './russian.js';
+import { cleanTrackText, musicSearchKey, readTrackTag } from './russian.js';
+import type { OnlineCreditData } from './online.js';
 import type { VkCoverImage, VkPlaylist } from './vk.js';
 
 export const AUDIO_MIMES = {
@@ -25,11 +26,13 @@ export interface Track {
   artist: string;
   album: string;
   duration: number;
+  genres?: string[];
   audioUrl: string;
   artworkUrl?: string;
   backdropUrl?: string;
   color?: string;
   demo?: boolean;
+  online?: OnlineCreditData;
 }
 
 export interface ImportResult {
@@ -44,11 +47,11 @@ export interface ImportResult {
 export interface DesktopBridge {
   getAppInfo(): Promise<AppInfo>;
   openReleases(): Promise<void>;
+  openOnlineLink(url: string): Promise<void>;
   getTracks(): Promise<Track[]>;
   chooseTracks(): Promise<ImportResult>;
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
-  openVkWebsite(): Promise<void>;
   openVkLink(url: string): Promise<void>;
   getVkCover(playlist: VkPlaylist): Promise<VkCoverImage | null>;
   diagnostics: DiagnosticsBridge;
@@ -72,12 +75,27 @@ export function emptyImport(tracks: Track[]): ImportResult {
   return { tracks, added: [], duplicates: 0, failures: [] };
 }
 
+/** Keep actual tags only; do not infer genres from filenames or artist names. */
+export function readGenres(input: unknown, clean: (value: string) => string = cleanTrackText): string[] | undefined {
+  if (!Array.isArray(input)) return;
+  const names = new Map<string, string>();
+  for (const value of input.slice(0, 12)) {
+    if (typeof value !== 'string') continue;
+    const name = clean(value).slice(0, 64);
+    const key = musicSearchKey(name);
+    if (key && !names.has(key)) names.set(key, name);
+  }
+  return names.size ? [...names.values()] : undefined;
+}
+
 export function trackInfo(
   filename: string,
-  tags?: { title?: string; artist?: string; albumartist?: string; album?: string },
+  tags?: { title?: string; artist?: string; albumartist?: string; album?: string; genre?: string[] },
   duration?: number,
-): Pick<Track, 'title' | 'artist' | 'album' | 'duration'> {
+): Pick<Track, 'title' | 'artist' | 'album' | 'duration' | 'genres'> {
+  const genres = readGenres(tags?.genre, readTrackTag);
   return {
+    ...(genres && { genres }),
     title: readTrackTag(tags?.title) || cleanTrackText(filename.replace(/\.[^.]+$/, '')) || cleanTrackText(filename) || 'Без названия',
     artist: readTrackTag(tags?.artist) || readTrackTag(tags?.albumartist) || 'Неизвестный исполнитель',
     album: readTrackTag(tags?.album) || 'Без альбома',

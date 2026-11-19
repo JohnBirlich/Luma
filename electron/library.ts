@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join } from 'node:path';
 import { parseFile } from 'music-metadata';
-import { audioMime, emptyImport, trackInfo, usableArtwork } from '../src/shared/media.js';
+import { audioMime, emptyImport, readGenres, trackInfo, usableArtwork } from '../src/shared/media.js';
 import type { ImportResult, Track } from '../src/shared/media.js';
 
 const UUID = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
@@ -58,10 +58,11 @@ export class DesktopLibrary {
   }
 
   list(): Track[] {
-    return this.entries.map(({ id, path, title, artist, album, duration, coverExtension, textVersion }) => {
+    return this.entries.map(({ id, path, title, artist, album, duration, coverExtension, textVersion, genres }) => {
       const tags = { title, artist, album };
+      const tagsGenres = readGenres(genres);
       // Old profiles are repaired for display without rewriting their metadata or changing track IDs.
-      const info = textVersion === 1 ? { ...tags, duration } : trackInfo(basename(path), tags, duration);
+      const info = textVersion === 1 ? { ...tags, duration, ...(tagsGenres && { genres: tagsGenres }) } : trackInfo(basename(path), tags, duration);
       return {
         id, ...info, audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
         artworkUrl: coverExtension ? `${APP_ORIGIN}/media/cover/${id}` : undefined,

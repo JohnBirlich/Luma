@@ -184,7 +184,7 @@ export function SettingsPage(props: SettingsProps) {
               <ToggleRow title="Показывать следующие треки" detail="Открывать очередь «Далее» вместе с большим плеером." enabled={appearance.fullscreenQueue} change={() => changeAppearance({ ...appearance, fullscreenQueue: !appearance.fullscreenQueue })} />
             </SettingCard>
           </>}
-          {section?.id === 'sound' && <SettingCard title="Локальный звук" detail="Luma читает оригинальные файлы и не перекодирует их. Качество зависит от файла и устройства вывода.">
+          {section?.id === 'sound' && <SettingCard title="Локальный звук" detail="Luma читает оригинальные файлы и не перекодирует их. Для онлайн-потоков доступны громкость и транспорт, но не эквалайзер.">
             <div className="setting-row settings-volume"><span><strong>Громкость плеера</strong><small>Меняется и в нижней панели.</small></span><VolumeControl {...props.volumeControls} /></div>
             <div className="setting-row"><span><strong>Эквалайзер</strong><small>{props.eqEnabled ? 'Включён' : 'Выключен'} · пять полос, пресеты и предусиление.</small></span>
               <button type="button" className="button outline-button" onClick={props.openEqualizer} aria-haspopup="dialog">Настроить</button>
@@ -198,7 +198,7 @@ export function SettingsPage(props: SettingsProps) {
                 </select>
               </label>
             </SettingCard>
-            <SettingCard title="Локальное воспроизведение">
+            <SettingCard title="Воспроизведение в Luma">
               <label className="setting-row select-row"><span><strong>Шаг перемотки</strong><small>Для горячих клавиш ← и →.</small></span>
                 <select value={playback.seekStep} onChange={(event) => changePlayback({ ...playback, seekStep: Number(event.currentTarget.value) as SeekStep })}>
                   {SEEK_STEPS.map((value) => <option key={value} value={value}>{value} с</option>)}
@@ -206,7 +206,7 @@ export function SettingsPage(props: SettingsProps) {
               </label>
               <ToggleRow title="Следующий трек автоматически" detail="Если выключено, плеер остановится в конце. Повтор одного трека действует отдельно." enabled={playback.autoNext} change={() => changePlayback({ ...playback, autoNext: !playback.autoNext })} />
             </SettingCard>
-            <div className="settings-footer-note"><Settings2 size={16} /><span>Звук VK настраивается в официальном виджете. Очередь и эквалайзер Luma работают с локальной музыкой.</span></div>
+            <div className="settings-footer-note"><Settings2 size={16} /><span>Звук VK настраивается в официальном виджете. Очередь Luma работает с файлами и онлайн-записями; эквалайзер — с файлами.</span></div>
           </>}
           {section?.id === 'library' && <SettingCard title="Коллекция Luma">
             <label className="setting-row select-row"><span><strong>Вид медиатеки</strong><small>Списком или плиткой с крупными обложками.</small></span>

@@ -2,14 +2,15 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { release, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
 import { VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
-import { VK_SESSION } from '../dist-electron/electron/vk-window.js';
+import { parseByteRange } from '../dist-electron/electron/protocol.js';
+import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
 import { taggedMp3 } from './fixtures/mp3.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -30,7 +31,8 @@ async function waitFor(label, check) {
   throw new Error(`Timed out: ${label}`);
 }
 
-const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), 100_000);
+const liveCatalog = process.env.LUMA_LIVE_CATALOG === '1';
+const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), liveCatalog ? 240_000 : 135_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
 const cover = await readFile(join(root, 'public/artwork/afterimage.webp'));
@@ -55,6 +57,7 @@ await import('../dist-electron/electron/main.js');
 async function smoke() {
   await app.whenReady();
   const window = await waitFor('application window', () => BrowserWindow.getAllWindows()[0]);
+  window.webContents.setAudioMuted(true);
   const run = (script) => window.webContents.executeJavaScript(script, true);
   const readMetadata = () => run(`(() => {
     const data = navigator.mediaSession?.metadata;
@@ -148,44 +151,97 @@ async function smoke() {
   await run(`document.querySelector('[aria-label="О приложении"]').click()`);
   await waitFor('About has package version', () => run(`document.querySelector('.about-build strong')?.textContent === ${JSON.stringify(`Версия ${version}`)}`));
 
-  const vkSession = session.fromPartition(VK_SESSION);
-  session.defaultSession.protocol.handle('https', () => new Response('<!doctype html><title>Mock VK widget</title>', { headers: { 'Content-Type': 'text/html' } }));
-  const authOrigin = 'https://id.vk.ru';
-  vkSession.protocol.handle('https', (request) => {
-    if (request.url === VK_MUSIC_URL) return new Response(null, { status: 302, headers: { Location: `${authOrigin}/luma-smoke` } });
-    return new Response('<!doctype html><title>Stub sign-in</title><p>Official sign-in fixture</p>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  const catalogCalls = [];
+  const streamCalls = [];
+  const fixtureHeaders = { 'Access-Control-Allow-Origin': '*' };
+  session.defaultSession.protocol.handle('https', (request) => {
+    const url = new URL(request.url);
+    if (url.pathname.endsWith('/thumb/') && url.origin === 'https://api.openverse.org') {
+      return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
+    }
+    if (url.origin === 'https://api.openverse.org' && url.pathname.startsWith('/v1/audio/')) {
+      catalogCalls.push(url);
+      const pair = [jamendoRecording, commonsRecording];
+      return Response.json(url.pathname === '/v1/audio/' ? { results: pair } : pair.find((item) => url.pathname.endsWith(`/${item.id}/`)), { headers: fixtureHeaders });
+    }
+    if ([jamendoRecording.url, commonsRecording.url].includes(url.href)) {
+      // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
+      streamCalls.push(url.href);
+      const range = request.headers.get('Range');
+      const bytes = range && parseByteRange(range, sample.length);
+      const body = bytes ? sample.subarray(bytes.start, bytes.end + 1) : sample;
+      return new Response(body, { status: bytes ? 206 : 200, headers: {
+        'Content-Type': 'audio/mpeg', 'Content-Length': String(body.length), 'Accept-Ranges': 'bytes',
+        ...(bytes && { 'Content-Range': `bytes ${bytes.start}-${bytes.end}/${sample.length}` }),
+      } });
+    }
+    if (url.origin === 'https://vk.ru' && url.pathname === '/widget_playlist.php') {
+      return new Response('<!doctype html><title>Mock VK widget</title>', { headers: { 'Content-Type': 'text/html' } });
+    }
+    return new Response(null, { status: 404 });
   });
+  const click = (selector) => run(`document.querySelector(${JSON.stringify(selector)}).click(); void 0;`);
+  const fill = (selector, value) => run(`(() => {
+    const field = document.querySelector(${JSON.stringify(selector)});
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), 'value').set.call(field, ${JSON.stringify(value)});
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+  const preferences = () => run(`JSON.parse(localStorage.getItem('luma-player:v1'))`);
+  const onlineAudio = 'audio[data-online-audio]';
+  const playOnline = '.online-result-actions button[aria-label="Слушать онлайн: All About Jazz"]';
+  const queueOnline = '.online-result-actions button[aria-label="В очередь: Jazz-Sax"]';
   try {
+    await go('Поиск');
+    await waitFor('collection search', () => run(`!!document.querySelector('main input[type="search"]')`));
+    await fill('main input[type="search"]', 'jazz');
+    await waitFor('online fallback prompt', () => run(`!!document.querySelector('.online-search-form button')`));
+    assert.equal(catalogCalls.length, 0, 'typing stays local until the user opts in');
+    await click('.online-search-form button');
+    await waitFor('both online sources', () => run(`document.querySelectorAll('.online-results li').length === 2`));
+    assert.equal(catalogCalls.length, 1);
+    assert.equal(catalogCalls[0].searchParams.get('q'), 'jazz');
+    await click(queueOnline);
+    await waitFor('an online reference queued', async () => (await preferences()).onlineRefs.length === 1);
+    assert.deepEqual(streamCalls, [], 'queueing does not fetch audio');
+    await click(playOnline);
+    await waitFor('online audio decoded', () => run(`Number.isFinite(document.querySelector('${onlineAudio}').duration)`));
+    await withArt('All About Jazz');
+    assert.ok(streamCalls.includes(jamendoRecording.url));
+    assert.equal(await run(`document.querySelector('audio').paused`), true);
+    assert.equal((await preferences()).onlineTracks.length, 0, 'playing is not a library save');
+    await click('button[aria-label="Сохранить: All About Jazz"]');
+    await waitFor('online link saved', async () => (await preferences()).onlineTracks.length === 1);
+    await go('Главная');
+    await waitFor('online attribution shown in player', () => run(`document.querySelector('.hero .online-credit')?.textContent.includes('CC BY-NC-ND 3.0')`));
     await go('VK Музыка');
-    await waitFor('VK account entry', () => run(`!!document.querySelector('a.vk-account-open')`));
+    await waitFor('native VK shelf', () => run(`!!document.querySelector('.vk-native-shelf')`));
+    assert.equal(await run(`typeof window.luma.openVkWebsite`), 'undefined');
+    assert.equal(await run(`!!document.querySelector('iframe')`), false, 'the shelf does not open a website or a player automatically');
+    await click('.vk-native-account summary');
     const launch = shell.openExternal;
     const openedUrls = [];
     try {
       shell.openExternal = async (url) => { openedUrls.push(url); };
       assert.equal(await run(`document.querySelector('a.vk-account-open').href`), VK_MUSIC_URL);
-      await run(`document.querySelector('a.vk-account-open').click()`);
-      await waitFor('official VK URL handed to desktop browser', () => openedUrls.length);
+      await click('a.vk-account-open');
+      await waitFor('official sign-in URL handed to browser', () => openedUrls.length);
       assert.deepEqual(openedUrls, [VK_MUSIC_URL]);
-      assert.equal(BrowserWindow.getAllWindows().length, 1, 'sign-in should not default to the isolated window');
+      assert.equal(BrowserWindow.getAllWindows().length, 1, 'VK site does not open inside Luma');
       shell.openExternal = async () => { throw new Error('fixture: browser handler unavailable'); };
-      await run(`document.querySelector('a.vk-account-open').click()`);
+      await click('a.vk-account-open');
       await waitFor('visible browser launch error', () => run(`document.querySelector('.vk-link-error')?.textContent.includes(${JSON.stringify(VK_MUSIC_URL)})`));
     } finally { shell.openExternal = launch; }
-    await run(`document.querySelector('.vk-window-option summary').click();`);
-    await run(`document.querySelector('button.vk-open-window').click();`);
-    const account = await waitFor('official sign-in in separate window', () => BrowserWindow.getAllWindows().find((item) => item !== window && item.webContents.getURL() === `${authOrigin}/luma-smoke`));
-    await waitFor('VK test page loaded', () => account.webContents.executeJavaScript(`document.body?.textContent.includes('Official sign-in fixture')`));
-    assert.equal(account.webContents.session, vkSession);
-    assert.notEqual(account.webContents.session, window.webContents.session);
-    assert.deepEqual(await account.webContents.executeJavaScript(`[typeof window.luma, typeof require]`), ['undefined', 'undefined']);
-    assert.equal(account.getTitle(), 'VK Музыка — id.vk.ru');
-    account.destroy();
+    await click('.vk-spotlight-actions .primary-button');
+    await waitFor('explicit official widget', () => run(`!!document.querySelector('iframe.vk-frame-loaded')`));
+    assert.equal(await run(`document.querySelector('${onlineAudio}').paused`), true);
+    await click('.vk-mode-bar button');
+    await waitFor('widget closed without opening browser windows', () => run(`!document.querySelector('iframe')`));
     await go('Главная');
+    await withArt('All About Jazz');
   } finally {
-    vkSession.protocol.unhandle('https');
     session.defaultSession.protocol.unhandle('https');
   }
-  console.log('Desktop smoke: package version, repeatable fullscreen pointer exit, upcoming queue, and browser-first VK with isolated fallback.');
+  console.log('Desktop smoke: fullscreen pointer exit, queue, catalog import/playback with production CSP, and native VK shelf + explicit widget.');
   const journalFile = join(profile, 'Luma Player', 'logs', 'diagnostics.json');
   const snapshot = await waitFor('desktop and renderer startup events', async () => {
     const data = await run('window.luma.diagnostics.snapshot()');
@@ -195,6 +251,11 @@ async function smoke() {
   assert.match(snapshot.environment.runtime, /Electron .*Chromium/);
   assert.equal(snapshot.environment.version, version);
   assert.equal(snapshot.storage, 'file');
+  if (process.platform === 'win32') {
+    assert.match(snapshot.environment.system, /^Windows(?: 10| 11| Server)? /);
+    assert.ok(snapshot.environment.system.includes(`сборка ${release().split('.')[2]} · приложение ${process.arch}`));
+    console.log(`Native diagnostics: ${snapshot.environment.system}`);
+  }
   await run(`window.luma.diagnostics.record('audio.error', { code: 4, path: 'private-test-path.mp3', token: 'private-test-token' });
     window.luma.diagnostics.record('desktop.failed', { code: 1 });`);
   const persisted = await waitFor('persisted filtered diagnostics', async () => {
@@ -220,6 +281,49 @@ async function smoke() {
   assert.deepEqual(warnings, []);
   console.log('Desktop smoke: native diagnostics recorded, persisted, exported, and cleared.');
   console.log('Desktop smoke: Cyrillic and embedded/fallback artwork published from luma:// with production CSP.');
+  if (liveCatalog) {
+    const failed = [];
+    for (const source of ['jamendo', 'wikimedia_audio']) {
+      let result;
+      try {
+        await go('Главная');
+        await go('Поиск');
+        await waitFor('live search field', () => run(`!!document.querySelector('main input[type="search"]')`));
+        await fill('main input[type="search"]', source === 'jamendo' ? 'jazz' : 'Bach chaconne');
+        await waitFor('live catalog form', () => run(`!!document.querySelector('.online-search-form select')`));
+        await run(`(() => {
+          const choice = document.querySelector('.online-search-form select');
+          choice.value = ${JSON.stringify(source)};
+          choice.dispatchEvent(new Event('change', { bubbles: true }));
+        })()`);
+        await click('.online-search-form button');
+        const options = await waitFor(`${source} live results`, async () => {
+          const outcome = await run(`(() => {
+            const problem = document.querySelector('.online-panel .error');
+            return problem ? { error: problem.textContent } : [...document.querySelectorAll('.online-results li .online-result-actions button:first-child')].map((button) => button.getAttribute('aria-label'));
+          })()`);
+          if (outcome?.error) throw new Error(outcome.error);
+          return outcome?.length ? outcome : undefined;
+        });
+        for (const name of options.slice(0, 3)) {
+          const selector = `.online-result-actions button[aria-label=${JSON.stringify(name)}]`;
+          // Search returned official provider URLs; ask the same audio element used by the app to decode them.
+          await click(selector);
+          const decoded = await waitFor(`${source} audio attempt`, () => run(`(() => {
+            const media = document.querySelector('${onlineAudio}');
+            return media.currentTime > .15 ? 'playing' : media.error ? 'unavailable' : null;
+          })()`)).catch(() => 'timed out');
+          if (decoded === 'playing') { result = `live search and playback passed (${name.replace('Слушать онлайн: ', '')})`; break; }
+        }
+        if (!result) throw new Error('catalog returned results, but audio did not play from the first three URLs');
+      } catch (error) {
+        result = error instanceof Error ? error.message : String(error);
+        failed.push(source);
+      }
+      console.log(`::notice title=Live catalog ${source}::${result.replace(/\r?\n/g, ' ')}`);
+    }
+    assert.deepEqual(failed, [], 'Live provider check (optional, depends on the network and these services)');
+  }
 }
 
 void smoke().then(() => finish(0), fail);

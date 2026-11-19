@@ -3,18 +3,18 @@ import type { IpcMainInvokeEvent } from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RELEASES_URL } from '../src/shared/app-info.js';
+import { APP_NAME, APP_USER_MODEL_ID, RELEASES_URL } from '../src/shared/app-info.js';
 import type { AppInfo } from '../src/shared/app-info.js';
 import { desktopAppInfo } from './app-info.js';
 import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js';
 import { DesktopDiagnostics } from './diagnostics.js';
+import { isOnlineExternalUrl } from '../src/shared/online.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
 import { isVkExternalUrl, isVkWidgetFrameUrl, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { createProtocolHandler } from './protocol.js';
 import { fetchVkCover } from './vk-artwork.js';
-import { VkWebsite } from './vk-window.js';
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'luma',
@@ -22,13 +22,12 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 
 app.commandLine.appendSwitch('lang', 'ru');
-app.setName('Luma Player');
-app.setAppUserModelId('app.lumaplayer.desktop');
+app.setName(APP_NAME);
+app.setAppUserModelId(APP_USER_MODEL_ID);
 const devUrl = getDevUrl();
 app.setPath('userData', join(app.getPath('appData'), devUrl ? 'Luma Player Dev' : 'Luma Player'));
 let window: BrowserWindow | null = null;
 let journal: DesktopDiagnostics | undefined;
-let vkWebsite: VkWebsite | undefined;
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -62,6 +61,11 @@ function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
 
 function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo) {
   ipcMain.handle('app:info', (event) => { appWindow(event); return info; });
+  ipcMain.handle('online:open-link', (event, url: unknown) => {
+    appWindow(event);
+    if (!isOnlineExternalUrl(url)) throw new Error('Unsupported catalog link');
+    return shell.openExternal(url);
+  });
   ipcMain.handle('app:releases', (event) => { appWindow(event); return shell.openExternal(RELEASES_URL); });
   logs.onChange = () => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('diagnostics:changed');
@@ -103,8 +107,6 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     if (typeof id !== 'string') throw new TypeError('Expected track ID');
     return library.remove(id);
   });
-  const website = vkWebsite = new VkWebsite(logs);
-  ipcMain.handle('vk:open-website', (event) => { appWindow(event); return website.open(); });
   ipcMain.handle('vk:open-link', async (event, url: unknown) => {
     appWindow(event);
     if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
@@ -140,7 +142,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
 
 async function createWindow() {
   const owner = new BrowserWindow({
-    title: 'Luma Player', width: 1440, height: 900, minWidth: 620, minHeight: 520,
+    title: APP_NAME, width: 1440, height: 900, minWidth: 620, minHeight: 520,
     frame: false, show: false, backgroundColor: '#101116',
     webPreferences: {
       preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)),
@@ -148,6 +150,12 @@ async function createWindow() {
     },
   });
   window = owner;
+  if (process.platform === 'win32' && app.isPackaged) {
+    // Windows taskbar and native media clients can resolve the AppUserModelID to this name.
+    // Keep the app origin unchanged so existing IndexedDB and localStorage survive updates.
+    owner.setAppDetails({ appId: APP_USER_MODEL_ID, relaunchDisplayName: APP_NAME, appIconPath: process.execPath,
+      relaunchCommand: `"${process.env.PORTABLE_EXECUTABLE_FILE || process.execPath}"` });
+  }
   owner.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   owner.webContents.on('will-frame-navigate', (event) => {
     const allowed = event.isMainFrame ? isAppPage(event.url) : isVkWidgetFrameUrl(event.url);
@@ -166,7 +174,7 @@ async function createWindow() {
   owner.webContents.on('render-process-gone', (_event, { reason, exitCode }) => {
     if (reason !== 'clean-exit') journal?.main('desktop.rendererExited', { code: exitCode });
   });
-  owner.on('closed', () => { if (window === owner) { window = null; vkWebsite?.close(); } });
+  owner.on('closed', () => { if (window === owner) window = null; });
   const sendMaximized = () => owner.webContents.send('window:maximized', owner.isMaximized());
   owner.on('maximize', sendMaximized);
   owner.on('unmaximize', sendMaximized);

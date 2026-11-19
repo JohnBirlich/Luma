@@ -1,20 +1,22 @@
 import { useRef, useState } from 'react';
+import { readGenres } from '../shared/media';
 import type { Track } from '../shared/media';
 import { cleanTrackText } from '../shared/russian';
 
-export type TrackDetails = Pick<Track, 'title' | 'artist' | 'album'>;
+export type TrackDetails = Pick<Track, 'title' | 'artist' | 'album' | 'genres'>;
 export const TRACK_DETAIL_LIMIT = 256;
 const STORAGE_KEY = 'luma-track-details:v1';
 
 function parseDetails(input: unknown): TrackDetails | undefined {
   if (!input || typeof input !== 'object') return;
-  const { title, artist, album } = input as Partial<TrackDetails>;
+  const { title, artist, album, genres } = input as Partial<TrackDetails>;
   if ([title, artist, album].some((value) => typeof value !== 'string' || value.length > TRACK_DETAIL_LIMIT)) return;
   const name = cleanTrackText(title);
   return name ? {
     title: name,
     artist: cleanTrackText(artist) || 'Неизвестный исполнитель',
     album: cleanTrackText(album) || 'Без альбома',
+    ...(Array.isArray(genres) ? { genres: readGenres(genres) ?? [] } : {}),
   } : undefined;
 }
 

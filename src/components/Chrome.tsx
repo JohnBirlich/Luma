@@ -3,7 +3,7 @@ import { AudioLines, Bug, Copy, Heart, House, ListMusic, Menu, Minus, Music2, Pa
 
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 
-export type Page = 'player' | 'search' | 'vk' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent';
+export type Page = 'player' | 'search' | 'vk' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent' | 'mixes';
 
 interface TitleBarProps {
   openSettings(): void;
@@ -61,6 +61,7 @@ interface SidebarProps {
   favoriteCount: number;
   queued: number;
   queueOpen: boolean;
+  vkWidgetOpen: boolean;
   toggleQueue(): void;
   openEqualizer(): void;
   eqEnabled: boolean;
@@ -71,7 +72,7 @@ interface SidebarProps {
 export function Sidebar(props: SidebarProps) {
   const { page, navigate, addMusic, busy, count, favoriteCount, queued, queueOpen, toggleQueue, openEqualizer, compact, toggleCompact } = props;
   const online = useSyncExternalStore(subscribeConnection, connectionState);
-  const active = page === 'settings' || page === 'diagnostics' || page === 'favorites' || page === 'recent' ? 'menu' : page;
+  const active = page === 'settings' || page === 'diagnostics' || page === 'favorites' || page === 'recent' ? 'menu' : page === 'mixes' ? 'library' : page;
   const expandLabel = compact ? 'Развернуть боковую панель' : 'Свернуть боковую панель';
   return (
     <aside className="sidebar" aria-label="Навигация">
@@ -95,8 +96,8 @@ export function Sidebar(props: SidebarProps) {
           <button type="button" className="nav-item" title="Избранное" aria-label="Избранное" aria-current={page === 'favorites' ? 'page' : undefined} onClick={() => navigate('favorites')}>
             <Heart className="nav-glyph" size={17} /><span className="nav-copy">Избранное</span>{favoriteCount > 0 && <small className="nav-count" aria-hidden="true">{favoriteCount}</small>}
           </button>
-          <button type="button" className="nav-item" title={page === 'vk' ? 'Очередь доступна для локальной музыки' : 'Очередь'} aria-label="Очередь из боковой панели"
-            aria-pressed={queueOpen && page !== 'vk'} aria-controls={queueOpen && page !== 'vk' ? 'play-queue' : undefined} disabled={page === 'vk'} onClick={toggleQueue}>
+          <button type="button" className="nav-item" title={props.vkWidgetOpen ? 'Очередь Luma недоступна в виджете VK' : 'Очередь'} aria-label="Очередь из боковой панели"
+            aria-pressed={queueOpen && !props.vkWidgetOpen} aria-controls={queueOpen && !props.vkWidgetOpen ? 'play-queue' : undefined} disabled={props.vkWidgetOpen} onClick={toggleQueue}>
             <ListMusic className="nav-glyph" size={18} /><span className="nav-copy">Очередь</span>{queued > 0 && <small className="nav-count" aria-hidden="true">{queued}</small>}
           </button>
           <button type="button" className="nav-item" title="Эквалайзер" aria-label="Эквалайзер из боковой панели" aria-haspopup="dialog" onClick={openEqualizer}>

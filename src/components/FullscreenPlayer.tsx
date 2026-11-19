@@ -4,6 +4,7 @@ import { AudioLines, ChevronDown, Heart, ListMusic, Palette, SlidersHorizontal }
 import type { ReadSpectrum } from '../player/useAudio';
 import type { Appearance } from '../shared/customization';
 import type { Track } from '../shared/media';
+import { OnlineCredit } from './OnlineMusic';
 import { Artwork } from './Artwork';
 import { SeekTimeline, TransportControls, VolumeControl } from './PlaybackControls';
 import type { PlaybackProps } from './PlaybackControls';
@@ -47,11 +48,11 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   return <dialog ref={ref} className="immersive-player" aria-labelledby="immersive-title" onCancel={(event) => { event.preventDefault(); close(); }}>
     <div ref={props.stage} className={`immersive-stage immersive-${hero}`} style={{ '--immersive-tone': tint } as CSSProperties}>
       {appearance.coverColors && <Artwork track={track} className="immersive-backdrop" imageUrl={track.backdropUrl} />}
-      <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive ? props.readSpectrum : undefined} />
+      <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
       <div aria-hidden="true" className="immersive-scrim" />
       <header className="immersive-header">
         <button type="button" className="icon-button immersive-collapse" onClick={close} title="Свернуть (Esc)" aria-label="Свернуть полноэкранный плеер"><ChevronDown size={24} /></button>
-        <div><p className="overline">Сейчас играет</p><strong>{track.demo ? 'Демотреки Luma' : 'Локальная медиатека'}</strong></div>
+        <div><p className="overline">Сейчас играет</p><strong>{track.online ? 'Онлайн-трек' : track.demo ? 'Демотреки Luma' : 'Локальная медиатека'}</strong></div>
         <div className="immersive-header-actions">
           <button type="button" className="icon-button immersive-queue-toggle" onClick={() => setQueueVisible((value) => !value)}
             aria-expanded={queueVisible} aria-controls={queueVisible ? 'immersive-upcoming' : undefined} aria-label={queueVisible ? 'Скрыть следующие треки' : 'Показать следующие треки'}
@@ -65,7 +66,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
         </div>
         <div className="immersive-content">
           <div className="immersive-meta">
-            <div><h1 id="immersive-title" title={track.title}>{track.title}</h1><p title={track.artist}>{track.artist}</p><small title={track.album}>{track.album}</small></div>
+            <div><h1 id="immersive-title" title={track.title}>{track.title}</h1><p title={track.artist}>{track.artist}</p><small title={track.album}>{track.online ? <OnlineCredit track={{ online: track.online }} /> : track.album}</small></div>
             <button type="button" className="icon-button immersive-favorite" aria-pressed={favorite} onClick={() => props.toggleFavorite(track.id)}
               aria-label={favorite ? 'Убрать из избранного' : 'В избранное'} title={favorite ? 'Убрать из избранного' : 'В избранное'}><Heart size={23} fill={favorite ? 'currentColor' : 'none'} /></button>
           </div>

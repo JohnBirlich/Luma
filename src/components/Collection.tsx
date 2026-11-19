@@ -1,8 +1,13 @@
-import { useMemo, useState } from 'react';
-import { ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
+import { Cloud, CloudOff, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
+import { connectionState, subscribeConnection } from '../data/diagnostics';
+import { musicGroups, tracksInGroup } from '../shared/mix';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
+import type { OnlineTrack } from '../shared/online';
+import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
+import type { OnlineAction } from './OnlineMusic';
 import type { Track } from '../shared/media';
 import type { Appearance, LibraryLayout } from '../shared/customization';
 import { musicSearchKey } from '../shared/russian';
@@ -33,21 +38,21 @@ function TrackCard({ track, active, playing, row, play, add, editCover, editDeta
         <div className="card-image">
           <Artwork track={track} />
           <span className="card-play-icon">{active && playing ? <Pause size={17} fill="currentColor" /> : <Play className="play-icon" size={17} fill="currentColor" />}</span>
-          {add && !row && track.demo && <span className="card-demo">Демо</span>}
+          {add && !row && (track.demo || track.online) && <span className="card-demo">{track.online ? 'Онлайн' : 'Демо'}</span>}
         </div>
         <div className="card-text">
           <strong>{track.title}</strong>
-          <small>{track.artist}{row && <span className="track-row-album"> · {track.album}</span>}</small>
+          <small>{track.artist}{row && <span className="track-row-album"> · {track.album}</span>}{track.online && ' · Онлайн'}</small>
         </div>
       </button>
       {add && <div className="card-details">
         <span className="track-length" title={track.album}>{!row && <>{track.album} <span aria-hidden="true">·</span> </>}{formatTime(track.duration)}</span>
         {toggleFavorite && <FavoriteButton track={track} selected={Boolean(favorite)} toggle={toggleFavorite} />}
-        {editDetails && !track.demo && <button type="button" className="icon-button" onClick={() => editDetails(track.id)} title="Редактировать данные трека" aria-label={`Данные трека: ${track.title}`} aria-haspopup="dialog"><Pencil size={15} /></button>}
+        {editDetails && !track.demo && !track.online && <button type="button" className="icon-button" onClick={() => editDetails(track.id)} title="Редактировать данные трека" aria-label={`Данные трека: ${track.title}`} aria-haspopup="dialog"><Pencil size={15} /></button>}
         {editCover && <button type="button" className="icon-button" onClick={() => editCover(track.id)} title="Редактировать обложку" aria-label={`Обложка: ${track.title}`} aria-haspopup="dialog"><ImagePlus size={16} /></button>}
         <button type="button" className="icon-button" onClick={() => add(track.id)} title="В очередь" aria-label={`Добавить ${track.title} в очередь`}><ListPlus size={17} /></button>
         {remove && !track.demo && <button type="button" className="icon-button delete-button" onClick={() => remove(track.id)}
-          title="Убрать из медиатеки (файл не удаляется)" aria-label={`Убрать ${track.title} из медиатеки`}><Trash2 size={15} /></button>}
+          title={track.online ? "Убрать онлайн-ссылку" : "Убрать из медиатеки (файл не удаляется)"} aria-label={`Убрать ${track.title} из медиатеки`}><Trash2 size={15} /></button>}
       </div>}
     </article>
   );
@@ -97,10 +102,10 @@ export function PlayerPage(props: PlayerPageProps) {
   return (
     <div className="page player-page">
       <header className="page-header">
-        <div><p className="overline page-kicker"><span />Локальный плеер</p><h1>Сейчас играет</h1></div>
+        <div><p className="overline page-kicker"><span />Плеер Luma</p><h1>Сейчас играет</h1></div>
         <div className="page-actions">
           <button type="button" className="button outline-button scene-open" onClick={props.openAppearance} aria-label="Оформление экрана «Сейчас играет»" title="Оформление" aria-haspopup="dialog"><Palette size={17} /><span>Оформление</span></button>
-          {track && !track.demo && <button type="button" className="button outline-button track-details-button" onClick={() => props.editDetails(track.id)}
+          {track && !track.demo && !track.online && <button type="button" className="button outline-button track-details-button" onClick={() => props.editDetails(track.id)}
             aria-label="Редактировать данные трека" title="Редактировать данные трека" aria-haspopup="dialog"><Pencil size={16} /></button>}
           {track && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
             aria-label="Редактировать обложку" title="Редактировать обложку" aria-haspopup="dialog"><ImagePlus size={17} /><span>Обложка</span></button>}
@@ -110,17 +115,17 @@ export function PlayerPage(props: PlayerPageProps) {
         </div>
       </header>
       <section aria-label="Текущий трек" className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
-        <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive ? props.readSpectrum : undefined} />
+        <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
         {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
           onError={() => { if (!fallback) setFailedPicture(source); }} />}
         {!showPicture && !centered && hero !== 'blur' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
         <div className="hero-scrim" aria-hidden="true" />
         {centered && <Artwork track={track} className="hero-center-art" />}
         <div className="hero-content">
-          <div className="hero-label"><Signal playing={playing} /> {track?.demo ? 'Демо-трек' : track ? 'Воспроизведение' : 'Ваша коллекция'}</div>
+          <div className="hero-label"><Signal playing={playing} /> {track?.demo ? 'Демо-трек' : track?.online ? 'Онлайн-трек' : track ? 'Воспроизведение' : 'Ваша коллекция'}</div>
           <h2 title={track?.title}>{track?.title ?? 'Время для музыки'}</h2>
           <div className="hero-meta">
-            {track ? <><span>{track.artist}</span><span className="hero-dot" /><span>{track.album}</span></> : <span>Добавьте аудиофайлы, чтобы начать.</span>}
+            {track ? <><span>{track.artist}</span><span className="hero-dot" />{track.online ? <OnlineCredit track={{ online: track.online }} /> : <span>{track.album}</span>}</> : <span>Добавьте аудиофайлы, чтобы начать.</span>}
           </div>
           <div className="hero-actions-row">
             <button type="button" className="button primary-button hero-action" onClick={track ? props.toggle : props.addMusic}>
@@ -161,6 +166,11 @@ interface LibraryPageProps {
   layout: LibraryLayout;
   changeLayout(layout: LibraryLayout): void;
   openVk(): void;
+  openMixes(): void;
+  openRecent(): void;
+  openFavorites(): void;
+  openSearch(): void;
+  chooseOnline(track: OnlineTrack, action: OnlineAction): void;
   addMusic(): void;
   toggleDemos(): void;
   play(id: string): void;
@@ -176,11 +186,19 @@ export function LibraryPage(props: LibraryPageProps) {
   const isSearch = props.mode === 'search';
   const isFavorites = props.mode === 'favorites';
   const isRecent = props.mode === 'recent';
+  const connected = useSyncExternalStore(subscribeConnection, connectionState);
   const [search, setSearch] = useState('');
-  const [onlyFiles, setOnlyFiles] = useState(false);
-  const files = useMemo(() => props.tracks.filter(({ demo }) => !demo), [props.tracks]);
-  const scope = onlyFiles ? files : props.tracks;
-  const indexed = useMemo(() => scope.map((track) => ({ track, text: musicSearchKey(`${track.title} ${track.artist} ${track.album}`) })), [scope]);
+  const [scopeId, setScope] = useState<'all' | 'offline' | 'online'>('all');
+  const files = useMemo(() => props.tracks.filter(({ online }) => !online), [props.tracks]);
+  const online = useMemo(() => props.tracks.filter(({ online }) => online), [props.tracks]);
+  const saved = useMemo(() => new Set(online.map(({ id }) => id)), [online]);
+  const [groupKind, setGroupKind] = useState<'artist' | 'album'>();
+  const [groupId, setGroupId] = useState('');
+  const groups = useMemo(() => groupKind ? musicGroups(props.tracks, groupKind) : [], [props.tracks, groupKind]);
+  const scope = useMemo(() => scopeId === 'offline' ? files : scopeId === 'online' ? online
+    : groupKind && groupId ? tracksInGroup(props.tracks, { kind: groupKind, id: groupId }) : props.tracks,
+    [files, online, scopeId, props.tracks, groupKind, groupId]);
+  const indexed = useMemo(() => scope.map((track) => ({ track, text: musicSearchKey(`${track.title} ${track.artist} ${track.album} ${track.genres?.join(' ') ?? ''}`) })), [scope]);
   const term = musicSearchKey(search);
   const results = useMemo(() => term ? indexed.filter(({ text }) => text.includes(term)).map(({ track }) => track) : scope, [scope, indexed, term]);
   const isList = props.layout === 'list';
@@ -190,23 +208,47 @@ export function LibraryPage(props: LibraryPageProps) {
         <div><p className="overline page-kicker"><span />{isSearch ? 'Найти трек' : 'Коллекция Luma'}</p><h1>{isRecent ? 'Недавно слушали' : isFavorites ? 'Избранное' : isSearch ? 'Поиск' : 'Медиатека'}</h1></div>
         {isLibrary && <button type="button" className="button primary-button" onClick={props.addMusic} disabled={props.busy}><Plus size={18} /> Добавить музыку</button>}
       </header>
-      {isRecent && <p className="recent-intro">Порядок прослушивания локальных треков. История не синхронизируется с VK.</p>}
+      {isRecent && <p className="recent-intro">Локальные и онлайн-треки, которые играли в Luma. История хранится на устройстве.</p>}
       {isLibrary && <div className="collection-tabs" role="group" aria-label="Разделы медиатеки">
-        <button type="button" aria-pressed={!onlyFiles} onClick={() => setOnlyFiles(false)}>Все треки <small>{props.tracks.length}</small></button>
-        <button type="button" aria-pressed={onlyFiles} onClick={() => setOnlyFiles(true)}>С устройства <small>{files.length}</small></button>
+        <button type="button" aria-pressed={scopeId === 'all'} onClick={() => { setScope('all'); setGroupKind(undefined); setGroupId(''); }}>Все треки <small>{props.tracks.length}</small></button>
+        <button type="button" aria-pressed={scopeId === 'offline'} onClick={() => setScope('offline')}>Без сети <small>{files.length}</small></button>
+        <button type="button" aria-pressed={scopeId === 'online'} onClick={() => setScope('online')}>Из интернета <small>{online.length}</small></button>
       </div>}
+      {isLibrary && scopeId === 'all' && !term && <div className="collection-shortcuts" aria-label="Каталоги медиатеки">
+        <button type="button" onClick={props.openMixes}><span><Sparkles size={18} />Микс Luma</span><small>Подборка ваших треков</small></button>
+        <button type="button" onClick={props.openRecent}><span><History size={18} />Недавно слушали</span><small>История на устройстве</small></button>
+        <button type="button" onClick={props.openFavorites}><span><Heart size={18} />Избранное</span><small>Любимые треки</small></button>
+        <button type="button" aria-pressed={groupKind === 'album'} onClick={() => { setGroupKind('album'); setGroupId(''); }}><span><Disc3 size={18} />Альбомы</span><small>Сгруппированы по тегам</small></button>
+        <button type="button" aria-pressed={groupKind === 'artist'} onClick={() => { setGroupKind('artist'); setGroupId(''); }}><span><UserRound size={18} />Исполнители</span><small>Найти музыку артиста</small></button>
+        <button type="button" onClick={() => setScope('online')}><span><Link2 size={18} />Перенос музыки</span><small>Добавить ссылку на запись</small></button>
+      </div>}
+      {isLibrary && scopeId === 'all' && groupKind && <label className="collection-facet">{groupKind === 'artist' ? 'Исполнитель' : 'Альбом'}
+        <select aria-label={groupKind === 'artist' ? 'Исполнитель' : 'Альбом'} value={groupId} onChange={(event) => setGroupId(event.currentTarget.value)}>
+          <option value="">{groupKind === 'artist' ? 'Все исполнители' : 'Все альбомы'}</option>
+          {groups.map(({ id, label, count }) => <option key={id} value={id}>{label} · {count}</option>)}
+        </select>
+      </label>}
+      {isLibrary && scopeId !== 'offline' && !connected && <p className="online-offline" role="status"><CloudOff size={17} /> Устройство вне сети. Файлы доступны во вкладке «Без сети».</p>}
+      {isLibrary && scopeId === 'online' && <OnlineImport disabled={props.busy} save={(track) => props.chooseOnline(track, 'save')} />}
+      {isLibrary && scopeId === 'offline' && <p className="recent-intro">Файлы с устройства и встроенная музыка. Онлайн-треки сюда не копируются.</p>}
       <div className="library-toolbar">
         <div className="library-search">
           <Search size={18} />
-          <input type="search" placeholder="Трек, исполнитель, альбом…" aria-label="Поиск по медиатеке" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
+          <input type="search" placeholder="Трек, исполнитель, альбом или жанр…" aria-label="Поиск по медиатеке" maxLength={140} value={search} onChange={(event) => setSearch(event.currentTarget.value)} onKeyDown={(event) => {
+            if (isSearch && !results.length && event.key === 'Enter' && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              const form = document.getElementById('online-search-form');
+              if (form instanceof HTMLFormElement) form.requestSubmit();
+            }
+          }} />
           {search && <button className="icon-button" type="button" onClick={() => setSearch('')} aria-label="Очистить поиск"><X size={16} /></button>}
         </div>
-        {isLibrary && !onlyFiles && <button className="button outline-button demo-toggle" type="button" onClick={props.toggleDemos}
+        {isLibrary && scopeId !== 'online' && <button className="button outline-button demo-toggle" type="button" onClick={props.toggleDemos}
           aria-pressed={props.showDemos} aria-label="Демотреки" title="Показать или скрыть встроенные демотреки" disabled={props.busy}>
           <Headphones size={16} /> <span>Демотреки</span>
         </button>}
       </div>
-      {isSearch && <div className="search-scope"><span>Поиск по музыке в Luma</span><button className="text-button" type="button" onClick={props.openVk}><Radio size={14} /> Перейти к VK</button></div>}
+      {isSearch && <div className="search-scope"><span>Сначала в медиатеке</span><button className="text-button" type="button" onClick={props.openVk}><Radio size={14} /> Перейти к VK</button></div>}
       <div className="library-caption">
         <div><Disc3 size={16} />{trackCount(results.length)}</div>
         <div className="library-actions">
@@ -222,12 +264,14 @@ export function LibraryPage(props: LibraryPageProps) {
       {results.length ? <div className={isList ? 'track-list' : 'track-grid library-grid'}>
         {results.map((track) => <TrackCard key={track.id} track={track} active={track.id === props.currentId} playing={props.playing} row={isList}
           play={props.play} add={props.add} editCover={props.editCover} editDetails={props.editDetails} remove={props.remove} favorite={props.favorites.has(track.id)} toggleFavorite={props.toggleFavorite} />)}
-      </div> : <div className="empty-library">
-        <div>{isRecent ? <History size={27} /> : isFavorites ? <Heart size={27} /> : <Music2 size={27} />}</div><h2>{term ? 'Ничего не нашлось' : isRecent ? 'История пока пуста' : isFavorites ? 'Сохраните любимые треки' : 'Здесь будет ваша музыка'}</h2>
-        <p>{term ? 'Попробуйте поискать по части названия или имени исполнителя.' : isRecent ? 'Прослушанные треки появятся здесь, если в настройках включена история.' : isFavorites ? 'Нажмите на сердце рядом с треком или на экране «Сейчас играет».' : 'Перетащите аудиофайлы в окно или выберите их на компьютере.'}</p>
+      </div> : isSearch && term ? <p className="search-local-empty">В медиатеке нет совпадений.</p> : <div className="empty-library">
+        <div>{isRecent ? <History size={27} /> : isFavorites ? <Heart size={27} /> : scopeId === 'online' ? <Cloud size={27} /> : <Music2 size={27} />}</div><h2>{term ? 'Ничего не нашлось' : isRecent ? 'История пока пуста' : isFavorites ? 'Сохраните любимые треки' : scopeId === 'online' ? 'Нет сохранённых онлайн-треков' : 'Здесь будет ваша музыка'}</h2>
+        <p>{term ? 'Попробуйте поискать по части названия или имени исполнителя.' : isRecent ? 'Прослушанные треки появятся здесь, если в настройках включена история.' : isFavorites ? 'Нажмите на сердце рядом с треком или на экране «Сейчас играет».' : scopeId === 'online' ? 'Найдите запись в онлайн-поиске или вставьте ссылку Openverse выше.' : 'Перетащите аудиофайлы в окно или выберите их на компьютере.'}</p>
         {!term && (isFavorites || isRecent ? <button type="button" className="button outline-button" onClick={props.goToLibrary}>Открыть медиатеку <ArrowRight size={16} /></button>
+          : scopeId === 'online' ? <button type="button" className="button outline-button" onClick={props.openSearch}>Открыть поиск <Search size={16} /></button>
           : <button type="button" className="button outline-button" onClick={props.addMusic} disabled={props.busy}><Plus size={17} /> Выбрать файлы</button>)}
       </div>}
+      {isSearch && search.trim().length >= 2 && <OnlineSearch key={search.trim()} query={search.trim()} hasLocal={results.length > 0} saved={saved} disabled={props.busy} choose={props.chooseOnline} />}
     </div>
   );
 }

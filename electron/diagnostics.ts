@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { release, type } from 'node:os';
 import { dirname, join } from 'node:path';
 import { net } from 'electron';
+import { systemName } from './system.js';
 import type { AppInfo } from '../src/shared/app-info.js';
 import { appendLog, logEntry, MAX_LOG_FILE_BYTES, readLog } from '../src/shared/diagnostics.js';
 import type { DiagnosticSnapshot, LogEntry, LogValues, MainLogEvent } from '../src/shared/diagnostics.js';
@@ -14,10 +14,10 @@ export class DesktopDiagnostics {
   private timer?: ReturnType<typeof setTimeout>;
   private writes = Promise.resolve();
 
-  private constructor(private file: string, private info: AppInfo) {}
+  private constructor(private file: string, private info: AppInfo, private system: string) {}
 
   static async open(profile: string, info: AppInfo) {
-    const journal = new DesktopDiagnostics(join(profile, 'logs', 'diagnostics.json'), info);
+    const journal = new DesktopDiagnostics(join(profile, 'logs', 'diagnostics.json'), info, await systemName());
     try {
       await mkdir(dirname(journal.file), { recursive: true });
       const stats = await stat(journal.file);
@@ -34,7 +34,7 @@ export class DesktopDiagnostics {
       storage: this.saved ? 'file' : 'session',
       environment: {
         ...this.info,
-        system: `${process.platform === 'win32' ? 'Windows' : type()} ${release()} · ${process.arch}`,
+        system: this.system,
         runtime: `Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · Node.js ${process.versions.node}`,
         online: net.isOnline(),
       },
