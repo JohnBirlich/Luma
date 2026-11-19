@@ -63,6 +63,9 @@ export default function App() {
   const [page, setPage] = useState<Page>(boot.playback.startPage);
   const [vkWidgetOpen, setVkWidgetOpen] = useState(false);
   const isVkPage = page === 'vk' && vkWidgetOpen;
+  const [vkWebsiteOpen, setVkWebsiteOpen] = useState(false);
+  const vkPlayback = isVkPage || vkWebsiteOpen;
+  useEffect(() => window.luma?.onVkWebsite(setVkWebsiteOpen), []);
   const [showEqualizer, setShowEqualizer] = useState(false);
   const [showAppearance, setShowAppearance] = useState(false);
   const [coverTarget, setCoverTarget] = useState<CoverTarget>();
@@ -104,6 +107,11 @@ export default function App() {
   }), []);
   const player = useAudio(preferences.volume, preferences.equalizer, ended, trackStarted);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
+  async function openVkWebsite(url: string) {
+    pause();
+    setVkWidgetOpen(false);
+    await window.luma?.openVkWebsite(url);
+  }
   const sampledTone = usePalette(appearance.coverColors ? current : null);
   const tint = appearance.coverColors ? sampledTone : theme['--accent'];
   const playbackError = isVkPage ? '' : player.error;
@@ -168,9 +176,9 @@ export default function App() {
   }, [playTrack, position, seek]);
   useEffect(() => {
     ended.current = () => {
-      if (!isVkPage && shouldAdvanceAfterEnd(playback, queueRef.current.repeat)) next(true);
+      if (!vkPlayback && shouldAdvanceAfterEnd(playback, queueRef.current.repeat)) next(true);
     };
-  }, [isVkPage, next, playback]);
+  }, [vkPlayback, next, playback]);
   const mediaActions = useMemo(() => ({
     play, pause, nexttrack: () => next(), previoustrack: previous,
     stop: () => { pause(); seek(0); },
@@ -178,7 +186,7 @@ export default function App() {
     seekforward: ({ seekOffset }: MediaSessionActionDetails) => seek(seekOffset ?? playback.seekStep, true),
     seekbackward: ({ seekOffset }: MediaSessionActionDetails) => seek(-(seekOffset ?? playback.seekStep), true),
   }), [next, previous, play, pause, seek, playback.seekStep]);
-  useMediaSession(isVkPage ? null : current, player.playing, player.elapsed, player.duration, isVkPage ? noMediaActions : mediaActions, playback.publishTrack);
+  useMediaSession(vkPlayback ? null : current, player.playing, player.elapsed, player.duration, vkPlayback ? noMediaActions : mediaActions, playback.publishTrack);
 
   const setVolume = useCallback((value: number) => {
     const volume = clamp(value, 0, 1);
@@ -251,7 +259,7 @@ export default function App() {
         if (!event.repeat) choose();
         return;
       }
-      if (isVkPage) return;
+      if (vkPlayback) return;
       if (!event.altKey && !event.metaKey && !event.ctrlKey && event.code === 'KeyF' && current
         && !(event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]'))) {
         event.preventDefault();
@@ -267,7 +275,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [choose, mute, seek, toggle, modalOpen, presentationOpen, showPresentation, closePresentation, current, queueOpen, isVkPage, playback.seekStep]);
+  }, [choose, mute, seek, toggle, modalOpen, presentationOpen, showPresentation, closePresentation, current, queueOpen, vkPlayback, playback.seekStep]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -437,13 +445,13 @@ export default function App() {
         queued={queued.length} queueOpen={queueOpen} vkWidgetOpen={isVkPage} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
         compact={appearance.compactSidebar} toggleCompact={toggleCompact} />
       <main className="main-pane" ref={scrollArea}>
-        {page === 'vk' ? <VkMusicPage widgetOpen={isVkPage} connected={connected} toggleWidget={(open) => { if (open) pause(); setVkWidgetOpen(open); }} covers={covers} editCover={setCoverTarget} discardCover={(key) => { void updateCover(key); }} /> :
+        {page === 'vk' ? <VkMusicPage openWebsite={openVkWebsite} widgetOpen={isVkPage} connected={connected} toggleWidget={(open) => { if (open) pause(); setVkWidgetOpen(open); }} covers={covers} editCover={setCoverTarget} discardCover={(key) => { void updateCover(key); }} /> :
           page === 'diagnostics' ? <DiagnosticsPage back={backToMenu} /> :
           page === 'settings' ? <SettingsPage appearance={appearance} playback={playback} showDemos={preferences.showDemos} libraryReady={ready && !working}
             previewTrack={current} tint={tint} localCount={localTracks.length} recentCount={preferences.recent.length}
             volumeControls={localControls} eqEnabled={preferences.equalizer.enabled} openEqualizer={openEqualizer} openRecent={() => navigate('recent')}
             clearRecent={() => setPreferences((data) => ({ ...data, recent: [] }))} openDiagnostics={() => navigate('diagnostics')} changeAppearance={changeAppearance}
-            changePlayback={(playback) => setPreferences((data) => ({ ...data, playback }))} toggleDemos={toggleDemos} reset={resetCustomization} goToMenu={() => navigate('menu')} /> :
+            changePlayback={(playback) => setPreferences((data) => ({ ...data, playback }))} toggleDemos={toggleDemos} openVk={() => navigate('vk')} reset={resetCustomization} goToMenu={() => navigate('menu')} /> :
           page === 'menu' ? <MenuPage localCount={localTracks.length} ready={ready && !working} eqEnabled={preferences.equalizer.enabled}
             openSettings={() => navigate('settings')} openEqualizer={openEqualizer} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={() => navigate('mixes')} openDiagnostics={() => navigate('diagnostics')} openVk={() => navigate('vk')} addMusic={choose} /> :
           page === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} recent={recent}
@@ -454,7 +462,7 @@ export default function App() {
             openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} /> :
           <LibraryPage key={page} tracks={page === 'favorites' ? favorites : page === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
             mode={page === 'favorites' || page === 'search' || page === 'recent' ? page : 'library'} favorites={favoriteIds} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
-            chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
+            chooseOnline={chooseOnline} openVkWebsite={openVkWebsite} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
       </main>
       {!isVkPage && queueOpen && <>
         <button type="button" className="queue-scrim" onClick={closeQueue} aria-label="Закрыть панель очереди" />
@@ -465,6 +473,7 @@ export default function App() {
         goToPlayer={() => setPage('player')} openPresentation={showPresentation} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
       {presentationOpen && current && !isVkPage && <FullscreenPlayer {...localControls} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={appearance}
         favorite={favoriteIds.has(current.id)} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
+        toggleQueue={() => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, fullscreenQueue: !data.appearance.fullscreenQueue } }))}
         openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} />}
       <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />
       <audio ref={player.streamRef} data-online-audio preload="none" />

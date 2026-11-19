@@ -56,7 +56,7 @@ test('legacy layouts remain unchanged; effect intensity and favorite IDs are val
 });
 
 test('new audio-reactive scenes persist without replacing old settings', () => {
-  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'off']) {
+  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'off']) {
     const prefs = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl', effect, effectStrength: 0.6, motion: false }, volume: 0.17 }));
     assert.equal(prefs.appearance.effect, effect);
     assert.equal(prefs.appearance.hero, 'vinyl');

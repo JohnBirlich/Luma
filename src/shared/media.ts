@@ -4,6 +4,8 @@ import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
 import { cleanTrackText, musicSearchKey, readTrackTag } from './russian.js';
 import type { OnlineCreditData } from './online.js';
 import type { VkCoverImage, VkPlaylist } from './vk.js';
+import type { MusicService } from './music-search.js';
+import type { Fingerprint, MetadataCandidate } from './recognition.js';
 
 export const AUDIO_MIMES = {
   mp3: 'audio/mpeg',
@@ -53,13 +55,24 @@ export interface DesktopBridge {
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
   openVkLink(url: string): Promise<void>;
+  openVkWebsite(url: string): Promise<void>;
+  onVkWebsite(callback: (open: boolean) => void): () => void;
+  openMusicSearch(service: MusicService, query: string): Promise<void>;
   getVkCover(playlist: VkPlaylist): Promise<VkCoverImage | null>;
+  recognition: {
+    search(query: string, locale: string): Promise<MetadataCandidate[]>;
+    hasAcoustid(): Promise<boolean>;
+    identify(fingerprint: Fingerprint): Promise<MetadataCandidate[]>;
+    openSource(url: string): Promise<void>;
+  };
   diagnostics: DiagnosticsBridge;
   window: {
     minimize(): void;
     toggleMaximize(): void;
     close(): void;
     isMaximized(): Promise<boolean>;
+    setFullscreen(fullscreen: boolean): Promise<void>;
+    onFullscreen(callback: (fullscreen: boolean) => void): () => void;
     onMaximized(callback: (maximized: boolean) => void): () => void;
   };
 }

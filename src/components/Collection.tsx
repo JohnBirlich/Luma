@@ -6,12 +6,13 @@ import { musicGroups, tracksInGroup } from '../shared/mix';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
 import type { OnlineTrack } from '../shared/online';
-import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
+import { MusicServiceSearch, OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
 import type { OnlineAction } from './OnlineMusic';
 import type { Track } from '../shared/media';
 import type { Appearance, LibraryLayout } from '../shared/customization';
 import { musicSearchKey } from '../shared/russian';
 import { Artwork } from './Artwork';
+import { FavoriteButton } from './FavoriteButton';
 import { Signal } from './QueuePanel';
 import { SceneBackground } from './SceneBackground';
 import { VinylRecord } from './VinylRecord';
@@ -56,13 +57,6 @@ function TrackCard({ track, active, playing, row, play, add, editCover, editDeta
       </div>}
     </article>
   );
-}
-
-function FavoriteButton({ track, selected, toggle }: { track: Track; selected: boolean; toggle(id: string): void }) {
-  return <button type="button" className="icon-button favorite-toggle" aria-pressed={selected} onClick={() => toggle(track.id)}
-    aria-label={`${selected ? 'Убрать из избранного' : 'В избранное'}: ${track.title}`} title={selected ? 'Убрать из избранного' : 'В избранное'}>
-    <Heart size={16} fill={selected ? 'currentColor' : 'none'} />
-  </button>;
 }
 
 interface PlayerPageProps {
@@ -114,7 +108,7 @@ export function PlayerPage(props: PlayerPageProps) {
           </button>
         </div>
       </header>
-      <section aria-label="Текущий трек" className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
+      <section aria-label="Текущий трек" data-effect={effect} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
         <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
         {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
           onError={() => { if (!fallback) setFailedPicture(source); }} />}
@@ -166,6 +160,7 @@ interface LibraryPageProps {
   layout: LibraryLayout;
   changeLayout(layout: LibraryLayout): void;
   openVk(): void;
+  openVkWebsite(url: string): Promise<void>;
   openMixes(): void;
   openRecent(): void;
   openFavorites(): void;
@@ -271,7 +266,10 @@ export function LibraryPage(props: LibraryPageProps) {
           : scopeId === 'online' ? <button type="button" className="button outline-button" onClick={props.openSearch}>Открыть поиск <Search size={16} /></button>
           : <button type="button" className="button outline-button" onClick={props.addMusic} disabled={props.busy}><Plus size={17} /> Выбрать файлы</button>)}
       </div>}
-      {isSearch && search.trim().length >= 2 && <OnlineSearch key={search.trim()} query={search.trim()} hasLocal={results.length > 0} saved={saved} disabled={props.busy} choose={props.chooseOnline} />}
+      {isSearch && search.trim().length >= 2 && <>
+        <MusicServiceSearch key={`services:${search.trim()}`} query={search} connected={connected} openVk={props.openVkWebsite} />
+        <OnlineSearch key={search.trim()} query={search.trim()} hasLocal={results.length > 0} saved={saved} disabled={props.busy} choose={props.chooseOnline} />
+      </>}
     </div>
   );
 }

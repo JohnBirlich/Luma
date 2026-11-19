@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { FormEvent, ReactNode } from 'react';
-import { ArrowUpRight, BookmarkPlus, Check, Cloud, CloudOff, Globe2, Link2, ListPlus, Play, Search } from 'lucide-react';
+import type { CSSProperties, FormEvent, ReactNode } from 'react';
+import { ArrowUpRight, BookmarkPlus, Check, Cloud, CloudOff, Globe2, Link2, ListPlus, MonitorPlay, Play, Search } from 'lucide-react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { findOnlineTracks, importOnlineTrack } from '../data/online';
 import { formatTime } from '../shared/media';
+import { MUSIC_SERVICES, serviceSearchUrl } from '../shared/music-search';
+import type { MusicService } from '../shared/music-search';
 import { ONLINE_SOURCES } from '../shared/online';
 import type { OnlineFilter, OnlineTrack } from '../shared/online';
 import { Artwork } from './Artwork';
@@ -29,6 +31,39 @@ export function OnlineCredit({ track, compact }: { track: { online: OnlineTrack[
 function message(error: unknown) {
   return error instanceof Error && !(error instanceof TypeError) && !(error instanceof SyntaxError) && error.name !== 'TimeoutError'
     ? error.message : 'Не удалось связаться с Openverse. Проверьте подключение и повторите попытку.';
+}
+
+export function MusicServiceSearch({ query, connected, openVk }: {
+  query: string; connected: boolean; openVk(url: string): Promise<void>;
+}) {
+  const [failed, setFailed] = useState<MusicService>();
+  const [busy, setBusy] = useState<MusicService>();
+  if (!serviceSearchUrl('vk', query)) return null;
+  return <section className="service-search" aria-labelledby="service-search-title">
+    <header><div className="service-search-mark"><Search size={20} /></div><div><p className="overline">Ваш запрос</p>
+      <h2 id="service-search-title">Найти в музыкальных сервисах</h2><p>Выберите площадку. Результаты и воспроизведение откроются в её плеере, не в очереди Luma.</p></div></header>
+    <div className="service-search-grid">
+      {(Object.keys(MUSIC_SERVICES) as MusicService[]).map((id) => {
+        const { name, mark, tone } = MUSIC_SERVICES[id];
+        const desktopVk = id === 'vk' && Boolean(window.luma);
+        const url = serviceSearchUrl(id, query);
+        return <a key={id} className="service-search-link" style={{ '--service-tone': tone } as CSSProperties}
+          href={connected ? url : undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!connected || busy === id || undefined} onClick={(event) => {
+            if (!connected || busy || !url) { event.preventDefault(); return; }
+            if (!window.luma) return;
+            event.preventDefault(); setFailed(undefined); setBusy(id);
+            const request = desktopVk ? openVk(url) : window.luma.openMusicSearch(id, query);
+            void request.catch(() => setFailed(id)).finally(() => setBusy(undefined));
+          }}>
+          <span className="service-search-glyph" aria-hidden="true">{mark}</span>
+          <span><strong>{name}</strong><small>{busy === id ? 'Открываем…' : desktopVk ? 'Окно VK в Luma' : 'В браузере'}</small></span>
+          {desktopVk ? <MonitorPlay size={15} aria-hidden="true" /> : <ArrowUpRight size={15} aria-hidden="true" />}
+        </a>;
+      })}
+    </div>
+    {failed && <p className="online-message error" role="alert">Не удалось открыть {MUSIC_SERVICES[failed].name}. Проверьте подключение и попробуйте снова.</p>}
+    <p className="online-footnote">{connected ? 'Некоторые сервисы требуют входа, подписки или доступны не во всех регионах.' : 'Для поиска в сервисах нужно подключение к интернету.'}</p>
+  </section>;
 }
 
 export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
@@ -58,7 +93,7 @@ export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
 
   return <section className="online-panel" aria-labelledby="online-title" aria-busy={busy}>
     <header><div className="online-mark"><Globe2 size={20} /></div><div>
-      <p className="overline">Открытые записи</p><h2 id="online-title">Поиск в интернете</h2>
+      <p className="overline">Открытые записи</p><h2 id="online-title">Слушать в Luma</h2>
       <p>{hasLocal ? 'Хотите больше вариантов? Проверьте онлайн-каталоги.' : 'Не нашли в медиатеке? Проверьте онлайн-каталоги.'} Запрос отправляется в Openverse только по кнопке.</p>
     </div></header>
     {!connected && <p className="online-offline" role="status"><CloudOff size={17} /> Устройство вне сети. Онлайн-поиск пока недоступен.</p>}
@@ -66,7 +101,7 @@ export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
       <select value={filter} aria-label="Источник онлайн-поиска" onChange={(event) => {
         pending.current?.abort(); setBusy(false); setTracks(undefined); setError(''); setFilter(event.currentTarget.value as OnlineFilter);
       }}>
-        <option value="all">Все источники</option>
+        <option value="all">Все открытые каталоги</option>
         {Object.entries(ONLINE_SOURCES).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
       </select>
       <button className="button primary-button" type="submit" disabled={busy || !connected || query.trim().length < 2}><Search size={16} /> {busy ? 'Ищем…' : 'Искать онлайн'}</button>

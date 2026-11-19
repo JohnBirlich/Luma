@@ -1,11 +1,12 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { CSSProperties, RefObject } from 'react';
-import { AudioLines, ChevronDown, Heart, ListMusic, Palette, SlidersHorizontal } from 'lucide-react';
+import { AudioLines, ChevronDown, ListMusic, Palette, SlidersHorizontal } from 'lucide-react';
 import type { ReadSpectrum } from '../player/useAudio';
 import type { Appearance } from '../shared/customization';
 import type { Track } from '../shared/media';
 import { OnlineCredit } from './OnlineMusic';
 import { Artwork } from './Artwork';
+import { FavoriteButton } from './FavoriteButton';
 import { SeekTimeline, TransportControls, VolumeControl } from './PlaybackControls';
 import type { PlaybackProps } from './PlaybackControls';
 import { SceneBackground } from './SceneBackground';
@@ -25,6 +26,7 @@ interface FullscreenPlayerProps extends PlaybackProps {
   stage: RefObject<HTMLDivElement | null>;
   close(): void;
   toggleFavorite(id: string): void;
+  toggleQueue(): void;
   openAppearance(): void;
   openEqualizer(): void;
 }
@@ -33,7 +35,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   const { track, tint, appearance, playing, favorite, close } = props;
   const { hero, effect, effectStrength, motion } = appearance;
   const ref = useRef<HTMLDialogElement>(null);
-  const [queueVisible, setQueueVisible] = useState(appearance.fullscreenQueue);
+  const queueVisible = appearance.fullscreenQueue;
   function jumpToQueue() {
     const panel = ref.current?.querySelector<HTMLElement>('#immersive-upcoming');
     panel?.focus({ preventScroll: true });
@@ -46,7 +48,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   }, []);
 
   return <dialog ref={ref} className="immersive-player" aria-labelledby="immersive-title" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <div ref={props.stage} className={`immersive-stage immersive-${hero}`} style={{ '--immersive-tone': tint } as CSSProperties}>
+    <div ref={props.stage} data-effect={effect} className={`immersive-stage immersive-${hero}`} style={{ '--immersive-tone': tint } as CSSProperties}>
       {appearance.coverColors && <Artwork track={track} className="immersive-backdrop" imageUrl={track.backdropUrl} />}
       <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
       <div aria-hidden="true" className="immersive-scrim" />
@@ -54,7 +56,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
         <button type="button" className="icon-button immersive-collapse" onClick={close} title="Свернуть (Esc)" aria-label="Свернуть полноэкранный плеер"><ChevronDown size={24} /></button>
         <div><p className="overline">Сейчас играет</p><strong>{track.online ? 'Онлайн-трек' : track.demo ? 'Демотреки Luma' : 'Локальная медиатека'}</strong></div>
         <div className="immersive-header-actions">
-          <button type="button" className="icon-button immersive-queue-toggle" onClick={() => setQueueVisible((value) => !value)}
+          <button type="button" className="icon-button immersive-queue-toggle" onClick={props.toggleQueue}
             aria-expanded={queueVisible} aria-controls={queueVisible ? 'immersive-upcoming' : undefined} aria-label={queueVisible ? 'Скрыть следующие треки' : 'Показать следующие треки'}
             title={queueVisible ? 'Скрыть следующие треки' : 'Показать следующие треки'}><ListMusic size={20} /></button>
           <div className="immersive-brand" aria-hidden="true"><AudioLines size={19} /><span>Luma Player</span></div>
@@ -67,8 +69,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
         <div className="immersive-content">
           <div className="immersive-meta">
             <div><h1 id="immersive-title" title={track.title}>{track.title}</h1><p title={track.artist}>{track.artist}</p><small title={track.album}>{track.online ? <OnlineCredit track={{ online: track.online }} /> : track.album}</small></div>
-            <button type="button" className="icon-button immersive-favorite" aria-pressed={favorite} onClick={() => props.toggleFavorite(track.id)}
-              aria-label={favorite ? 'Убрать из избранного' : 'В избранное'} title={favorite ? 'Убрать из избранного' : 'В избранное'}><Heart size={23} fill={favorite ? 'currentColor' : 'none'} /></button>
+            <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />
           </div>
           <SeekTimeline {...props} />
           <TransportControls {...props} />

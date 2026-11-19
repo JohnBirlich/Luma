@@ -10,7 +10,6 @@ import { Artwork } from './Artwork';
 import { MenuGroup, MenuItem } from './Menu';
 import { VolumeControl } from './PlaybackControls';
 import type { VolumeProps } from './PlaybackControls';
-import { VkBrowserLink } from './VkMusic';
 import { NowPlayingOptions } from './NowPlayingOptions';
 import { SceneBackground } from './SceneBackground';
 import { VinylRecord } from './VinylRecord';
@@ -100,6 +99,7 @@ interface SettingsProps {
   toggleDemos(): void;
   reset(): void;
   goToMenu(): void;
+  openVk(): void;
 }
 
 const SECTIONS = [
@@ -172,7 +172,7 @@ export function SettingsPage(props: SettingsProps) {
             <SettingCard title="Экран «Сейчас играет»">
               <NowPlayingOptions appearance={appearance} change={changeAppearance} />
               <ToggleRow title="Цвет фона из обложки" detail="Если выключено, фон использует акцент темы." enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
-              <ToggleRow title="Реакция на музыку" detail="Фон откликается на частоты локального трека. При отключении остаётся обычная анимация." enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
+              <ToggleRow title="Реакция на музыку" detail="Спектр и свет в некоторых фонах откликаются на локальный трек. При отключении остаётся обычная анимация." enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
               <label className="setting-row select-row"><span><strong>Темп фона</strong><small>Скорость анимации, не скорость песни.</small></span>
                 <select value={appearance.effectTempo} disabled={appearance.effect === 'off'} onChange={(event) => changeAppearance({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
                   {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{label}</option>)}
@@ -181,7 +181,7 @@ export function SettingsPage(props: SettingsProps) {
             </SettingCard>
             <SettingCard title="Полноэкранный плеер">
               <ToggleRow title="Разворачивать на весь монитор" detail="Если выключено, большой плеер открывается внутри окна Luma." enabled={appearance.nativeFullscreen} change={() => changeAppearance({ ...appearance, nativeFullscreen: !appearance.nativeFullscreen })} />
-              <ToggleRow title="Показывать следующие треки" detail="Открывать очередь «Далее» вместе с большим плеером." enabled={appearance.fullscreenQueue} change={() => changeAppearance({ ...appearance, fullscreenQueue: !appearance.fullscreenQueue })} />
+              <ToggleRow title="Показывать следующие треки" detail="Это же положение переключателя запоминается после выхода из большого плеера." enabled={appearance.fullscreenQueue} change={() => changeAppearance({ ...appearance, fullscreenQueue: !appearance.fullscreenQueue })} />
             </SettingCard>
           </>}
           {section?.id === 'sound' && <SettingCard title="Локальный звук" detail="Luma читает оригинальные файлы и не перекодирует их. Для онлайн-потоков доступны громкость и транспорт, но не эквалайзер.">
@@ -224,7 +224,7 @@ export function SettingsPage(props: SettingsProps) {
               <ToggleRow title="Передавать данные трека системе" detail="Название, исполнитель и обложка для медиапанели. Медиаклавиши работают отдельно." enabled={playback.publishTrack} change={() => changePlayback({ ...playback, publishTrack: !playback.publishTrack })} />
             </SettingCard>
             <SettingCard title="VK Музыка" detail="Вход и личная музыка открываются на официальном сайте. Luma не читает пароль или данные аккаунта.">
-              <div className="settings-actions"><VkBrowserLink /></div>
+              <div className="settings-actions"><button className="button outline-button" type="button" onClick={props.openVk}>Открыть VK Музыку</button></div>
             </SettingCard>
           </>}
           {section?.id === 'storage' && <>

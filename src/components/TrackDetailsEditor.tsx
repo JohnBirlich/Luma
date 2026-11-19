@@ -3,9 +3,11 @@ import { Pencil, RotateCcw, X } from 'lucide-react';
 import { TRACK_DETAIL_LIMIT } from '../data/track-details';
 import type { TrackDetails } from '../data/track-details';
 import { cleanTrackText } from '../shared/russian';
+import type { Track } from '../shared/media';
+import { MetadataLookup } from './MetadataLookup';
 
 interface Props {
-  track: TrackDetails;
+  track: Track;
   edited: boolean;
   save(value?: TrackDetails): void;
   close(): void;
@@ -33,7 +35,7 @@ export function TrackDetailsEditor({ track, edited, save, close }: Props) {
     dismiss();
   }
   return (
-    <dialog ref={dialog} className="cover-dialog" aria-labelledby="track-details-title" aria-describedby="track-details-hint"
+    <dialog ref={dialog} className="cover-dialog track-details-dialog" aria-labelledby="track-details-title" aria-describedby="track-details-hint"
       onCancel={(event) => { event.preventDefault(); dismiss(); }} onClick={(event) => { if (event.target === event.currentTarget) dismiss(); }}>
       <form className="cover-editor" onSubmit={(event) => { event.preventDefault(); if (cleanTrackText(draft.title)) apply({ ...draft, genres: genres.split(',') }); }}>
         <header className="dialog-header">
@@ -51,6 +53,10 @@ export function TrackDetailsEditor({ track, edited, save, close }: Props) {
           <label>Жанры<input type="text" value={genres} placeholder="Через запятую" maxLength={TRACK_DETAIL_LIMIT}
             onChange={(event) => setGenres(event.currentTarget.value)} /></label>
         </div>
+        <MetadataLookup track={track} artistHint={draft.artist} select={(candidate, titleOnly) => setDraft((draft) => ({
+          ...draft, title: candidate.title,
+          ...(!titleOnly && { artist: candidate.artist, album: candidate.album ?? draft.album }),
+        }))} />
         <footer className="dialog-footer cover-footer">
           <button type="button" className="button ghost-button" onClick={() => apply()} disabled={!edited}><RotateCcw size={15} /> Вернуть исходные</button>
           <button type="submit" className="button primary-button" disabled={!cleanTrackText(draft.title)}>Сохранить</button>
