@@ -1,5 +1,5 @@
 import { decodeOpenverse, onlineSearchUrl, OPENVERSE_API, openverseLinkId } from '../shared/online';
-import type { OnlineFilter, OnlineTrack } from '../shared/online';
+import type { CommunitySource, OnlineFilter, OnlineTrack } from '../shared/online';
 
 const MAX_JSON = 512 * 1024;
 
@@ -35,7 +35,20 @@ async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
   } finally { void reader.cancel().catch(() => {}); }
 }
 
+let requestId = 0;
+async function communityTracks(query: string, source: CommunitySource, signal: AbortSignal) {
+  if (!window.luma) throw new Error('Этот каталог доступен в настольной версии Luma.');
+  signal.throwIfAborted();
+  const id = ++requestId;
+  const cancel = () => { void window.luma?.cancelCatalogSearch(id).catch(() => {}); };
+  signal.addEventListener('abort', cancel, { once: true });
+  try { return await window.luma.searchCommunity(id, query.trim().slice(0, 140), source); }
+  catch { throw new Error('Каталог сейчас недоступен. Повторите попытку позже.'); }
+  finally { signal.removeEventListener('abort', cancel); }
+}
+
 export async function findOnlineTracks(query: string, source: OnlineFilter, signal: AbortSignal): Promise<OnlineTrack[]> {
+  if (source === 'ccmixter' || source === 'netlabels') return communityTracks(query, source, signal);
   const data = await getJson(onlineSearchUrl(query, source), signal) as { results?: unknown[] } | null;
   if (!Array.isArray(data?.results)) throw new Error('Каталог вернул неожиданный ответ.');
   const tracks = new Map<string, OnlineTrack>();

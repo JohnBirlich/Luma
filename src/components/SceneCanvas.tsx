@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
+import { initialBeat, sampleBeat } from '../shared/beat';
 import type { ReadSpectrum } from '../player/useAudio';
 import { FIREWORKS_FPS, sceneBufferSize, SPECTRUM_FPS } from '../shared/scene-budget';
 
-const bands = [1, 2, 3, 4, 6, 8, 11, 14, 18, 24, 29, 37, 45, 56, 69, 86, 105, 127];
+const bands = [1, 2, 3, 4, 6, 8, 11, 15, 21, 29, 40, 55, 76, 105, 144, 202, 279, 393];
 const idle = [0.26, 0.36, 0.34, 0.5, 0.64, 0.6, 0.84, 0.9, 0.8, 0.68, 0.64, 0.71, 0.5, 0.43, 0.49, 0.28, 0.22];
 
 function seeded(seed: number) {
@@ -12,13 +13,13 @@ function seeded(seed: number) {
   };
 }
 const scatter = seeded(971);
-const bursts = [
-  { x: .76, y: .24, phase: 0, color: '#ffd4a4' },
-  { x: .29, y: .28, phase: 2.5, color: '#e5affc' },
-  { x: .87, y: .49, phase: 4.9, color: '#92f2e6' },
-].map((burst) => ({ ...burst, sparks: Array.from({ length: 54 }, (_, index) => {
-  const angle = index * 2 * Math.PI / 54 + (scatter() - .5) * .13;
-  const speed = .31 + scatter() * .34;
+const FIREWORKS_CYCLE = 5.9;
+const bursts = Array.from({ length: 6 }, (_, i) => ({
+  x: [.78, .29, .87, .53, .68, .19][i], y: [.19, .32, .44, .17, .52, .22][i], phase: i * FIREWORKS_CYCLE / 6,
+  color: ['#ffd4a4', '#e5affc', '#92f2e6', '#fee6a0', '#96cafc', '#faa5c7'][i],
+})).map((burst) => ({ ...burst, sparks: Array.from({ length: 42 }, (_, index) => {
+  const angle = index * 2 * Math.PI / 42 + (scatter() - .5) * .13;
+  const speed = .32 + scatter() * .39;
   return { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed, life: .9 + scatter() * .62 };
 }) }));
 
@@ -27,7 +28,7 @@ function fireworks(ctx: CanvasRenderingContext2D, w: number, h: number, t: numbe
   ctx.lineWidth = Math.max(.9, Math.min(2.8, size / 246));
   ctx.lineCap = 'round';
   for (const { x, y, color, phase, sparks } of bursts) {
-    const age = ((t + phase) % 6.65) - .74;
+    const age = ((t + phase) % FIREWORKS_CYCLE) - .74;
     const cx = w * x, cy = h * y;
     ctx.strokeStyle = color;
     if (age < 0) {
@@ -63,8 +64,75 @@ function fireworks(ctx: CanvasRenderingContext2D, w: number, h: number, t: numbe
   ctx.globalAlpha = 1;
 }
 
-/** A single bounded surface for the two scenes whose geometry changes each frame. */
-export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'fireworks'; tempo: number; sample?: ReadSpectrum }) {
+const rainDrops = Array.from({ length: 132 }, () => ({ x: scatter(), y: scatter(), depth: scatter() }));
+const reflections = Array.from({ length: 18 }, () => ({ x: .2 + scatter() * .79, y: .62 + scatter() * .34, phase: scatter() * 3 }));
+const meteors = Array.from({ length: 12 }, () => ({ x: scatter(), y: scatter() * .7, phase: scatter() * 4.4, depth: scatter() }));
+const fraction = (v: number) => v - Math.floor(v);
+
+function drawRain(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+  ctx.lineCap = 'round';
+  for (let front = 0; front < 2; front++) {
+    ctx.strokeStyle = front ? '#c3e8ff9c' : '#b4b8ecd5';
+    ctx.globalAlpha = front ? .55 : .36;
+    ctx.lineWidth = front ? Math.max(1, h / 414) : Math.max(.62, h / 690);
+    ctx.beginPath();
+    for (const { x, y, depth } of rainDrops) {
+      if (Number(depth > .68) !== front) continue;
+      const dx = h * (.018 + depth * .034), dy = h * (.03 + depth * .082);
+      const xx = fraction(x - t * (.025 + depth * .071)) * (w + dx) - dx;
+      const yy = fraction(y + t * (.6 + depth * 1.47)) * (h + dy);
+      ctx.moveTo(xx + dx, yy - dy); ctx.lineTo(xx, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#f5d0a1';
+  ctx.lineWidth = Math.max(.75, w / 1460);
+  for (const { x, y, phase } of reflections) {
+    const age = (t + phase) % 1.28;
+    if (age > .76) continue;
+    const radius = (h * .01 + h * .038 * age) * (.3 + y * .8);
+    ctx.globalAlpha = (1 - age / .76) * .5;
+    ctx.beginPath(); ctx.ellipse(x*w, y*h, radius, radius*.19, -.04, 0, Math.PI*2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawMeteors(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+  ctx.lineCap = 'round';
+  for (const { x, y, phase, depth } of meteors) {
+    const age = (t * (.78 + .29 * depth) + phase) % 4.4;
+    if (age > 1.24) continue;
+    const xx = (x + .30 * age - .17) * w, yy = (y + .30 * age - .18) * h;
+    const tail = .08 + depth * .16;
+    const fade = Math.min(1, age * 10) * (1 - age / 1.24);
+    const color = ctx.createLinearGradient(xx, yy, xx - tail*w, yy - tail*h);
+    color.addColorStop(0, '#fef1ff'); color.addColorStop(.26, '#b49effbb'); color.addColorStop(1, '#7b64ef00');
+    ctx.strokeStyle = color; ctx.globalAlpha = fade; ctx.lineWidth = 1.15 + depth * 1.8;
+    ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx-tail*w, yy-tail*h); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawPulse(ctx: CanvasRenderingContext2D, w: number, h: number, ringAges: number[], kick: number, halo: CanvasGradient) {
+  const radius = Math.min(h, w) * .13;
+  const cx = w * .65, cy = h * .49;
+  ctx.globalAlpha = .48 + .52 * kick;
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#c0a9fa';
+  for (const age of ringAges) {
+    const expansion = radius * (1.1 + 3.9 * age);
+    ctx.globalAlpha = .82 * (1 - age / 1.22);
+    ctx.lineWidth = Math.max(1, radius * .065 * (1 - age / 1.47));
+    ctx.beginPath(); ctx.arc(cx, cy, expansion, 0, 2 * Math.PI); ctx.stroke();
+  }
+  ctx.strokeStyle = '#f2e8ff'; ctx.lineWidth = Math.max(1.25, radius * .031); ctx.globalAlpha = .39 + kick * .59;
+  ctx.beginPath(); ctx.arc(cx, cy, radius * (.95 + kick * .22), 0, 2 * Math.PI); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+/** A single bounded surface for scenes whose geometry changes each frame. */
+export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'fireworks' | 'pulse' | 'rain' | 'meteors'; tempo: number; sample?: ReadSpectrum }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const speed = useRef(tempo);
   speed.current = tempo;
@@ -73,16 +141,21 @@ export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'f
     const context = element?.getContext('2d');
     if (!element || !context) return;
     const surface = element, ctx = context;
-    const bins = new Uint8Array(128);
+    const bins = new Uint8Array(512);
+    const beat = initialBeat();
+    const onsets: number[] = [];
     const heights = Float32Array.from(idle);
-    const period = 1000 / (effect === 'spectrum' ? SPECTRUM_FPS : FIREWORKS_FPS);
+    const period = 1000 / (effect === 'spectrum' || effect === 'pulse' ? SPECTRUM_FPS : FIREWORKS_FPS);
     let raf = 0, last = 0, previous = 0, t = 0;
     let palettes: CanvasGradient[] = [];
+    let pulseHalo: CanvasGradient | undefined;
     const resize = new ResizeObserver(([{ contentRect }]) => {
       const { width, height } = sceneBufferSize(contentRect.width, contentRect.height, devicePixelRatio);
       if (width === surface.width && height === surface.height && palettes.length) return;
       surface.width = width;
       surface.height = height;
+      pulseHalo = ctx.createRadialGradient(width * .65, height * .49, 0, width * .65, height * .49, .43 * Math.min(width, height));
+      pulseHalo.addColorStop(0, '#f2c9faac'); pulseHalo.addColorStop(.3, '#c17dec65'); pulseHalo.addColorStop(1, '#873ce500');
       palettes = ['#bda5fd', '#78d8eb', '#f5b2a7'].map((color) => {
         const gradient = ctx.createLinearGradient(0, height, 0, height * .09);
         gradient.addColorStop(0, `${color}04`);
@@ -101,7 +174,16 @@ export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'f
         const { width, height } = surface;
         ctx.clearRect(0, 0, width, height);
         if (effect === 'fireworks') fireworks(ctx, width, height, t + 1.05);
-        else {
+        else if (effect === 'rain') drawRain(ctx, width, height, t);
+        else if (effect === 'meteors') drawMeteors(ctx, width, height, t);
+        else if (effect === 'pulse' && pulseHalo) {
+          const seconds = now / 1000;
+          const live = sample?.(bins);
+          if (live && sampleBeat(beat, bins, seconds)) onsets.push(seconds);
+          if (!live) beat.kick *= .82;
+          while (onsets.length && seconds - onsets[0] >= 1.22) onsets.shift();
+          drawPulse(ctx, width, height, onsets.map((at) => seconds - at), beat.kick, pulseHalo);
+        } else {
           const live = sample?.(bins);
           const slot = width * .89 / idle.length;
           const base = height * .94;

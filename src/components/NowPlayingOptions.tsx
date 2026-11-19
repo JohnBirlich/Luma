@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Activity, AudioLines, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Sparkles, Sunset, Triangle, Waves, X } from 'lucide-react';
+import { Activity, AudioLines, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Sparkles, Sunset, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
 import type { Track } from '../shared/media';
 import type { ReadSpectrum } from '../player/useAudio';
 import { EFFECT_TEMPOS } from '../shared/customization';
@@ -22,13 +22,15 @@ const EFFECTS = [
   { id: 'stars', label: 'Звёзды', description: 'Созвездия и звёздное поле', icon: Sparkles },
   { id: 'spectrum', label: 'Спектр', description: 'Световые полосы частот', icon: AudioLines },
   { id: 'orbits', label: 'Орбиты', description: 'Планета и световые кольца', icon: Orbit },
-  { id: 'prism', label: 'Призма', description: 'Переливы цветных лучей', icon: Triangle },
+  { id: 'prism', label: 'Призма', description: 'Стекло преломляет белый луч', icon: Triangle },
   { id: 'pulse', label: 'Импульс', description: 'Кольца в ритме баса', icon: Activity },
-  { id: 'nebula', label: 'Туманность', description: 'Цветное облако и звёздная пыль', icon: Wind },
+  { id: 'nebula', label: 'Туманность', description: 'Глубокая туманность и параллакс звёзд', icon: Wind },
   { id: 'horizon', label: 'Неон', description: 'Линии горизонта и синтвейв', icon: Sunset },
-  { id: 'kaleidoscope', label: 'Калейдоскоп', description: 'Вращение цветных граней', icon: Grid2X2 },
-  { id: 'fireworks', label: 'Фейерверк', description: 'Мягкие цветные искры', icon: Sparkles },
-  { id: 'rain', label: 'Дождь', description: 'Огни города сквозь мокрое стекло', icon: CloudRain },
+  { id: 'kaleidoscope', label: 'Хромолинии', description: 'Поток переливающихся нитей', icon: Grid2X2 },
+  { id: 'fireworks', label: 'Фейерверк', description: 'Частые цветные залпы', icon: Sparkles },
+  { id: 'rain', label: 'Дождь', description: 'Капли и круги на мокрой улице', icon: CloudRain },
+  { id: 'solar', label: 'Солнечный ветер', description: 'Тёплые нити света', icon: Sun },
+  { id: 'meteors', label: 'Метеоры', description: 'Падающие звёзды и следы', icon: Telescope },
 ] as const;
 
 export interface SceneOptionsProps { appearance: Appearance; change(value: Appearance): void }

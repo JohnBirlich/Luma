@@ -15,8 +15,8 @@ const TYPES = {
   recent: { name: 'Недавно слушали', detail: 'Микс из недавних прослушиваний в Luma.' },
 } as const;
 
-export function MixesPage({ tracks, favorites, favoriteTracks, recent, currentId, playing, fullNumbers, playAll, addMix, goToLibrary }: {
-  tracks: Track[]; favorites: ReadonlySet<string>; favoriteTracks: Track[]; recent: Track[]; currentId: string | null; playing: boolean; fullNumbers: boolean;
+export function MixesPage({ tracks, favorites, favoriteTracks, disliked, recent, currentId, playing, fullNumbers, playAll, addMix, goToLibrary }: {
+  tracks: Track[]; favorites: ReadonlySet<string>; favoriteTracks: Track[]; disliked: ReadonlySet<string>; recent: Track[]; currentId: string | null; playing: boolean; fullNumbers: boolean;
   playAll(items: Track[], start?: string): void; addMix(items: Track[]): void; goToLibrary(): void;
 }) {
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
@@ -33,12 +33,12 @@ export function MixesPage({ tracks, favorites, favoriteTracks, recent, currentId
   const pool = type === 'favorites' ? favoriteTracks : tracks;
   const source = type === 'recent' ? currentHistory : pool;
   const groups = useMemo(() => {
-    const pool = offline || !connected ? source.filter(({ online }) => !online) : source;
+    const pool = source.filter(({ id, online }) => !disliked.has(id) && (!(offline || !connected) || !online));
     return { artist: musicGroups(pool, 'artist', 6), genre: musicGroups(pool, 'genre', 6) };
-  }, [source, connected, offline]);
+  }, [source, connected, offline, disliked]);
   const selected = group && group.kind !== 'album' ? groups[group.kind].find(({ id }) => id === group.id) : undefined;
-  const items = useMemo(() => makeMix(pool, { type, favorites, recent: currentHistory, group: selected ? group : undefined, offline: offline || !connected, seed }),
-    [pool, type, favorites, currentHistory, selected, group, connected, offline, seed]);
+  const items = useMemo(() => makeMix(pool, { type, favorites, disliked, recent: currentHistory, group: selected ? group : undefined, offline: offline || !connected, seed }),
+    [pool, type, favorites, disliked, currentHistory, selected, group, connected, offline, seed]);
   const name = selected ? `Микс: ${selected.label}` : type === 'library' ? 'Микс по моей музыке' : `Микс: ${TYPES[type].name}`;
   const refresh = () => { setHistory(recent); setSeed((previous) => previous + 31337); };
 

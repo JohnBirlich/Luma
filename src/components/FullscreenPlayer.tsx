@@ -6,7 +6,7 @@ import type { Appearance } from '../shared/customization';
 import type { Track } from '../shared/media';
 import { OnlineCredit } from './OnlineMusic';
 import { Artwork } from './Artwork';
-import { FavoriteButton } from './FavoriteButton';
+import { DislikeButton, FavoriteButton } from './FavoriteButton';
 import { SeekTimeline, TransportControls, VolumeControl } from './PlaybackControls';
 import type { PlaybackProps } from './PlaybackControls';
 import { SceneBackground } from './SceneBackground';
@@ -18,6 +18,8 @@ interface FullscreenPlayerProps extends PlaybackProps {
   tint: string;
   appearance: Appearance;
   favorite: boolean;
+  disliked: boolean;
+  toggleDislike(id: string): void;
   readSpectrum: ReadSpectrum;
   sceneVisible: boolean;
   upcoming: Track[];
@@ -49,7 +51,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
 
   return <dialog ref={ref} className="immersive-player" aria-labelledby="immersive-title" onCancel={(event) => { event.preventDefault(); close(); }}>
     <div ref={props.stage} data-effect={effect} className={`immersive-stage immersive-${hero}`} style={{ '--immersive-tone': tint } as CSSProperties}>
-      {appearance.coverColors && <Artwork track={track} className="immersive-backdrop" imageUrl={track.backdropUrl} />}
+      {appearance.coverColors && <Artwork track={track} className={`immersive-backdrop${hero === 'cover' ? ' immersive-cover-backdrop' : ''}`} imageUrl={track.backdropUrl} />}
       <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
       <div aria-hidden="true" className="immersive-scrim" />
       <header className="immersive-header">
@@ -64,12 +66,15 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
       </header>
       <div className="immersive-scroll"><div className={`immersive-main${queueVisible ? ' immersive-with-queue' : ''}`}>
         <div className="immersive-art">
-          {hero === 'vinyl' ? <VinylRecord track={track} animate={motion && playing && props.sceneVisible} /> : <Artwork track={track} />}
+          {hero === 'vinyl' ? <VinylRecord track={track} animate={motion && playing && props.sceneVisible} /> : <Artwork track={track} imageUrl={hero === 'cover' ? track.backdropUrl : undefined} />}
         </div>
         <div className="immersive-content">
           <div className="immersive-meta">
             <div><h1 id="immersive-title" title={track.title}>{track.title}</h1><p title={track.artist}>{track.artist}</p><small title={track.album}>{track.online ? <OnlineCredit track={{ online: track.online }} /> : track.album}</small></div>
-            <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />
+            <div className="immersive-feedback">
+              <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />
+              <DislikeButton track={track} selected={props.disliked} toggle={props.toggleDislike} immersive />
+            </div>
           </div>
           <SeekTimeline {...props} />
           <TransportControls {...props} />

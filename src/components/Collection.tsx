@@ -14,7 +14,7 @@ import type { Track } from '../shared/media';
 import type { Appearance, LibraryLayout } from '../shared/customization';
 import { musicSearchKey } from '../shared/russian';
 import { Artwork } from './Artwork';
-import { FavoriteButton } from './FavoriteButton';
+import { DislikeButton, FavoriteButton } from './FavoriteButton';
 import { Signal } from './QueuePanel';
 import { SceneBackground } from './SceneBackground';
 import { VinylRecord } from './VinylRecord';
@@ -31,10 +31,12 @@ interface TrackCardProps {
   editDetails?(id: string): void;
   remove?(id: string): void;
   favorite?: boolean;
+  disliked?: boolean;
+  toggleDislike?(id: string): void;
   toggleFavorite?(id: string): void;
 }
 
-function TrackCard({ track, active, playing, row, play, add, editCover, editDetails, remove, favorite, toggleFavorite }: TrackCardProps) {
+function TrackCard({ track, active, playing, row, play, add, editCover, editDetails, remove, favorite, disliked, toggleFavorite, toggleDislike }: TrackCardProps) {
   return (
     <article className={`track-card${row ? ' track-list-item' : ''}${active ? ' track-card-active' : ''}${active && playing ? ' track-card-playing' : ''}`}>
       <button type="button" className="card-play" onClick={() => play(track.id)} aria-label={`${active && playing ? 'Приостановить' : 'Воспроизвести'} ${track.title}`}>
@@ -51,6 +53,7 @@ function TrackCard({ track, active, playing, row, play, add, editCover, editDeta
       {add && <div className="card-details">
         <span className="track-length" title={track.album}>{!row && <>{track.album} <span aria-hidden="true">·</span> </>}{formatTime(track.duration)}</span>
         {toggleFavorite && <FavoriteButton track={track} selected={Boolean(favorite)} toggle={toggleFavorite} />}
+        {toggleDislike && <DislikeButton track={track} selected={Boolean(disliked)} toggle={toggleDislike} />}
         {editDetails && !track.demo && !track.online && <button type="button" className="icon-button" onClick={() => editDetails(track.id)} title="Редактировать данные трека" aria-label={`Данные трека: ${track.title}`} aria-haspopup="dialog"><Pencil size={15} /></button>}
         {editCover && <button type="button" className="icon-button" onClick={() => editCover(track.id)} title="Редактировать обложку" aria-label={`Обложка: ${track.title}`} aria-haspopup="dialog"><ImagePlus size={16} /></button>}
         <button type="button" className="icon-button" onClick={() => add(track.id)} title="В очередь" aria-label={`Добавить ${track.title} в очередь`}><ListPlus size={17} /></button>
@@ -66,6 +69,8 @@ interface PlayerPageProps {
   tracks: Track[];
   recent: Track[];
   favoriteIds: ReadonlySet<string>;
+  disliked: ReadonlySet<string>;
+  toggleDislike(id: string): void;
   connected: boolean;
   elapsed: number;
   autoLyrics: boolean;
@@ -100,13 +105,13 @@ export function PlayerPage(props: PlayerPageProps) {
   const artwork = fallback ? DEFAULT_ARTWORK_URL : source;
   const showPicture = !!track && (hero === 'cover' || hero === 'blur');
   const centered = hero === 'center';
-  const picks = useMemo(() => homeRecommendations(tracks, props.recent, props.favoriteIds, !props.connected), [tracks, props.recent, props.favoriteIds, props.connected]);
+  const picks = useMemo(() => homeRecommendations(tracks, props.recent, props.favoriteIds, !props.connected, props.disliked), [tracks, props.recent, props.favoriteIds, props.connected, props.disliked]);
   const homeSections = [
     { label: 'Похожее на прослушанное', items: picks.related, icon: Headphones },
     { label: 'Открытия в медиатеке', items: picks.discoveries, icon: Sparkles },
     { label: 'Недавно слушали', items: picks.recent, icon: History },
   ];
-  const featured = (tracks.length > 1 ? tracks.filter(({ id }) => id !== track?.id) : tracks).slice(0, 4);
+  const featured = tracks.filter(({ id }) => (tracks.length === 1 || id !== track?.id) && !props.disliked.has(id)).slice(0, 4);
   return (
     <div className="page player-page">
       <header className="page-header">
@@ -142,6 +147,7 @@ export function PlayerPage(props: PlayerPageProps) {
             </button>
             {track && <>
               <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />
+              <DislikeButton track={track} selected={props.disliked.has(track.id)} toggle={props.toggleDislike} />
               <button type="button" className="icon-button hero-fullscreen" onClick={props.openPresentation} aria-label="Развернуть текущий трек" title="Во весь экран (F)" aria-haspopup="dialog"><Maximize2 size={17} /></button>
             </>}
           </div>
@@ -184,6 +190,8 @@ interface LibraryPageProps {
   initialScope?: 'all' | 'offline';
   fullNumbers: boolean;
   favorites: ReadonlySet<string>;
+  disliked: ReadonlySet<string>;
+  toggleDislike(id: string): void;
   toggleFavorite(id: string): void;
   goToLibrary(): void;
   layout: LibraryLayout;
@@ -287,7 +295,7 @@ export function LibraryPage(props: LibraryPageProps) {
       </div>
       {results.length ? <div className={isList ? 'track-list' : 'track-grid library-grid'}>
         {results.map((track) => <TrackCard key={track.id} track={track} active={track.id === props.currentId} playing={props.playing} row={isList}
-          play={props.play} add={props.add} editCover={props.editCover} editDetails={props.editDetails} remove={props.remove} favorite={props.favorites.has(track.id)} toggleFavorite={props.toggleFavorite} />)}
+          play={props.play} add={props.add} editCover={props.editCover} editDetails={props.editDetails} remove={props.remove} favorite={props.favorites.has(track.id)} toggleFavorite={props.toggleFavorite} disliked={props.disliked.has(track.id)} toggleDislike={props.toggleDislike} />)}
       </div> : isSearch && term ? <p className="search-local-empty">В медиатеке нет совпадений.</p> : <div className="empty-library">
         <div>{isRecent ? <History size={27} /> : isFavorites ? <Heart size={27} /> : scopeId === 'online' ? <Cloud size={27} /> : <Music2 size={27} />}</div><h2>{term ? 'Ничего не нашлось' : isRecent ? 'История пока пуста' : isFavorites ? 'Сохраните любимые треки' : scopeId === 'online' ? 'Нет сохранённых онлайн-треков' : 'Здесь будет ваша музыка'}</h2>
         <p>{term ? 'Попробуйте поискать по части названия или имени исполнителя.' : isRecent ? 'Прослушанные треки появятся здесь, если в настройках включена история.' : isFavorites ? 'Нажмите на сердце рядом с треком или на экране «Сейчас играет».' : scopeId === 'online' ? 'Найдите запись в онлайн-поиске или вставьте ссылку Openverse выше.' : 'Перетащите аудиофайлы в окно или выберите их на компьютере.'}</p>

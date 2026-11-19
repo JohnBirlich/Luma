@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
 import { CircleAlert, CircleCheck, FileAudio, X } from 'lucide-react';
 import { Sidebar, TitleBar } from './components/Chrome';
@@ -18,6 +18,7 @@ import { NowPlayingDialog } from './components/NowPlayingOptions';
 import { PlayerBar } from './components/PlayerBar';
 import { QueuePanel } from './components/QueuePanel';
 import { SettingsPage } from './components/Settings';
+import type { SettingsSectionId } from './components/Settings';
 import { TrackDetailsEditor } from './components/TrackDetailsEditor';
 import { VkModeBar, VkMusicPage } from './components/VkMusic';
 import { VkWebsitePanel } from './components/VkWebsitePanel';
@@ -77,6 +78,10 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [working, setWorking] = useState(false);
   const [page, setPage] = useState<Page>(boot.playback.startPage === 'local' ? 'library' : boot.playback.startPage);
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>();
+  const settingsFrom = useRef<{ page: Exclude<Page, 'settings'>; top: number }>({ page: 'player', top: 0 });
+  const returningTop = useRef(0);
+  const basePage = page === 'settings' ? settingsFrom.current.page : page;
   const [libraryScope, setLibraryScope] = useState<'all' | 'offline'>(boot.playback.startPage === 'local' ? 'offline' : 'all');
   const [vkWidgetOpen, setVkWidgetOpen] = useState(false);
   const isVkPage = page === 'vk' && vkWidgetOpen;
@@ -135,6 +140,7 @@ export default function App() {
   const collection = useMemo(() => tracks.filter(({ online, id }) => !online || savedOnline.has(id)), [tracks, savedOnline]);
   const byId = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
   const favoriteIds = useMemo(() => new Set(preferences.favorites), [preferences.favorites]);
+  const dislikedIds = useMemo(() => new Set(preferences.disliked), [preferences.disliked]);
   const favorites = useMemo(() => tracks.filter(({ id }) => favoriteIds.has(id)), [tracks, favoriteIds]);
   const recent = useMemo(() => preferences.recent.flatMap((id) => byId.get(id) ?? []), [byId, preferences.recent]);
   const current = byId.get(queue.currentId ?? '') ?? null;
@@ -205,7 +211,11 @@ export default function App() {
     if (boot.playback.autoPlay && page !== 'vk' && !vkPlayback && current && !current.online && !isPlaying()) play();
   }, [ready, boot, page, vkPlayback, current, isPlaying, play]);
   useEffect(() => { if (presentationOpen && (!current || isVkPage)) closePresentation(); }, [presentationOpen, current, isVkPage, closePresentation]);
-  useEffect(() => { scrollArea.current?.scrollTo({ top: 0 }); if (page !== 'vk') setVkWidgetOpen(false); }, [page, libraryScope]);
+  useLayoutEffect(() => {
+    scrollArea.current?.scrollTo({ top: returningTop.current });
+    returningTop.current = 0;
+  }, [page, libraryScope]);
+  useEffect(() => { if (page !== 'vk') setVkWidgetOpen(false); }, [page]);
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(undefined), notice.error ? 8500 : 4800);
@@ -315,6 +325,19 @@ export default function App() {
   }
   function filesDragged(event: DragEvent): boolean { return event.dataTransfer.types.includes('Files'); }
 
+  const exitSettings = useCallback(() => {
+    setVkVisit(undefined);
+    returningTop.current = settingsFrom.current.top;
+    setPage(settingsFrom.current.page);
+  }, []);
+  const openSettings = useCallback(() => {
+    if (page === 'settings') { exitSettings(); return; }
+    settingsFrom.current = { page, top: scrollArea.current?.scrollTop ?? 0 };
+    setVkVisit(undefined);
+    if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
+    setPage('settings');
+  }, [page, exitSettings]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || modalOpen) return;
@@ -328,11 +351,7 @@ export default function App() {
       }
       if (!presentationOpen && (event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'Comma') {
         event.preventDefault();
-        if (!event.repeat) {
-          setVkVisit(undefined);
-          setPage('settings');
-          if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
-        }
+        if (!event.repeat) openSettings();
         return;
       }
       if (!presentationOpen && (event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyO') {
@@ -356,7 +375,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [choose, mute, seek, toggle, modalOpen, presentationOpen, showPresentation, closePresentation, current, queueOpen, vkPlayback, vkVisit, widget, changeWidget, playback.seekStep]);
+  }, [choose, mute, seek, toggle, modalOpen, presentationOpen, showPresentation, closePresentation, current, queueOpen, vkPlayback, vkVisit, widget, changeWidget, openSettings, playback.seekStep]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -380,7 +399,7 @@ export default function App() {
       removeQueued(id);
       void updateCover(trackCoverKey(id));
       updateDetails(id);
-      setPreferences((data) => ({ ...data, favorites: data.favorites.filter((favorite) => favorite !== id), recent: data.recent.filter((recentId) => recentId !== id) }));
+      setPreferences((data) => ({ ...data, favorites: data.favorites.filter((favorite) => favorite !== id), disliked: data.disliked.filter((item) => item !== id), recent: data.recent.filter((recentId) => recentId !== id) }));
       setNotice({ message: 'Трек убран из медиатеки', detail: 'Исходный файл не удалён.' });
     } catch {
       setNotice({ message: 'Не удалось убрать трек из медиатеки.', error: true });
@@ -514,6 +533,11 @@ export default function App() {
   const toggleCompact = () => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, compactSidebar: !data.appearance.compactSidebar } }));
   const toggleFavorite = useCallback((id: string) => setPreferences((data) => ({
     ...data, favorites: data.favorites.includes(id) ? data.favorites.filter((favorite) => favorite !== id) : [...data.favorites, id],
+    disliked: data.disliked.filter((item) => item !== id),
+  })), []);
+  const toggleDislike = useCallback((id: string) => setPreferences((data) => ({
+    ...data, disliked: data.disliked.includes(id) ? data.disliked.filter((item) => item !== id) : [...data.disliked, id],
+    favorites: data.favorites.filter((item) => item !== id),
   })), []);
   const backToMenu = useCallback(() => setPage('menu'), []);
   const changeLibraryLayout = (libraryLayout: LibraryLayout) => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, libraryLayout } }));
@@ -548,15 +572,29 @@ export default function App() {
         setDropActive(false);
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
-      {!widget && <TitleBar openSettings={() => navigate('settings')} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready || Boolean(vkVisit)} />}
+      {!widget && <TitleBar openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready || Boolean(vkVisit)} />}
       {!widget && <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready || Boolean(vkVisit)} count={collection.length} favoriteCount={favorites.length}
         fullNumbers={appearance.fullNumbers} vkWebsiteOpen={Boolean(vkVisit)} queued={queued.length} queueOpen={queueOpen} vkWidgetOpen={vkPlayback} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
         compact={appearance.compactSidebar} toggleCompact={toggleCompact} />}
       <main className={`main-pane${vkVisit ? ' vk-site-active' : ''}`} ref={scrollArea}>
-        <div key={page} className="page-body" hidden={Boolean(vkVisit) || widget}>
-        {page === 'vk' ? <VkMusicPage openWebsite={openVkWebsite} widgetOpen={isVkPage} connected={connected} toggleWidget={(open) => { if (open) pause(); setVkWidgetOpen(open); }} covers={covers} editCover={setCoverTarget} discardCover={(key) => { void updateCover(key); }} /> :
-          page === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :
-          page === 'settings' ? <SettingsPage appearance={appearance} effectiveAppearance={effectiveAppearance} locale={locale} playback={playback} audioQuality={audioQuality}
+        <div key={basePage} className="page-body" hidden={Boolean(vkVisit) || widget || page === 'settings'}>
+        {basePage === 'vk' ? <VkMusicPage openWebsite={openVkWebsite} widgetOpen={isVkPage} connected={connected} toggleWidget={(open) => { if (open) pause(); setVkWidgetOpen(open); }} covers={covers} editCover={setCoverTarget} discardCover={(key) => { void updateCover(key); }} /> :
+          basePage === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :
+          basePage === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers} ready={ready && !working}
+            openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={() => navigate('mixes')} openDiagnostics={() => navigate('diagnostics')} openVk={() => navigate('vk')} addMusic={choose} /> :
+          basePage === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} disliked={dislikedIds} recent={recent} fullNumbers={appearance.fullNumbers}
+            playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :
+          basePage === 'player' ? <PlayerPage track={current} tracks={collection} tint={tint} appearance={effectiveAppearance}
+            recent={recent} favoriteIds={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} connected={connected} elapsed={player.elapsed} autoLyrics={preferences.autoLyrics} openMixes={() => navigate('mixes')} playing={player.playing} position={queue.order.indexOf(current?.id ?? '') + 1}
+            count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle} play={(id) => playTrack(id, true)} goToLibrary={goToLibrary}
+            favorite={Boolean(current && favoriteIds.has(current.id))} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)} openPresentation={showPresentation} sceneVisible={page !== 'settings' && !presentationOpen && !modalOpen} readSpectrum={player.readSpectrum}
+            openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} /> :
+          <LibraryPage key={`${basePage}:${libraryScope}`} initialScope={basePage === 'library' ? libraryScope : 'all'} fullNumbers={appearance.fullNumbers} tracks={basePage === 'favorites' ? favorites : basePage === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
+            mode={basePage === 'favorites' || basePage === 'search' || basePage === 'recent' ? basePage : 'library'} favorites={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
+            chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
+        </div>
+        {page === 'settings' && !vkVisit && !widget && <div className="page-body" key="settings">
+          <SettingsPage appearance={appearance} effectiveAppearance={effectiveAppearance} locale={locale} playback={playback} audioQuality={audioQuality}
             playingStream={player.stream?.id === current?.id ? player.stream?.url : undefined} connected={connected}
             metered={audioQuality.network === 'auto' ? metered : audioQuality.network === 'metered'}
             autoLyrics={preferences.autoLyrics} exportLyrics={preferences.exportLyrics} showDemos={preferences.showDemos} libraryReady={ready && !working}
@@ -569,20 +607,8 @@ export default function App() {
             toggleEffects={() => setPreferences((data) => ({ ...data, equalizer: { ...data.equalizer, enabled: !data.equalizer.enabled } }))}
             openLocalLibrary={() => navigate('library', 'offline')} openWidget={() => { void changeWidget(true); }}
             openTrackInfo={current && !current.demo && !current.online ? () => editTrackDetails(current.id) : undefined}
-            openVk={() => openVkWebsite(VK_MUSIC_URL)} reset={resetCustomization} goToMenu={() => navigate('menu')} /> :
-          page === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers} ready={ready && !working} eqEnabled={preferences.equalizer.enabled}
-            openSettings={() => navigate('settings')} openEqualizer={openEqualizer} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={() => navigate('mixes')} openDiagnostics={() => navigate('diagnostics')} openVk={() => navigate('vk')} addMusic={choose} /> :
-          page === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} recent={recent} fullNumbers={appearance.fullNumbers}
-            playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :
-          page === 'player' ? <PlayerPage track={current} tracks={collection} tint={tint} appearance={effectiveAppearance}
-            recent={recent} favoriteIds={favoriteIds} connected={connected} elapsed={player.elapsed} autoLyrics={preferences.autoLyrics} openMixes={() => navigate('mixes')} playing={player.playing} position={queue.order.indexOf(current?.id ?? '') + 1}
-            count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle} play={(id) => playTrack(id, true)} goToLibrary={goToLibrary}
-            favorite={Boolean(current && favoriteIds.has(current.id))} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)} openPresentation={showPresentation} sceneVisible={!presentationOpen && !modalOpen} readSpectrum={player.readSpectrum}
-            openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} /> :
-          <LibraryPage key={`${page}:${libraryScope}`} initialScope={page === 'library' ? libraryScope : 'all'} fullNumbers={appearance.fullNumbers} tracks={page === 'favorites' ? favorites : page === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
-            mode={page === 'favorites' || page === 'search' || page === 'recent' ? page : 'library'} favorites={favoriteIds} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
-            chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
-        </div>
+            openVk={() => openVkWebsite(VK_MUSIC_URL)} reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
+        </div>}
         {vkVisit && <VkWebsitePanel url={vkVisit} close={closeVkWebsite} />}
       </main>
       {!vkPlayback && !widget && queueOpen && <>
@@ -594,7 +620,7 @@ export default function App() {
       : vkPlayback ? <VkModeBar website={Boolean(vkVisit)} closeWidget={vkVisit ? closeVkWebsite : () => setVkWidgetOpen(false)} /> : <PlayerBar {...localControls} track={current} classic={appearance.classicDock}
         goToPlayer={() => setPage('player')} openPresentation={showPresentation} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
       {presentationOpen && current && !vkPlayback && !widget && <FullscreenPlayer {...localControls} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={appearance}
-        favorite={favoriteIds.has(current.id)} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
+        favorite={favoriteIds.has(current.id)} disliked={dislikedIds.has(current.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
         toggleQueue={() => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, fullscreenQueue: !data.appearance.fullscreenQueue } }))}
         openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} />}
       <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />

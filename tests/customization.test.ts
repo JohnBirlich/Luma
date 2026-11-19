@@ -10,7 +10,7 @@ test('customization reads old profiles without altering queue, volume or equaliz
     equalizer: { enabled: true, preset: 'custom', preamp: -2, gains: [1, 2, 3, 4, 5] },
     queue: { order: ['local-1'], currentId: 'local-1', beforeShuffle: null, repeat: 'one' },
   };
-  assert.deepEqual(decodePreferences(JSON.stringify(previous)), { ...previous, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], recent: [], onlineTracks: [], onlineRefs: [] });
+  assert.deepEqual(decodePreferences(JSON.stringify(previous)), { ...previous, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], onlineTracks: [], onlineRefs: [] });
 });
 
 test('customization persists valid choices and validates each stored field', () => {

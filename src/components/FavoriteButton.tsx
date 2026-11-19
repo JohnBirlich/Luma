@@ -1,4 +1,4 @@
-import { Heart } from 'lucide-react';
+import { Heart, ThumbsDown } from 'lucide-react';
 import type { Track } from '../shared/media';
 
 export function FavoriteButton({ track, selected, toggle, immersive }: {
@@ -19,5 +19,15 @@ export function FavoriteButton({ track, selected, toggle, immersive }: {
     }}>
     <Heart size={immersive ? 23 : 16} fill={selected ? 'currentColor' : 'none'} />
     <span className="like-sparks" aria-hidden="true" />
+  </button>;
+}
+
+export function DislikeButton({ track, selected, toggle, immersive }: {
+  track: Track; selected: boolean; toggle(id: string): void; immersive?: boolean;
+}) {
+  const label = selected ? 'Вернуть в рекомендации' : 'Не рекомендовать';
+  return <button type="button" className={`icon-button dislike-toggle${immersive ? ' immersive-favorite' : ''}`}
+    aria-pressed={selected} aria-label={immersive ? label : `${label}: ${track.title}`} title={label} onClick={() => toggle(track.id)}>
+    <ThumbsDown size={immersive ? 21 : 16} fill={selected ? 'currentColor' : 'none'} aria-hidden="true" />
   </button>;
 }

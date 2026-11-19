@@ -8,6 +8,7 @@ import type { AppInfo } from '../src/shared/app-info.js';
 import { desktopAppInfo } from './app-info.js';
 import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js';
 import { DesktopDiagnostics } from './diagnostics.js';
+import { searchCommunity } from '../src/shared/community-catalogs.js';
 import { isOnlineExternalUrl } from '../src/shared/online.js';
 import { createLyricsService } from '../src/shared/lyrics-service.js';
 import { createOnlineExporter } from './online-export.js';
@@ -99,6 +100,21 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     appWindow(event);
     if (!isMetadataPage(url)) throw new Error('Unsupported recording link');
     return shell.openExternal(url);
+  });
+  let catalogSearch: { id: number; controller: AbortController } | undefined;
+  ipcMain.handle('online:search-community', async (event, id: unknown, query: unknown, filter: unknown) => {
+    appWindow(event);
+    if (typeof id !== 'number' || !Number.isSafeInteger(id) || (filter !== 'ccmixter' && filter !== 'netlabels')) return [];
+    catalogSearch?.controller.abort();
+    const controller = new AbortController();
+    catalogSearch = { id, controller };
+    try {
+      return await searchCommunity(net.fetch, query, filter, AbortSignal.any([controller.signal, AbortSignal.timeout(11_000)]));
+    } finally { if (catalogSearch?.controller === controller) catalogSearch = undefined; }
+  });
+  ipcMain.handle('online:cancel-search', (event, id: unknown) => {
+    appWindow(event);
+    if (catalogSearch && catalogSearch.id === id) catalogSearch.controller.abort();
   });
   ipcMain.handle('online:open-link', (event, url: unknown) => {
     appWindow(event);

@@ -28,7 +28,7 @@ export function OnlineCredit({ track, compact }: { track: { online: OnlineTrack[
 
 function message(error: unknown) {
   return error instanceof Error && !(error instanceof TypeError) && !(error instanceof SyntaxError) && error.name !== 'TimeoutError'
-    ? error.message : 'Не удалось связаться с Openverse. Проверьте подключение и повторите попытку.';
+    ? error.message : 'Не удалось связаться с каталогом. Проверьте подключение и повторите попытку.';
 }
 
 export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabled, choose }: {
@@ -58,16 +58,16 @@ export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabl
   return <section className="online-panel" aria-labelledby="online-title" aria-busy={busy}>
     <header><div className="online-mark"><Globe2 size={20} /></div><div>
       <p className="overline">Слушать в Luma</p><h2 id="online-title">Найти в музыкальных сервисах</h2>
-      <p>{hasLocal ? 'Хотите больше вариантов? Нажмите «Искать онлайн», чтобы отправить запрос в Openverse.'
-        : 'Отправьте запрос в Openverse кнопкой «Искать онлайн» или клавишей Enter.'}</p>
+      <p>{hasLocal ? 'Хотите больше вариантов? Нажмите «Искать онлайн», чтобы отправить запрос в выбранный каталог.'
+        : 'Отправьте запрос в выбранный каталог кнопкой «Искать онлайн» или клавишей Enter.'}</p>
     </div></header>
     {!connected && <p className="online-offline" role="status"><CloudOff size={17} /> Устройство вне сети. Онлайн-поиск пока недоступен.</p>}
     <form id="online-search-form" className="online-search-form" onSubmit={search}>
       <select value={filter} aria-label="Источник онлайн-поиска" onChange={(event) => {
         pending.current?.abort(); setBusy(false); setTracks(undefined); setError(''); setFilter(event.currentTarget.value as OnlineFilter);
       }}>
-        <option value="all">Все открытые каталоги</option>
-        {Object.entries(ONLINE_SOURCES).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        <option value="all">Jamendo + Wikimedia Commons</option>
+        {Object.entries(ONLINE_SOURCES).map(([id, name]) => <option key={id} value={id}>{name}{!window.luma && (id === 'ccmixter' || id === 'netlabels') ? ' · Windows' : ''}</option>)}
       </select>
       <button className="button primary-button" type="submit" disabled={busy || !connected || query.trim().length < 2}><Search size={16} /> {busy ? 'Ищем…' : 'Искать онлайн'}</button>
     </form>

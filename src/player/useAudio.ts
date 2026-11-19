@@ -40,8 +40,8 @@ class AudioGraph {
   });
 
   constructor(audio: HTMLAudioElement) {
-    this.analyser.fftSize = 256;
-    this.analyser.smoothingTimeConstant = 0.78;
+    this.analyser.fftSize = 1024;
+    this.analyser.smoothingTimeConstant = 0.61;
     const chain: AudioNode[] = [this.preamp, ...this.filters, this.analyser, this.master, this.context.destination];
     chain.slice(1).forEach((node, index) => chain[index].connect(node));
     this.connect(audio);

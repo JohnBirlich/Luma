@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, History, Info, Music2, Radio, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, History, Info, Music2, Radio, Settings2, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
 import { About } from './About';
@@ -33,9 +33,7 @@ interface MenuPageProps {
   localCount: number;
   fullNumbers: boolean;
   ready: boolean;
-  eqEnabled: boolean;
   openSettings(): void;
-  openEqualizer(): void;
   openLibrary(): void;
   openFavorites(): void;
   openRecent(): void;
@@ -70,7 +68,6 @@ export function MenuPage(props: MenuPageProps) {
           </MenuGroup>
           <MenuGroup label="Плеер">
             <MenuItem icon={Settings2} title="Настройки" detail="Внешний вид, медиатека и воспроизведение" select={props.openSettings} />
-            <MenuItem icon={SlidersHorizontal} title="Эквалайзер" detail={props.eqEnabled ? 'Включён · пресеты и пять полос' : 'Выключен · пресеты и пять полос'} select={props.openEqualizer} dialog />
             <MenuItem icon={Bug} title="Диагностика" detail="Журнал событий, подключение и сведения о системе" select={props.openDiagnostics} />
             <MenuItem icon={Info} title="О приложении" detail="Версия Luma, возможности и релизы" select={() => setAbout(true)} />
           </MenuGroup>

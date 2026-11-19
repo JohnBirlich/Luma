@@ -115,7 +115,9 @@ interface SettingsProps {
   changePlayback(playback: PlaybackPreferences): void;
   toggleDemos(): void;
   reset(): void;
-  goToMenu(): void;
+  sectionId: SettingsSectionId | undefined;
+  selectSection(id?: SettingsSectionId): void;
+  returnToTab(): void;
   openVk(): void;
 }
 
@@ -134,7 +136,8 @@ const APP_SECTIONS = [
   { id: 'keys', label: 'Горячие клавиши', detail: 'Управление плеером с клавиатуры', icon: Keyboard },
   { id: 'updates', label: 'Обновления приложения', detail: 'Версия сборки и переход к релизам', icon: ArrowUpCircle },
 ] as const;
-type Section = typeof SECTIONS[number] | typeof APP_SECTIONS[number];
+const allSections = [...SECTIONS, ...APP_SECTIONS];
+export type SettingsSectionId = (typeof allSections)[number]['id'];
 const shortcuts = [
   ['Пробел / K', 'Воспроизведение и пауза'], ['← / →', 'Перемотка'], ['F / Esc', 'Развернуть трек / выйти из большого плеера'],
   ['M', 'Выключить или вернуть звук'], ['Q', 'Очередь в обычном плеере'], ['Ctrl + O', 'Добавить музыку'],
@@ -143,7 +146,7 @@ const shortcuts = [
 
 export function SettingsPage(props: SettingsProps) {
   const { appearance, playback, changeAppearance, changePlayback } = props;
-  const [section, setSection] = useState<Section>();
+  const section = allSections.find(({ id }) => id === props.sectionId);
   const [confirmClear, setConfirmClear] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const formatId = section?.id === 'sound' && props.previewTrack && !props.previewTrack.format && !props.previewTrack.online && !props.previewTrack.demo ? props.previewTrack.id : undefined;
@@ -158,25 +161,26 @@ export function SettingsPage(props: SettingsProps) {
   }, [formatId]);
   const color = appearance.accent ?? THEMES[appearance.theme].accent;
   const accent = accentFor(appearance);
-  useEffect(() => { root.current?.parentElement?.scrollTo({ top: 0 }); }, [section]);
+  useEffect(() => { root.current?.closest('main')?.scrollTo({ top: 0 }); }, [section]);
   const back = () => {
     setConfirmClear(false);
-    if (section) setSection(undefined);
-    else props.goToMenu();
+    if (section) props.selectSection();
+    else props.returnToTab();
   };
   return (
     <div className="page settings-page" ref={root}>
       <header className="page-header settings-header">
-        <button type="button" className="icon-button settings-back" aria-label={section ? 'Назад к настройкам' : 'Назад в меню'} title="Назад" onClick={back}><ArrowLeft size={19} /></button>
+        <button type="button" className="icon-button settings-back" aria-label={section ? 'Назад к настройкам' : 'Вернуться на вкладку'} title="Назад" onClick={back}><ArrowLeft size={19} /></button>
         <div><p className="overline page-kicker"><span />{section ? 'Настройки' : 'Ваш плеер'}</p><h1>{section?.label ?? 'Настройки'}</h1></div>
+        {section && <button type="button" className="button outline-button settings-return" onClick={props.returnToTab}><ArrowLeft size={15} /> К прежней вкладке</button>}
         {!section && <button type="button" className="button outline-button settings-reset" aria-label="Сбросить настройки" onClick={props.reset} disabled={!props.libraryReady} title="Вернуть настройки по умолчанию"><RotateCcw size={16} /> <span>Сбросить настройки</span></button>}
       </header>
       <p className="settings-intro">{section?.detail ?? 'Выберите раздел, чтобы настроить Luma под себя.'}</p>
       <div className="settings-layout">
         <div className="settings-stack">
           {!section && <>
-            <MenuGroup label="Плеер">{SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={item.label} detail={item.detail} select={() => setSection(item)} />)}</MenuGroup>
-            <MenuGroup label="Приложение">{APP_SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={item.label} detail={item.detail} select={() => setSection(item)} />)}</MenuGroup>
+            <MenuGroup label="Плеер">{SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={item.label} detail={item.detail} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
+            <MenuGroup label="Приложение">{APP_SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={item.label} detail={item.detail} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
           </>}
           {section?.id === 'look' && <>
             <SettingCard title="Тема" detail="Меняет фон, панели и цвет элементов управления.">

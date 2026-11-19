@@ -32,9 +32,9 @@ export function musicGroups(tracks: readonly Track[], kind: LibraryGroup, limit 
 }
 
 export function makeMix(tracks: Track[], options: {
-  type: MixType; favorites: ReadonlySet<string>; recent: readonly Track[]; group?: GroupFilter; offline: boolean; seed: number;
+  type: MixType; favorites: ReadonlySet<string>; recent: readonly Track[]; disliked?: ReadonlySet<string>; group?: GroupFilter; offline: boolean; seed: number;
 }): Track[] {
-  const { type, favorites, recent, group, offline, seed } = options;
+  const { type, favorites, recent, group, offline, seed, disliked } = options;
   const listened = new Set(recent.map(({ id }) => id));
   const source = type === 'recent' ? recent : type === 'favorites' ? tracks.filter(({ id }) => favorites.has(id)) : tracks;
   const candidates = group ? tracksInGroup(source, group) : source;
@@ -42,7 +42,7 @@ export function makeMix(tracks: Track[], options: {
   const random = () => (state = (Math.imul(state, 1664525) + 1013904223) >>> 0) / 4294967296;
   const seen = new Set<string>();
   return candidates.filter(({ id, online }) => {
-    if (seen.has(id) || (offline && online)) return false;
+    if (seen.has(id) || disliked?.has(id) || (offline && online)) return false;
     seen.add(id);
     return true;
   }).map((track) => ({ track, rank: random() + (type === 'library' && favorites.has(track.id) ? 0.35 : 0)
@@ -60,12 +60,12 @@ export function shuffledMix(tracks: Track[], random = Math.random): Track[] {
 }
 
 /** Personalize from the actual Luma profile, not demo seeds or a remote listening profile. */
-export function homeRecommendations(collection: readonly Track[], recent: readonly Track[], favorites: ReadonlySet<string>, offline: boolean) {
-  const available = (track: Track) => !track.demo && !(offline && track.online);
+export function homeRecommendations(collection: readonly Track[], recent: readonly Track[], favorites: ReadonlySet<string>, offline: boolean, disliked?: ReadonlySet<string>) {
+  const available = (track: Track) => !track.demo && !disliked?.has(track.id) && !(offline && track.online);
   const listened = new Set(recent.map(({ id }) => id));
   const creators = new Set<string>();
   const genres = new Set<string>();
-  for (const track of recent.filter((track) => !track.demo).slice(0, 12)) {
+  for (const track of recent.filter(available).slice(0, 12)) {
     for (const { id } of labels(track, 'artist')) if (id) creators.add(id);
     for (const { id } of labels(track, 'genre')) if (id) genres.add(id);
   }

@@ -23,6 +23,7 @@ export interface Preferences {
   resumeRepeat: Repeat;
   resumeShuffle: boolean;
   favorites: string[];
+  disliked: string[];
   recent: string[];
   onlineTracks: OnlineTrack[];
   onlineRefs: OnlineTrack[];
@@ -33,7 +34,7 @@ export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, equalizer: defaultEqualizer, appearance: defaultAppearance,
   playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false,
-  resumeRepeat: 'off', resumeShuffle: false, favorites: [], recent: [], onlineTracks: [], onlineRefs: [],
+  resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], onlineTracks: [], onlineRefs: [],
 };
 const readRepeat = (value: unknown): Repeat => value === 'all' || value === 'one' ? value : 'off';
 const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.every((id) => typeof id === 'string');
@@ -51,6 +52,8 @@ export function decodePreferences(value: string | null): Preferences {
     const data = JSON.parse(value ?? 'null') as Partial<Preferences> | null;
     if (!data || typeof data !== 'object') return defaults;
     const eq = data.equalizer;
+    const disliked = readFavorites(data.disliked);
+    const excluded = new Set(disliked);
     const queue = data.queue;
     const playback = readPlayback(data.playback);
     const resumeRepeat = playback.rememberRepeat ? readRepeat(data.resumeRepeat ?? queue?.repeat) : 'off';
@@ -62,7 +65,7 @@ export function decodePreferences(value: string | null): Preferences {
       lastVolume: numeric(data.lastVolume, defaults.lastVolume, 0.01, 1),
       showDemos: data.showDemos !== false,
       appearance: readAppearance(data.appearance),
-      favorites: readFavorites(data.favorites),
+      favorites: readFavorites(data.favorites).filter((id) => !excluded.has(id)), disliked,
       recent: readFavorites(data.recent).slice(0, RECENT_LIMIT),
       onlineTracks: readOnlineShelf(data.onlineTracks),
       onlineRefs: readOnlineShelf(data.onlineRefs),

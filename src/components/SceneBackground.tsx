@@ -16,7 +16,7 @@ interface SceneProps {
   sample?: ReadSpectrum;
 }
 const stillBars = [22, 44, 36, 54, 62, 52, 82, 89, 65, 77, 57, 50, 58, 41, 35, 46, 26];
-const haloEffects = new Set<BackgroundEffect>(['aurora', 'pulse', 'nebula', 'prism', 'orbits', 'stars', 'kaleidoscope']);
+const haloEffects = new Set<BackgroundEffect>(['aurora', 'nebula', 'prism', 'orbits', 'stars', 'solar']);
 
 export const SceneBackground = memo(function SceneBackground({ effect, strength = 0.75, animate = false, tempo = 'normal', sample }: SceneProps) {
   const element = useRef<HTMLDivElement>(null);
@@ -63,14 +63,15 @@ export const SceneBackground = memo(function SceneBackground({ effect, strength 
       <circle cx="398" cy="119" r="4"/><circle cx="607" cy="82" r="3"/><circle cx="219" cy="209" r="2.5" />
     </svg></>}
     {effect === 'spectrum' && !moving && <div className="scene-bars">{stillBars.map((height, index) => <i key={index} style={{ '--bar': height / 100 } as CSSProperties} />)}</div>}
-    {moving && (effect === 'spectrum' || effect === 'fireworks') && <SceneCanvas effect={effect} tempo={factor} sample={effect === 'spectrum' ? sample : undefined} />}
-    {effect === 'pulse' && <div className="scene-pulse-rings"><i /><i /></div>}
-    {effect === 'nebula' && <div className="scene-dust"><i /><i /></div>}
+    {moving && (effect === 'spectrum' || effect === 'fireworks' || effect === 'pulse' || effect === 'rain' || effect === 'meteors') && <SceneCanvas effect={effect} tempo={factor} sample={sample} />}
+    {effect === 'pulse' && !moving && <div className="scene-pulse-still" />}
+    {effect === 'nebula' && <><i className="nebula-plate" /><i className="nebula-stars" /></>}
     {effect === 'orbits' && <><i className="orbit-planet" /><div className="orbit-lines"><i /><i /></div></>}
     {effect === 'horizon' && <><i className="scene-neon-sun" /><i className="scene-neon-floor" /><i className="scene-neon-light" /></>}
-    {effect === 'kaleidoscope' && <div className="scene-facets"><i /><i /></div>}
-    {effect === 'rain' && <><i className="scene-rain-air" /><i className="scene-rain-glass" /></>}
-    {effect === 'prism' && <div className="scene-prism-beams"><i /><i /></div>}
+    {effect === 'kaleidoscope' && <div className="scene-chromatic"><i /><i /></div>}
+    {effect === 'rain' && <i className="rain-glass-beads" />}
+    {effect === 'prism' && <div className="scene-prism-optics" />}
+    {effect === 'solar' && <div className="scene-solar-filaments"><i /><i /></div>}
     {moving && sample && haloEffects.has(effect) && <div className="scene-audio-halo" ref={halo} />}
   </div>;
 });

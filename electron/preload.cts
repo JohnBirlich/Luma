@@ -6,6 +6,8 @@ import type { VkWebsiteState } from '../src/shared/vk.js';
 
 const bridge: DesktopBridge = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
+  searchCommunity: (id, query, source) => ipcRenderer.invoke('online:search-community', id, query, source),
+  cancelCatalogSearch: (id) => ipcRenderer.invoke('online:cancel-search', id),
   openOnlineLink: (url: string) => ipcRenderer.invoke('online:open-link', url),
   openReleases: () => ipcRenderer.invoke('app:releases'),
   getAudioFormat: (id) => ipcRenderer.invoke('library:audio-format', id),

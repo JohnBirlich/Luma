@@ -42,29 +42,21 @@
 .scene-moving .orbit-lines i + i { animation-duration: calc(22s * var(--scene-tempo)); animation-direction: alternate-reverse; }
 @keyframes orbit-turn { from { rotate: -14deg; scale: 1 .78; } to { rotate: 28deg; scale: 1.03 1.04; } }
 
-.scene-prism { background: radial-gradient(ellipse at 67% 44%, #493569, #101222 72%); }
-.scene-prism-beams { position: absolute; inset: 0; }
-.scene-prism-beams i { position: absolute; inset: -8% -8% -7% 16%; clip-path: polygon(0 79%, 76% 3%, 98% 14%, 93% 48%, 23% 91%); background: linear-gradient(133deg, transparent 15%, #75d4ee9c, #ba90ffc2 54%, #ffb9b68e 71%, transparent 89%); opacity: .78; }
-.scene-prism-beams i + i { inset: -10% -5% -8% 20%; clip-path: polygon(10% 35%, 63% 14%, 96% 62%, 91% 93%, 58% 66%, 47% 31%); background: linear-gradient(32deg, transparent 26%, #f2ab93a8, #b08cfea4 58%, #72e4eaa0, transparent); }
-.scene-moving .scene-prism-beams i { animation: prism-shift calc(11s * var(--scene-tempo)) ease-in-out infinite alternate; }
-.scene-moving .scene-prism-beams i + i { animation-duration: calc(15s * var(--scene-tempo)); animation-direction: alternate-reverse; }
-@keyframes prism-shift { from { transform: translate3d(-5%, 2%, 0) rotate(-6deg); opacity: .55; } to { transform: translate3d(5%, -1%, 0) rotate(10deg); opacity: .87; } }
+.scene-prism { background: radial-gradient(ellipse at 64% 49%, #25223e, #0c0c20 67%); }
+.scene-prism-optics { position: absolute; inset: -9% -2%; background: url('./assets/scenes/prism.svg') 64% 51% / cover no-repeat; }
+.scene-moving .scene-prism-optics { animation: refraction-sway calc(13s * var(--scene-tempo)) ease-in-out infinite alternate; }
+@keyframes refraction-sway { from { transform: translate3d(-2%, 1%, 0) scale(1.01); opacity: .86; } to { transform: translate3d(2%, -1%, 0) scale(1.11); opacity: 1; } }
 
-.scene-pulse { background: radial-gradient(ellipse at 68% 49%, #392e62, #121527 72%); }
-.scene-pulse-rings { position: absolute; inset: 0; }
-.scene-pulse-rings i { position: absolute; left: 66%; top: 50%; width: min(76%, 560px); aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; background: repeating-radial-gradient(circle, #bdaeec00 0 8%, #76d1e527 9%, #d6c7fd92 9.6%, #d6c7fd00 10.2% 13.4%); opacity: .71; }
-.scene-pulse-rings i + i { width: min(48%, 390px); background: radial-gradient(circle, #f0b4da69 0%, #a977d353 23%, transparent 63%); opacity: .85; }
-.scene-moving .scene-pulse-rings i { animation: pulse-spread calc(5.3s * var(--scene-tempo)) ease-in-out infinite alternate; }
-.scene-moving .scene-pulse-rings i + i { animation-duration: calc(7s * var(--scene-tempo)); }
-@keyframes pulse-spread { from { scale: .89; opacity: .49; } to { scale: 1.11; opacity: .85; } }
+.scene-pulse { background: radial-gradient(ellipse at 63% 51%, #332556, #0e1123 67%); }
+.scene-pulse-still { position: absolute; inset: 0; background: repeating-radial-gradient(circle at 65% 49%, #e3b7f900 0 7%, #bbadf08a 7.35%, #e3b7f900 7.7% 11%), radial-gradient(circle at 65% 49%, #eebcfd66, transparent 36%); }
 
-.scene-nebula { background: url('./assets/scenes/stars.svg') center / cover no-repeat, radial-gradient(ellipse at 73% 35%, #443064, transparent 72%), #131328; }
-.scene-dust { position: absolute; inset: 0; }
-.scene-dust i { position: absolute; inset: -9% -2% -23% 29%; transform: rotate(-17deg); background: radial-gradient(ellipse at 57% 50%, #f4bce2a1, #c079be61 20%, transparent 57%), radial-gradient(ellipse at 63% 45%, #9883e385, transparent 61%); }
-.scene-dust i + i { inset: -22% 7% -2% 20%; transform: rotate(13deg); background: radial-gradient(ellipse at 59% 43%, #81bce9b0, #5d70c86f 25%, transparent 62%); opacity: .58; }
-.scene-moving .scene-dust i { animation: nebula-drift calc(20s * var(--scene-tempo)) ease-in-out infinite alternate; }
-.scene-moving .scene-dust i + i { animation-direction: alternate-reverse; animation-duration: calc(28s * var(--scene-tempo)); }
-@keyframes nebula-drift { from { translate: -6% 3%; scale: 1 .97; } to { translate: 7% -4%; scale: 1.12 1.14; } }
+.scene-nebula { background: #100d24; }
+.nebula-plate { position: absolute; inset: -8%; background: url('./assets/scenes/nebula.webp') 68% 52% / cover no-repeat; }
+.nebula-stars { position: absolute; inset: -10%; opacity: .43; background: url('./assets/scenes/stars.svg') 52% 40% / cover no-repeat; }
+.scene-moving .nebula-plate { animation: nebula-orbit calc(25s * var(--scene-tempo)) ease-in-out infinite alternate; }
+.scene-moving .nebula-stars { animation: star-parallax calc(34s * var(--scene-tempo)) ease-in-out infinite alternate; }
+@keyframes nebula-orbit { from { transform: translate3d(-2%, 1%, 0) scale(1.02); } to { transform: translate3d(4%, -2%, 0) scale(1.11); } }
+@keyframes star-parallax { from { transform: translate3d(3%, -3%, 0); opacity: .33; } to { transform: translate3d(-4%, 2%, 0); opacity: .59; } }
 
 /* Neon uses a static floor and two cheap light layers; no background-position, perspective or filters. */
 .scene-horizon { background: radial-gradient(ellipse at 70% 52%, #74275e 0, #36204c 33%, transparent 72%), linear-gradient(154deg, #0b1229, #1e1640 64%, #122342); }
@@ -74,21 +66,24 @@
 .scene-moving .scene-neon-light { animation: neon-breathe calc(8s * var(--scene-tempo)) ease-in-out infinite alternate; }
 @keyframes neon-breathe { from { transform: translate3d(-5%, 0, 0) scaleX(.91); opacity: .38; } to { transform: translate3d(4%, 0, 0) scaleX(1.12); opacity: .85; } }
 
-.scene-kaleidoscope { background: radial-gradient(ellipse at 65% 46%, #55446d, #111930 71%); }
-.scene-facets { position: absolute; width: min(84%, 695px); aspect-ratio: 1; left: 67%; top: 50%; translate: -50% -50%; }
-.scene-facets i { position: absolute; inset: 0; border-radius: 50%; opacity: .68; background: repeating-conic-gradient(from 12deg, #7ad3e7a6 0 12deg, #404a7cad 14deg 24deg, #c1a3f0bd 26deg 39deg, #fad9b3a8 41deg 49deg, transparent 51deg 60deg); }
-.scene-facets i + i { inset: 15%; border-radius: 24%; clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%); background: repeating-conic-gradient(from 29deg, #ffe1bcaa 0 25deg, #98dbe6c4 28deg 53deg, #7b54b7aa 57deg 90deg, #27213c 94deg 120deg); }
-.scene-moving .scene-facets i { animation: facet-turn calc(39s * var(--scene-tempo)) linear infinite; }
-.scene-moving .scene-facets i + i { animation-direction: reverse; animation-duration: calc(28s * var(--scene-tempo)); }
-@keyframes facet-turn { to { transform: rotate(1turn); } }
+.scene-kaleidoscope { background: radial-gradient(ellipse at 74% 43%, #2a3462, #0e0922 71%); }
+.scene-chromatic i { position: absolute; inset: -13%; background: url('./assets/scenes/chromatic.svg') 76% center / cover no-repeat; }
+.scene-chromatic i + i { opacity: .39; rotate: -13deg; }
+.scene-moving .scene-chromatic i { animation: chromaline calc(14s * var(--scene-tempo)) ease-in-out infinite alternate; }
+.scene-moving .scene-chromatic i + i { animation-direction: alternate-reverse; animation-duration: calc(19s * var(--scene-tempo)); }
+@keyframes chromaline { from { transform: translate3d(-5%, -1%, 0) scaleY(.89); } to { transform: translate3d(4%, 4%, 0) scaleY(1.13); } }
 
-.scene-rain { background: #102637 url('./assets/scenes/rain.webp') 66% 52% / cover no-repeat; }
-.scene-rain-air { position: absolute; inset: -220px 0 0; background: url('./assets/scenes/rain-air.svg') 0 0 / 370px 220px repeat; opacity: .59; }
-.scene-rain-glass { position: absolute; inset: -344px 0 0; background: url('./assets/scenes/rain-glass.svg') 0 0 / 456px 344px repeat; opacity: .85; }
-.scene-moving .scene-rain-air { animation: rain-air calc(1.05s * var(--scene-tempo)) linear infinite; }
-.scene-moving .scene-rain-glass { animation: rain-glass calc(5.4s * var(--scene-tempo)) linear infinite; }
-@keyframes rain-air { to { transform: translate3d(0, 220px, 0); } }
-@keyframes rain-glass { to { transform: translate3d(0, 344px, 0); } }
+.scene-rain { background: #102637 url('./assets/scenes/rain.webp') 65% 52% / cover no-repeat; }
+.rain-glass-beads { position: absolute; inset: 0; opacity: .63; background: radial-gradient(ellipse 6px 13px at 85% 16%, #f1f5ff66, #fff0), radial-gradient(ellipse 3px 8px at 67% 35%, #b7d4ed66, #fff0), radial-gradient(ellipse 4px 10px at 79% 62%, #c9e8f85d, #fff0), radial-gradient(ellipse 7px 11px at 95% 42%, #d5b0cb59, #fff0); }
+
+.scene-solar { background: radial-gradient(ellipse at 75% 35%, #6a2a3f, #241429 44%, #100d21 83%); }
+.scene-solar-filaments i { position: absolute; inset: -15%; background: url('./assets/scenes/solar-wind.svg') right center / cover no-repeat; }
+.scene-solar-filaments i + i { inset: -18% -13% -18% 16%; opacity: .44; rotate: 11deg; }
+.scene-moving .scene-solar-filaments i { animation: solar-wash calc(12s * var(--scene-tempo)) ease-in-out infinite alternate; }
+.scene-moving .scene-solar-filaments i + i { animation-direction: alternate-reverse; animation-duration: calc(18s * var(--scene-tempo)); }
+@keyframes solar-wash { from { transform: translate3d(-4%, 2%, 0) scale(.97); } to { transform: translate3d(5%, -3%, 0) scale(1.12); } }
+.scene-meteors { background: url('./assets/scenes/stars.svg') center / cover no-repeat, radial-gradient(ellipse at 73% 30%, #382e6b, #161834 53%, #0d0e24); }
+.scene-meteors:not(.scene-moving)::after { position: absolute; inset: 0; content: ''; background: linear-gradient(38deg, #fff0 68%, #c0b1fd88 68.2%, #fff0 68.6%) 66% 15% / 32% 51% no-repeat; }
 
 .scene-fireworks { background: url('./assets/scenes/stars.svg') center / cover no-repeat, radial-gradient(ellipse at 73% 34%, #472945, transparent 47%), radial-gradient(ellipse at 25% 64%, #241c40, transparent 50%), linear-gradient(132deg, #0f152b, #100f23); }
 .scene-fireworks:not(.scene-moving)::after { content: ''; position: absolute; inset: 0; background: url('./assets/scenes/fireworks.svg') center / 100% 100% no-repeat; }
