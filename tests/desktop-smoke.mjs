@@ -1,7 +1,7 @@
 // Run with Electron after `npm run build`. Uses a temporary profile, not the user's library.
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { release, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -116,6 +116,22 @@ async function smoke() {
     const mode = await run('window.luma.floatOutput.start(48000)');
     assert.ok(['running', 'unsupported'].includes(mode), `WASAPI helper starts or reports device incompatibility: ${mode}`);
     await run('window.luma.floatOutput.stop()');
+    const module = (await readdir(join(root, 'dist', 'assets'))).find((name) => /^float\.worklet-.*\.js$/.test(name));
+    assert.ok(module, 'Float worklet shipped with the renderer');
+    const graphCheck = await run(`(async () => {
+      const ctx = new AudioContext();
+      let stage = 'audioWorklet.addModule';
+      try {
+        await ctx.audioWorklet.addModule(${JSON.stringify(`/assets/${module}`)});
+        stage = 'AudioContext.setSinkId(none)';
+        await ctx.setSinkId({ type: 'none' });
+        stage = 'AudioContext.setSinkId(default)';
+        await ctx.setSinkId('');
+        return 'ok';
+      } catch (error) { return stage + ': ' + error.name + ': ' + error.message; }
+      finally { await ctx.close(); }
+    })()`);
+    assert.equal(graphCheck, 'ok', `Chromium Float audio graph preflight: ${graphCheck}`);
     console.log(`::notice title=WASAPI Float probe::Driver result for stereo 48 kHz Float32 on the runner: ${mode}.`);
   }
   assert.equal(await run('window.luma.lastfm.status().then(({ enabled }) => enabled)'), false);
@@ -389,8 +405,9 @@ async function smoke() {
       await click('.player-bar .play-button');
       const status = await waitFor('Float graph reaches driver result', () => run(`(() => {
         const state = document.querySelector('.settings-page .setting-body-copy[role="status"]')?.textContent;
-        return /WASAPI Exclusive|Устройство занято или не приняло Float32/.test(state ?? '') ? state : false;
+        return /WASAPI Exclusive|Устройство занято или не приняло Float32|Сбой Float-вывода|Float-вывод недоступен/.test(state ?? '') ? state : false;
       })()`));
+      assert.match(status, /WASAPI Exclusive|Устройство занято или не приняло Float32/);
       await waitFor('local decoding continues', () => run(`[...document.querySelectorAll('audio:not([data-online-audio])')].some((audio) => !audio.paused && audio.currentTime > .5)`));
       await click(toggle);
       await waitFor('system output restored', () => run(`document.querySelector('.settings-page .setting-body-copy[role="status"]')?.textContent === 'Системный вывод'`));

@@ -334,8 +334,16 @@ if (!app.requestSingleInstanceLock()) {
     journal.main('desktop.start');
     Menu.setApplicationMenu(null);
     session.defaultSession.setUserAgent(session.defaultSession.getUserAgent(), `${RUSSIAN_LOCALE},ru`);
-    session.defaultSession.setPermissionRequestHandler((_contents, _permission, reply) => reply(false));
-    session.defaultSession.setPermissionCheckHandler(() => false);
+    // Chromium needs speaker selection to switch our audio graph to/from its silent sink.
+    // This does not grant capture and never applies to VK, subframes or other windows.
+    const canRouteAudio = (contents: Electron.WebContents | null, permission: string, url: string | undefined, mainFrame: boolean) =>
+      process.platform === 'win32' && permission === 'speaker-selection' && mainFrame && !!url
+      && !!window && !window.isDestroyed() && contents === window.webContents && isAppPage(url);
+    session.defaultSession.setPermissionRequestHandler((contents, permission, reply, details) => {
+      reply(canRouteAudio(contents, permission, details.requestingUrl, details.isMainFrame));
+    });
+    session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
+      canRouteAudio(contents, permission, details.requestingUrl, details.isMainFrame));
     const library = await DesktopLibrary.open(app.getPath('userData'));
     const cache = await StreamCache.open(join(app.getPath('userData'), 'stream-cache'), net.fetch);
     protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache));
