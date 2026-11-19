@@ -396,9 +396,18 @@ export default function App() {
       setNotice(undefined);
       void window.luma.exportMp3(track, preferences.exportLyrics).then((result) => {
         if (result.saved) {
-          const text = result.lyrics === 'sidecar' ? 'Текст сохранён в .lrc.' : result.lyrics === 'embedded' ? 'Текст добавлен в тег MP3.'
-            : result.lyrics === 'existing' ? 'Существующий текст не изменён.' : result.lyrics === 'missing' ? 'Новый текст не добавлен.' : '';
-          setNotice({ message: 'Копия MP3 сохранена', detail: `${text}${result.credit ? '' : ' Не удалось сохранить файл с источником и лицензией.'}`.trim(), error: !result.credit });
+          const notes: string[] = [];
+          if (result.lyrics) {
+            const { synced, plain } = result.lyrics;
+            if (synced === 'saved') notes.push('Синхронный текст сохранён в .lrc.');
+            if (plain === 'saved') notes.push('Обычный текст добавлен в тег MP3.');
+            if (synced === 'existing') notes.push('Существующий .lrc не изменён.');
+            if (plain === 'existing') notes.push('Исходный текст в теге MP3 сохранён.');
+            if (synced === 'failed' || plain === 'failed') notes.push('Не удалось записать часть текстов.');
+            if (!synced && !plain) notes.push('Подходящий текст не найден.');
+          }
+          if (!result.credit) notes.push('Не удалось сохранить файл с источником и лицензией.');
+          setNotice({ message: 'Копия MP3 сохранена', detail: notes.join(' '), error: !result.credit });
         }
       }, (error: unknown) => {
         const detail = error instanceof Error && /Файл уже существует/.test(error.message) ? 'Файл уже существует. Выберите новое имя.' : 'Запись может быть недоступна для скачивания. Проверьте сеть и путь сохранения.';
@@ -490,7 +499,7 @@ export default function App() {
     const state = queueRef.current;
     const updated = appendToQueue(state, items.map(({ id }) => id));
     commit(updated);
-    setNotice({ message: updated === state ? 'Все треки микса уже в очереди' : `Добавлено: ${trackCount(updated.order.length - state.order.length)}` });
+    setNotice({ message: updated === state ? 'Все треки микса уже в очереди' : `Добавлено: ${trackCount(updated.order.length - state.order.length, appearance.fullNumbers)}` });
   }
   function goToLibrary() { navigate('library'); }
   function navigate(target: Page, scope: 'all' | 'offline' = 'all') {
@@ -540,7 +549,7 @@ export default function App() {
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
       {!widget && <TitleBar openSettings={() => navigate('settings')} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready || Boolean(vkVisit)} />}
-      {!widget && <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
+      {!widget && <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready || Boolean(vkVisit)} count={collection.length} favoriteCount={favorites.length}
         fullNumbers={appearance.fullNumbers} vkWebsiteOpen={Boolean(vkVisit)} queued={queued.length} queueOpen={queueOpen} vkWidgetOpen={vkPlayback} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
         compact={appearance.compactSidebar} toggleCompact={toggleCompact} />}
       <main className={`main-pane${vkVisit ? ' vk-site-active' : ''}`} ref={scrollArea}>
@@ -561,7 +570,7 @@ export default function App() {
             openLocalLibrary={() => navigate('library', 'offline')} openWidget={() => { void changeWidget(true); }}
             openTrackInfo={current && !current.demo && !current.online ? () => editTrackDetails(current.id) : undefined}
             openVk={() => openVkWebsite(VK_MUSIC_URL)} reset={resetCustomization} goToMenu={() => navigate('menu')} /> :
-          page === 'menu' ? <MenuPage localCount={localTracks.length} ready={ready && !working} eqEnabled={preferences.equalizer.enabled}
+          page === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers} ready={ready && !working} eqEnabled={preferences.equalizer.enabled}
             openSettings={() => navigate('settings')} openEqualizer={openEqualizer} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={() => navigate('mixes')} openDiagnostics={() => navigate('diagnostics')} openVk={() => navigate('vk')} addMusic={choose} /> :
           page === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} recent={recent} fullNumbers={appearance.fullNumbers}
             playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :

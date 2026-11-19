@@ -80,6 +80,15 @@ export class DesktopLibrary {
     return kind === 'audio' ? entry.path : this.coverPath(entry);
   }
 
+  async audioFormat(id: unknown): Promise<AudioFormat | null> {
+    const entry = typeof id === 'string' && UUID.test(id) ? this.entries.find((track) => track.id === id) : undefined;
+    if (!entry) return null;
+    const existing = readAudioFormat(entry.format);
+    if (existing) return existing;
+    const tags = await parseFile(entry.path, { skipCovers: true }).catch(() => undefined);
+    return readAudioFormat(tags?.format) ?? null;
+  }
+
   async lyrics(id: unknown) {
     const entry = typeof id === 'string' && UUID.test(id) ? this.entries.find((track) => track.id === id) : undefined;
     if (!entry) return null;

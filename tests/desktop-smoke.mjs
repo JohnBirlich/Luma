@@ -50,6 +50,13 @@ await writeFile(broken, taggedMp3(sample, {
 }));
 const library = await DesktopLibrary.open(join(profile, 'Luma Player'));
 assert.equal((await library.importPaths([tagged, broken])).added.length, 2);
+// An upgraded library has no new audio-format fields; inspect an old track on demand, not at startup.
+const libraryFile = join(profile, 'Luma Player', 'library.json');
+const index = JSON.parse(await readFile(libraryFile, 'utf8'));
+const legacyEntry = index.find((entry) => entry.path === broken);
+assert.ok(legacyEntry?.format);
+delete legacyEntry.format;
+await writeFile(libraryFile, JSON.stringify(index));
 const warnings = [];
 let externalRuntimeErrors = 0;
 app.on('web-contents-created', (_event, contents) => {
@@ -221,14 +228,20 @@ async function smoke() {
   const widgetTime = await run('document.querySelector("audio").currentTime');
   await click('[aria-label="Виджеты рабочего стола"] button');
   await waitFor('floating widget opens without replacing the renderer', async () => window.isAlwaysOnTop() && window.getBounds().width < widgetBounds.width
-    && await run(`document.querySelector('.desktop-widget')?.dataset.widgetBackground === 'white' && window.testAudio === document.querySelector('audio')`));
+    && await run(`document.querySelector('.widget-mode > .desktop-widget')?.dataset.widgetBackground === 'white' && window.testAudio === document.querySelector('audio')`));
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   await click('.widget-window-buttons [aria-label="Вернуться в плеер"]');
-  await waitFor('widget restores the old window', async () => !window.isAlwaysOnTop() && !await run(`!!document.querySelector('.desktop-widget')`));
+  await waitFor('widget restores the old window', async () => !window.isAlwaysOnTop() && !await run(`!!document.querySelector('.widget-mode > .desktop-widget')`));
   assert.deepEqual(window.getBounds(), widgetBounds);
   assert.equal(await run('document.querySelector("audio").currentTime'), widgetTime);
   await click('[aria-label="Сохранять текст с новым MP3"]');
   await waitFor('opt-in to MP3 lyric tagging', async () => (await preferences()).exportLyrics);
+  await click('.settings-back');
+  await click('.settings-page [aria-label="Воспроизведение"]');
+  await waitFor('crossfade preference', () => run(`!!document.querySelector('[aria-label="Воспроизведение в Luma"] select')`));
+  await select('[aria-label="Воспроизведение в Luma"] select', '4');
+  await waitFor('crossfade preference saved', async () => (await preferences()).playback.crossfade === 4);
+
 
   const catalogCalls = [];
   const streamCalls = [];
@@ -327,6 +340,17 @@ async function smoke() {
     assert.equal((await readFile(broken)).equals(taggedMp3(sample, {
       title: "Ty Zdes'", picture: { mime: 'image/png', data: Buffer.from('89504e470d0a1a0a', 'hex') },
     })), true, 'the music file and embedded data remain unchanged');
+    await click('.hero-action');
+    await waitFor('local track is playing', () => run(`!document.querySelector('audio').paused && document.querySelector('audio').currentTime > 4.15`));
+    await run(`(() => { const audio = document.querySelector('audio'); audio.currentTime = audio.duration - 4.8; })()`);
+    await waitFor('local crossfade overlaps with the following track', () => run(`(() => {
+      const [from, to] = document.querySelectorAll('audio');
+      return !from.paused && !to.paused && to.currentTime > .05 && document.querySelector('.hero h2').textContent === 'Отблеск';
+    })()`));
+    await click('.player-bar .play-button');
+    await waitFor('pause cancels the retiring deck', () => run(`[...document.querySelectorAll('audio')].every((item) => item.paused) && !document.querySelector('audio').hasAttribute('src')`));
+    console.log('::notice title=Local crossfade::Two decoded tracks overlap before the first ends. Pausing stops both decks immediately.');
+
     await go('Поиск');
     await waitFor('collection search', () => run(`!!document.querySelector('main input[type="search"]')`));
     await fill('main input[type="search"]', 'jazz');
@@ -359,7 +383,8 @@ async function smoke() {
     const childView = () => window.contentView.children.find((view) => view.webContents?.session === vkSession);
     await click('.vk-account-actions .primary-button');
     const vk = await waitFor('VK is attached to the main window', childView);
-    const vkRun = (script) => vk.webContents.executeJavaScript(script, true);
+    const contents = vk.webContents;
+    const vkRun = (script) => contents.executeJavaScript(script, true);
     await waitFor('VK home fixture', () => vkRun(`!!document.getElementById('vkid')`));
     assert.equal(vk.webContents.session, vkSession);
     assert.ok(vkSession.storagePath?.includes('luma-vk-web'));
@@ -377,7 +402,7 @@ async function smoke() {
     await vkRun(`document.getElementById('signin').click(); void 0;`);
     await waitFor('signed-in VK session fixture', () => vkRun(`document.cookie.includes('lumaFixture=1')`));
     await click('.vk-site-toolbar [aria-label="Закрыть сайт VK"]');
-    await waitFor('VK view closed', () => !childView());
+    await waitFor('VK view and renderer closed', () => !childView() && contents.isDestroyed());
     await click('.vk-add');
     await fill('#vk-widget-code', 'https://vk.com/audios-42?z=audio_playlist-42_7/Share-Key');
     await click('#vk-playlist-form button[type="submit"]');
@@ -414,6 +439,7 @@ async function smoke() {
     await go('Главная');
     await withArt('All About Jazz');
     await go('Поиск');
+    await waitFor('MP3 catalog query', () => run(`!!document.querySelector('main input[type="search"]')`));
     await fill('main input[type="search"]', 'fixture-mp3');
     await waitFor('downloadable sources form', () => run(`!!document.querySelector('.online-search-form button')`));
     await click('.online-search-form button');
@@ -424,8 +450,12 @@ async function smoke() {
       const plainPath = join(profile, 'new-plain.mp3');
       dialog.showSaveDialog = async () => ({ canceled: false, filePath: syncedPath });
       await click(`button[aria-label="Скачать MP3: ${synced.title}"]`);
-      await waitFor('timed text saved outside MP3', () => run(`document.querySelector('.toast small')?.textContent.includes('сохранён в .lrc')`));
-      assert.equal((await readFile(syncedPath)).equals(sample), true, 'synced text does not re-tag the MP3');
+      await waitFor('both lyrics formats are saved when available', () => run(`(() => {
+        const result = document.querySelector('.toast small')?.textContent;
+        return result?.includes('сохранён в .lrc') && result.includes('в тег MP3');
+      })()`));
+      assert.equal((await parseFile(syncedPath)).common.lyrics[0].text, plainText);
+      assert.equal((await run(`window.luma.lyrics.local(${JSON.stringify('non-library-id')})`)), null, 'lyrics IPC only reads tracks in the index');
       assert.equal(await readFile(syncedPath.replace('.mp3', '.lrc'), 'utf8'), `${lrcText}\n`);
       assert.match(await readFile(syncedPath.replace('.mp3', '.source.txt'), 'utf8'), /creativecommons.org/);
       await delay(400); // Respect the lyrics provider's request spacing.
@@ -433,10 +463,18 @@ async function smoke() {
       await click(`button[aria-label="Скачать MP3: ${plain.title}"]`);
       await waitFor('plain text embedded in MP3', () => run(`document.querySelector('.toast small')?.textContent.includes('в тег MP3')`));
       assert.equal((await parseFile(plainPath)).common.lyrics[0].text, plainText);
+      await assert.rejects(readFile(plainPath.replace('.mp3', '.lrc')), { code: 'ENOENT' });
       assert.deepEqual(lyricQueries.map(({ track_name, duration }) => [track_name, duration]), [[synced.title, '32'], [plain.title, '32']]);
       await click(`button[aria-label="Скачать MP3: ${plain.title}"]`);
       await waitFor('existing destination is not overwritten', () => run(`document.querySelector('.toast-error small')?.textContent.includes('Файл уже существует')`));
       assert.equal((await parseFile(plainPath)).common.lyrics[0].text, plainText);
+      const existingLrc = join(profile, 'with-existing.lrc');
+      await writeFile(existingLrc, '[00:01.00] Existing local lyrics');
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath: existingLrc.replace('.lrc', '.mp3') });
+      await click(`button[aria-label="Скачать MP3: ${synced.title}"]`);
+      await waitFor('existing sidecar is not overwritten', () => run(`document.querySelector('.toast small')?.textContent.includes('Существующий .lrc не изменён')`));
+      assert.equal(await readFile(existingLrc, 'utf8'), '[00:01.00] Existing local lyrics');
+      assert.equal((await parseFile(existingLrc.replace('.lrc', '.mp3'))).common.lyrics[0].text, plainText);
     } finally { dialog.showSaveDialog = choosePath; }
   } finally {
     session.defaultSession.protocol.unhandle('https');
@@ -448,6 +486,14 @@ async function smoke() {
     const suggestions = await run(`window.luma.recognition.search('Madam Broshkina', 'ru-RU')`);
     assert.ok(suggestions.some(({ title }) => title === 'Мадам Брошкина'), 'live Apple Music transliteration lookup');
     console.log('::notice title=Live Apple Music::Cyrillic recording candidates returned for a transliterated title.');
+    try {
+      const text = await run(`window.luma.lyrics.lookup({ title: 'Yellow', artist: 'Coldplay', duration: 267 })`);
+      assert.ok(text?.synced || text?.plain);
+      console.log('::notice title=Live LRCLIB::The official endpoint returned text for a matching recording.');
+    } catch {
+      console.log('::warning title=Live LRCLIB::The endpoint did not return matching lyrics from this network. The controlled checks passed.');
+    }
+
     try {
       await go('VK Музыка');
       await waitFor('VK account action', () => run(`!!document.querySelector('.vk-account-actions .primary-button')`));
@@ -506,6 +552,8 @@ async function smoke() {
     await session.defaultSession.clearCache();
     const failed = [];
     for (const source of ['jamendo', 'wikimedia_audio']) {
+      // The controlled check exercised mp31. The live check confirms the requested variant really plays.
+
       let result;
       try {
         await go('Главная');
@@ -533,9 +581,12 @@ async function smoke() {
           await click(selector);
           const decoded = await waitFor(`${source} audio attempt`, () => run(`(() => {
             const media = document.querySelector('${onlineAudio}');
-            return media.currentTime > .15 ? 'playing' : media.error ? 'unavailable' : null;
+            return media.currentTime > .15 ? new URL(media.currentSrc).searchParams.get('format') ?? 'original' : media.error ? 'unavailable' : null;
           })()`)).catch(() => 'timed out');
-          if (decoded === 'playing') { result = `live search and playback passed (${name.replace('Слушать онлайн: ', '')})`; break; }
+          if (decoded === 'mp31' && source === 'jamendo' || decoded === 'original' && source === 'wikimedia_audio') {
+            result = `live search and playback passed (${name.replace('Слушать онлайн: ', '')}, ${decoded})`;
+            break;
+          }
         }
         if (!result) throw new Error('catalog returned results, but audio did not play from the first three URLs');
       } catch (error) {

@@ -80,7 +80,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
             <VolumeControl {...props} />
           </div>
         </div>
-        {queueVisible && <UpcomingTracks tracks={props.upcoming} repeat={props.repeat} autoNext={props.autoNext} play={props.playUpcoming} />}
+        {queueVisible && <UpcomingTracks tracks={props.upcoming} repeat={props.repeat} autoNext={props.autoNext} fullNumbers={appearance.fullNumbers} play={props.playUpcoming} />}
       </div></div>
     </div>
   </dialog>;

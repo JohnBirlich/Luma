@@ -10,7 +10,7 @@ on:
         type: boolean
         default: false
       live_services:
-        description: 'Check live Apple Music metadata and first-party VK navigation (no login)'
+        description: 'Check live Apple Music, LRCLIB and first-party VK navigation (no login)'
         type: boolean
         default: false
 

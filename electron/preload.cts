@@ -8,6 +8,7 @@ const bridge: DesktopBridge = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   openOnlineLink: (url: string) => ipcRenderer.invoke('online:open-link', url),
   openReleases: () => ipcRenderer.invoke('app:releases'),
+  getAudioFormat: (id) => ipcRenderer.invoke('library:audio-format', id),
   getTracks: () => ipcRenderer.invoke('library:list'),
   chooseTracks: () => ipcRenderer.invoke('library:choose'),
   importDroppedFiles: (files) => ipcRenderer.invoke('library:drop', files.map((file) => webUtils.getPathForFile(file)).filter(Boolean)),

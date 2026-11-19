@@ -14,7 +14,8 @@ export type OnlineFilter = OnlineSource | 'all';
 export const MAX_ONLINE_TRACKS = 180;
 export interface OnlineCreditData { source: OnlineSource; page: string; license: string; licenseUrl: string }
 export interface OnlineTrack extends Track { online: OnlineCreditData }
-export interface Mp3ExportResult { saved: boolean; lyrics?: 'sidecar' | 'embedded' | 'existing' | 'missing'; credit?: boolean }
+type LyricWrite = 'saved' | 'existing' | 'failed';
+export interface Mp3ExportResult { saved: boolean; lyrics?: { synced?: LyricWrite; plain?: LyricWrite }; credit?: boolean }
 
 /** Only original MP3s offered from Wikimedia Commons under supported reusable licenses. */
 export function commonsMp3Export(track: OnlineTrack) {

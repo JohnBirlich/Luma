@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlignLeft, Music2 } from 'lucide-react';
 import { createLyricsService } from '../shared/lyrics-service';
+import { ONLINE_SOURCES } from '../shared/online';
 import { activeLyricLine, readLocalLyrics, readLyricsQuery, timedLines } from '../shared/lyrics';
 import type { Lyrics } from '../shared/lyrics';
 import type { Track } from '../shared/media';
@@ -10,7 +11,7 @@ const webLyrics = createLyricsService();
 export function LyricsPanel({ track, elapsed, playing, auto, connected }: {
   track: Track; elapsed: number; playing: boolean; auto: boolean; connected: boolean;
 }) {
-  const query = useMemo(() => readLyricsQuery({ ...track, album: track.online?.source === 'wikimedia_audio' && track.album === 'Wikimedia Commons' ? undefined : track.album }), [track]);
+  const query = useMemo(() => readLyricsQuery({ ...track, album: track.online && track.album === ONLINE_SOURCES[track.online.source] ? undefined : track.album }), [track]);
   const [attempt, setAttempt] = useState(0);
   const [started, setStarted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,7 +38,7 @@ export function LyricsPanel({ track, elapsed, playing, auto, connected }: {
     void lookup.then((lyrics) => { if (!request.signal.aborted) setRemote(lyrics); }, () => {
       if (!request.signal.aborted) setError(true);
     }).finally(() => { if (!request.signal.aborted) setBusy(false); });
-    return () => { request.abort(); };
+    return () => { request.abort(); setBusy(false); };
   }, [attempt, auto, started, query, connected, local]);
   useEffect(() => {
     const pane = scroll.current, item = line.current;

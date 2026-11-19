@@ -130,13 +130,15 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     const { audio, track } = deck;
     const mixer = graph.current;
     const policy = transition.current;
-    const next = !track.online && policy.seconds > 0 && !fading.current && !blendUnavailable.current
-      && mixer?.context.state === 'running' && !audio.paused && !audio.seeking && audio.playbackRate === 1 ? policy.next(track) : undefined;
-    const target = next && !next.online && next.id !== track.id ? next : undefined;
     const outgoingDuration = length(audio, track);
     const remaining = outgoingDuration - audio.currentTime;
-    const overlap = target && Number.isFinite(outgoingDuration) ? Math.min(policy.seconds, outgoingDuration / 4, target.duration / 4) : 0;
-    if (!target || !mixer || overlap < 0.35 || remaining < .22 || remaining > overlap + 1.6) {
+    if (!policy.seconds || track.online || fading.current || blendUnavailable.current || mixer?.context.state !== 'running'
+      || audio.paused || audio.seeking || audio.playbackRate !== 1 || !Number.isFinite(remaining) || remaining < .22 || remaining > policy.seconds + 1.6) {
+      cancelWarmup(); return;
+    }
+    const target = policy.next(track);
+    const overlap = target ? Math.min(policy.seconds, outgoingDuration / 4, target.duration / 4) : 0;
+    if (!target || target.online || target.id === track.id || !Number.isFinite(overlap) || overlap < 0.35 || remaining > overlap + 1.6) {
       cancelWarmup(); return;
     }
     let incoming = candidate.current;

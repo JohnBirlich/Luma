@@ -126,6 +126,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     return true;
   });
   let pendingCovers = 0;
+  ipcMain.handle('library:audio-format', (event, id: unknown) => { appWindow(event); return library.audioFormat(id); });
   ipcMain.handle('library:list', (event) => { appWindow(event); return library.list(); });
   ipcMain.handle('library:choose', async (event) => {
     const owner = appWindow(event);

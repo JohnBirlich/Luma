@@ -1363,3 +1363,7 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .widget-track strong { font-size: 13px; color: var(--text); }
 .widget-track small { font-size: 11px; color: var(--muted); }
 .desktop-widget .timeline { margin-inline: 0; width: 100%; }
+
+.widget-sample { display: block; height: auto; max-width: 310px; padding: 8px 11px; overflow: hidden; border: 1px solid #88849a5c; border-radius: 9px; margin-top: 8px; }
+.widget-sample .widget-track .artwork { width: 33px; height: 33px; }
+.widget-sample .widget-track > svg { color: var(--accent-light); }

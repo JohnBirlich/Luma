@@ -119,6 +119,14 @@ async function add(files: File[]): Promise<ImportResult> {
 export const browserLibrary: LibrarySource = {
   async list() { await ensureLoaded(); return tracks(); },
   add,
+  async audioFormat(id) {
+    await ensureLoaded();
+    const entry = entries.find(({ record }) => record.id === id);
+    if (!entry) return null;
+    if (entry.track.format) return entry.track.format;
+    const result = await import('music-metadata').then(({ parseBlob }) => parseBlob(entry.record.audio, { skipCovers: true })).catch(() => undefined);
+    return readAudioFormat(result?.format) ?? null;
+  },
   async remove(id): Promise<Track[]> {
     await ensureLoaded();
     const entry = entries.find(({ record }) => record.id === id);

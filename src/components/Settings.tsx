@@ -6,6 +6,7 @@ import type { Appearance, CrossfadeTime, DataLanguage, EffectTempo, LibraryLayou
 import { describeAudioFormat, describeStream, NETWORK_MODES, STREAM_QUALITIES } from '../shared/audio-quality';
 import type { AudioQuality, NetworkMode, StreamQuality } from '../shared/audio-quality';
 import type { Track } from '../shared/media';
+import { localLibrary } from '../data/library';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { ReleaseLink, useInstalledBuild } from './About';
 import { Artwork } from './Artwork';
@@ -145,6 +146,16 @@ export function SettingsPage(props: SettingsProps) {
   const [section, setSection] = useState<Section>();
   const [confirmClear, setConfirmClear] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const formatId = section?.id === 'sound' && props.previewTrack && !props.previewTrack.format && !props.previewTrack.online && !props.previewTrack.demo ? props.previewTrack.id : undefined;
+  const [formatProbe, setFormatProbe] = useState<{ id: string; result: Awaited<ReturnType<typeof localLibrary.audioFormat>> }>();
+  useEffect(() => {
+    if (!formatId) return;
+    let ignore = false;
+    void localLibrary.audioFormat(formatId).then((result) => { if (!ignore) setFormatProbe({ id: formatId, result }); }, () => {
+      if (!ignore) setFormatProbe({ id: formatId, result: null });
+    });
+    return () => { ignore = true; };
+  }, [formatId]);
   const color = appearance.accent ?? THEMES[appearance.theme].accent;
   const accent = accentFor(appearance);
   useEffect(() => { root.current?.parentElement?.scrollTo({ top: 0 }); }, [section]);
@@ -240,10 +251,11 @@ export function SettingsPage(props: SettingsProps) {
             <SettingCard title="Текущий трек" detail={props.previewTrack ? props.previewTrack.title : 'Выберите трек, чтобы посмотреть его формат.'}>
               {props.previewTrack && <p className="setting-body-copy">{props.playingStream ? describeStream(props.previewTrack, props.playingStream)
                 : props.previewTrack.online ? 'Поток ещё не запущен.'
-                : describeAudioFormat(props.previewTrack.format, props.locale) || 'Файл воспроизводится без перекодирования. Битрейт не определён.'}</p>}
+                : formatId && formatProbe?.id !== formatId ? 'Читаем сведения о файле…'
+                : describeAudioFormat(props.previewTrack.format ?? (formatProbe?.id === formatId ? formatProbe?.result ?? undefined : undefined), props.locale) || 'Файл воспроизводится без перекодирования. Битрейт не определён.'}</p>}
               <div className="setting-row settings-volume"><span><strong>Громкость плеера</strong><small>Меняется и в нижней панели.</small></span><VolumeControl {...props.volumeControls} /></div>
             </SettingCard>
-            <SettingCard title="Float-вывод" detail="24/32-битный вывод зависит от драйвера и звукового устройства. Эта сборка не выбирает аппаратный формат и не выдаёт внутреннюю обработку Electron за Float-вывод.">
+            <SettingCard title="Float-вывод" detail="Формат вывода выбирает система. Аппаратный 24/32-битный режим зависит от драйвера и устройства; в этой сборке его нельзя включить вручную.">
               <span className="setting-status">Не поддерживается в этой сборке</span>
             </SettingCard>
           </>}
@@ -287,6 +299,10 @@ export function SettingsPage(props: SettingsProps) {
                 <select value={appearance.widgetBackground} onChange={(event) => changeAppearance({ ...appearance, widgetBackground: event.currentTarget.value as WidgetBackground })}>
                   {Object.entries(WIDGET_BACKGROUNDS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
                 </select></label>
+              <div className="desktop-widget widget-sample" aria-label="Предпросмотр фона виджета" data-widget-background={appearance.widgetBackground} style={{ '--widget-tint': props.tint } as CSSProperties}>
+                {appearance.widgetBackground === 'blur' && <Artwork track={props.previewTrack} className="widget-backdrop" />}
+                <div className="widget-track"><Artwork track={props.previewTrack} /><div><strong>{props.previewTrack?.title ?? 'Ваша музыка'}</strong><small>Предпросмотр виджета Luma</small></div><Play size={16} /></div>
+              </div>
               <div className="settings-actions">
                 {window.luma ? <button className="button outline-button" type="button" onClick={props.openWidget}><Monitor size={16} /> Открыть виджет Luma</button> : <span className="setting-status">В приложении Windows</span>}
               </div>
@@ -302,7 +318,7 @@ export function SettingsPage(props: SettingsProps) {
               <Service title="Тексты песен" status="LRCLIB">
                 <p>Доступен LRCLIB. Для следующих источников — Musixmatch, Genius и VK — пока нет подключённого доступа к текстам.</p>
                 <ToggleRow title="Автопоиск текстов" detail="Искать для играющего трека на главной. LRCLIB получит название, исполнителя, альбом и длительность, если они известны." enabled={props.autoLyrics} change={() => props.toggleLyrics('autoLyrics')} />
-                {window.luma && <ToggleRow title="Сохранять текст с новым MP3" detail="При сохранении разрешённого MP3: синхронный текст в соседний .lrc, обычный — в тег MP3. Существующие файлы не меняются." enabled={props.exportLyrics} change={() => props.toggleLyrics('exportLyrics')} />}
+                {window.luma && <ToggleRow title="Сохранять текст с новым MP3" detail="Для личной копии MP3: синхронный текст в соседний .lrc, обычный — в тег MP3. Если найдены оба, сохраняются оба. Существующие файлы не меняются." enabled={props.exportLyrics} change={() => props.toggleLyrics('exportLyrics')} />}
               </Service>
               <Service title="iTunes" status="Поиск данных">
                 <p>Поиск названия и тегов в каталоге Apple Music запускается вручную. Сервис независим, доступность не гарантируется. Автозамены обложек VK и записи тегов в исходный файл нет.</p>
@@ -361,7 +377,7 @@ function VkAccountSettings({ connected, openVk }: { connected: boolean; openVk()
   const [notice, setNotice] = useState('');
   return <Service title="VK Music" status="Официальный сайт">
     <p><strong>Статус аккаунта:</strong> проверьте на странице VK. Luma не читает данные входа и не может подтвердить ваш аккаунт.</p>
-    <p>Плеер сайта и публичный виджет не используют аудио API Luma. Треки из VK Микса, радио, «Для вас» и «Открытий» нельзя переносить в очередь Luma.</p>
+    <p>Звуком на сайте и в виджете управляет VK. У Luma нет доступа к аудио API VK, поэтому VK Микс, радио и личные подборки недоступны в очереди Luma.</p>
     {window.luma && <div className="settings-actions">
       <button className="button outline-button" type="button" disabled={resetting || !connected} onClick={openVk}>Войти в VK в Luma</button>
       <button className="button outline-button" type="button" disabled={resetting} onClick={() => {

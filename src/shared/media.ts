@@ -55,6 +55,7 @@ export interface DesktopBridge {
   openReleases(): Promise<void>;
   openOnlineLink(url: string): Promise<void>;
   getTracks(): Promise<Track[]>;
+  getAudioFormat(id: string): Promise<AudioFormat | null>;
   chooseTracks(): Promise<ImportResult>;
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;

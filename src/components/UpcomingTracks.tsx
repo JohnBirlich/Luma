@@ -5,14 +5,14 @@ import type { Track } from '../shared/media';
 import type { Repeat } from '../shared/queue';
 import { Artwork } from './Artwork';
 
-export const UpcomingTracks = memo(function UpcomingTracks({ tracks, repeat, autoNext, play }: {
-  tracks: Track[]; repeat: Repeat; autoNext: boolean; play(id: string): void;
+export const UpcomingTracks = memo(function UpcomingTracks({ tracks, repeat, autoNext, fullNumbers, play }: {
+  tracks: Track[]; repeat: Repeat; autoNext: boolean; fullNumbers: boolean; play(id: string): void;
 }) {
   const note = repeat === 'one' ? 'Сейчас включён повтор текущего трека.'
     : !autoNext ? 'Автопереход выключен. Можно выбрать трек вручную.'
       : repeat === 'all' && !tracks.length ? 'В очереди один трек. Он начнётся сначала.' : '';
   return <section className="immersive-upcoming" id="immersive-upcoming" aria-labelledby="immersive-upcoming-title" tabIndex={-1}>
-    <header><div><p className="overline">Очередь воспроизведения</p><h2 id="immersive-upcoming-title">Далее</h2></div><span>{trackCount(tracks.length)}</span></header>
+    <header><div><p className="overline">Очередь воспроизведения</p><h2 id="immersive-upcoming-title">Далее</h2></div><span>{trackCount(tracks.length, fullNumbers)}</span></header>
     {note && <p className="upcoming-note">{note}</p>}
     {tracks.length ? <ol className="upcoming-list">
       {tracks.map((track, index) => <li key={track.id}>

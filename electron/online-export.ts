@@ -57,13 +57,14 @@ export function createOnlineExporter(lookup: (query: unknown, signal: AbortSigna
       const query = readLyricsQuery({ ...actual, album: actual.album === 'Wikimedia Commons' ? undefined : actual.album, duration });
       const lyrics = wantsLyrics === true && query?.duration ? await lookup(query, signal).catch(() => null) : null;
       let data: Uint8Array = buffer;
-      let lyricsState: Mp3ExportResult['lyrics'] = wantsLyrics === true ? 'missing' : undefined;
-      if (lyrics?.plain && !lyrics.synced) {
-        if (hasLyrics) lyricsState = 'existing';
+      const lyricsState: Mp3ExportResult['lyrics'] = wantsLyrics === true ? {} : undefined;
+      if (lyricsState && lyrics?.plain) {
+        if (hasLyrics) lyricsState.plain = 'existing';
         else {
+          lyricsState.plain = 'failed';
           try {
             const tagged = ID3.update({ unsynchronisedLyrics: { language: 'und', text: lyrics.plain } }, buffer);
-            if (Buffer.isBuffer(tagged)) { data = tagged; lyricsState = 'embedded'; }
+            if (Buffer.isBuffer(tagged)) { data = tagged; lyricsState.plain = 'saved'; }
           } catch { /* Save the original recording if its tags cannot be safely updated. */ }
         }
       }
@@ -74,9 +75,10 @@ export function createOnlineExporter(lookup: (query: unknown, signal: AbortSigna
         throw new Error('Не удалось записать MP3 в выбранную папку.');
       }
       const stem = filePath.slice(0, -4);
-      const credit = await createFile(`${stem}.source.txt`, `${actual.title}\n${actual.artist}\n${actual.online.page}\n${actual.online.license}: ${actual.online.licenseUrl}\n${lyricsState === 'embedded' ? 'Добавлен тег текста песни (LRCLIB, для личного использования).\n' : ''}`).then(() => true, () => false);
-      if (lyrics?.synced) {
-        lyricsState = await createFile(`${stem}.lrc`, `${lyrics.synced}\n`).then(() => 'sidecar', (error: NodeJS.ErrnoException) => error.code === 'EEXIST' ? 'existing' : 'missing');
+      const credit = await createFile(`${stem}.source.txt`, `${actual.title}\n${actual.artist}\n${actual.online.page}\n${actual.online.license}: ${actual.online.licenseUrl}\n${lyricsState?.plain === 'saved' ? 'Добавлен тег текста песни (LRCLIB, для личного использования).\n' : ''}`).then(() => true, () => false);
+      if (lyricsState && lyrics?.synced) {
+        lyricsState.synced = await createFile(`${stem}.lrc`, `${lyrics.synced}\n`)
+          .then(() => 'saved', (error: NodeJS.ErrnoException) => error.code === 'EEXIST' ? 'existing' : 'failed');
       }
       return { saved: true, lyrics: lyricsState, credit };
     } finally { busy = false; }
