@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { AudioLines, RotateCcw, X } from 'lucide-react';
 import { BANDS, PRESETS } from '../shared/equalizer';
+import { formatRussianNumber } from '../shared/russian';
 import type { EqualizerSettings, Preset } from '../shared/equalizer';
 import type { CSSProperties } from 'react';
 
-const db = (value: number) => `${value > 0 ? '+' : ''}${value} дБ`;
+const db = (value: number) => `${value > 0 ? '+' : ''}${formatRussianNumber(value)} дБ`;
 
 interface EqualizerProps {
   settings: EqualizerSettings;

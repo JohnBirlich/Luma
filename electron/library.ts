@@ -13,6 +13,7 @@ interface Entry extends ReturnType<typeof trackInfo> {
   id: string;
   path: string;
   coverExtension?: string;
+  textVersion?: 1;
 }
 
 function isLocalPath(path: string): boolean {
@@ -57,11 +58,15 @@ export class DesktopLibrary {
   }
 
   list(): Track[] {
-    return this.entries.map(({ id, title, artist, album, duration, coverExtension }) => ({
-      id, title, artist, album, duration,
-      audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
-      artworkUrl: coverExtension ? `${APP_ORIGIN}/media/cover/${id}` : undefined,
-    }));
+    return this.entries.map(({ id, path, title, artist, album, duration, coverExtension, textVersion }) => {
+      const tags = { title, artist, album };
+      // Old profiles are repaired for display without rewriting their metadata or changing track IDs.
+      const info = textVersion === 1 ? { ...tags, duration } : trackInfo(basename(path), tags, duration);
+      return {
+        id, ...info, audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
+        artworkUrl: coverExtension ? `${APP_ORIGIN}/media/cover/${id}` : undefined,
+      };
+    });
   }
 
   mediaPath(id: string, kind: 'audio' | 'cover'): string | undefined {
@@ -98,7 +103,7 @@ export class DesktopLibrary {
         // An untagged file (or one the tag parser cannot read) can still be playable.
         const metadata = await parseFile(path, { duration: true }).catch(() => undefined);
         const entry: Entry = {
-          id: randomUUID(), path,
+          id: randomUUID(), path, textVersion: 1,
           ...trackInfo(name, metadata?.common, metadata?.format.duration),
         };
         const artwork = usableArtwork(metadata?.common.picture);

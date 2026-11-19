@@ -3,6 +3,7 @@ import type { IpcMainInvokeEvent } from 'electron';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
+import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
 import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { createProtocolHandler } from './protocol.js';
@@ -13,6 +14,7 @@ protocol.registerSchemesAsPrivileged([{
   privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
 }]);
 
+app.commandLine.appendSwitch('lang', 'ru');
 app.setName('Luma Player');
 app.setAppUserModelId('app.lumaplayer.desktop');
 const devUrl = getDevUrl();
@@ -129,6 +131,7 @@ if (!app.requestSingleInstanceLock()) {
   });
   void app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
+    session.defaultSession.setUserAgent(session.defaultSession.getUserAgent(), `${RUSSIAN_LOCALE},ru`);
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, reply) => reply(false));
     session.defaultSession.setPermissionCheckHandler(() => false);
     const library = await DesktopLibrary.open(app.getPath('userData'));

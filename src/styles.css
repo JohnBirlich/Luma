@@ -695,6 +695,11 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .cover-error { color: #ffc1b4; font-size: 12px; line-height: 1.4; padding: 9px 11px; margin-top: 11px; border-radius: 7px; background: #a6422829; }
 .cover-footer { padding-top: 14px; border-top: 1px solid #ffffff17; }
 .cover-footer .ghost-button { padding-inline: 5px; }
+.track-details-button { padding-inline: 10px; }
+.track-details-hint { color: var(--muted); margin-bottom: 16px; font-size: 12px; line-height: 1.45; }
+.track-details-fields { display: grid; gap: 11px; }
+.track-details-fields label { display: grid; gap: 5px; min-width: 0; color: var(--muted); font-size: 12px; }
+.track-details-fields input { width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid #ffffff27; border-radius: 7px; background: var(--raised-bg); color: var(--text); font: inherit; font-size: 14px; }
 .vk-panel-actions { display: flex; align-items: center; gap: 8px; }
 .vk-cover-button { border: 1px solid #9abaff51; color: var(--vk-tint); }
 .vk-playlist-cover { width: 40px; height: 40px; border: 1px solid #9abaff51; border-radius: 10px; }

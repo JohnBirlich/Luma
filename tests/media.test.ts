@@ -67,9 +67,9 @@ test('desktop imports tagged audio, deduplicates and survives restart without de
   assert.equal(imported.added.length, 1);
   assert.equal(imported.duplicates, 1);
   assert.equal(imported.failures.length, 2);
-  assert.equal(imported.tracks[0].title, 'Afterimage');
-  assert.equal(imported.tracks[0].artist, 'Arden Vale');
-  assert.equal(imported.tracks[0].album, 'Midnight Signals');
+  assert.equal(imported.tracks[0].title, 'Отблеск');
+  assert.equal(imported.tracks[0].artist, 'Арден Вейл');
+  assert.equal(imported.tracks[0].album, 'Полуночные сигналы');
   assert.ok(imported.tracks[0].duration >= 31);
   assert.ok(!JSON.stringify(imported.tracks).includes('Тестовый трек.mp3'));
   const trackId = imported.added[0];
@@ -131,4 +131,45 @@ test('embedded front cover is cached, served, and cleaned up with its entry', as
   assert.deepEqual(Buffer.from(await cover.arrayBuffer()), png);
   await library.remove(track.id);
   assert.equal((await handle(new Request(track.artworkUrl))).status, 404);
+});
+
+test('desktop reads Windows-1251 ID3v2.3 tags and repairs old library entries in place', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'luma-russian-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const { taggedMp3 } = await import('./fixtures/mp3.mjs');
+  const legacy = { title: 'Òû çäåñü', artist: 'Àðèÿ', album: 'Æèâîé çâóê' };
+  const audio = taggedMp3(await readFile(sample), legacy);
+  const path = join(dir, 'Старые теги.mp3');
+  await writeFile(path, audio);
+  const library = await DesktopLibrary.open(dir);
+  const { tracks: [track] } = await library.importPaths([path]);
+  assert.deepEqual([track.title, track.artist, track.album], ['Ты здесь', 'Ария', 'Живой звук']);
+
+  const index = join(dir, 'library.json');
+  // Simulate an index written by 0.4.0 and verify that no reimport or file rewrite is needed.
+  const [entry] = JSON.parse(await readFile(index, 'utf8'));
+  const saved = JSON.stringify([{ ...entry, ...legacy, textVersion: undefined }]);
+  await writeFile(index, saved);
+  assert.deepEqual((await DesktopLibrary.open(dir)).list(), [track]);
+  assert.equal(await readFile(index, 'utf8'), saved);
+  assert.deepEqual(await readFile(path), audio);
+});
+
+test('desktop decodes legacy ID3v1 titles with Ё and falls back to Cyrillic filenames', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'luma-id3v1-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const source = await readFile(sample);
+  const offset = 10 + source.subarray(6, 10).reduce((size, byte) => (size << 7) + byte, 0);
+  const audio = source.subarray(offset);
+  const tail = Buffer.alloc(128);
+  tail.write('TAG¨ëêà', 0, 'latin1');
+  tail.write('Êèíî', 33, 'latin1');
+  const tagged = join(dir, 'ID3v1.mp3');
+  const untagged = join(dir, 'Дорога домой.mp3');
+  await writeFile(tagged, Buffer.concat([audio, tail]));
+  await writeFile(untagged, audio);
+  const library = await DesktopLibrary.open(dir);
+  const { tracks: [legacy, raw] } = await library.importPaths([tagged, untagged]);
+  assert.deepEqual([legacy.title, legacy.artist], ['Ёлка', 'Кино']);
+  assert.equal(raw.title, 'Дорога домой');
 });

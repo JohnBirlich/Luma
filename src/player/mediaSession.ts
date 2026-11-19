@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { DEFAULT_ARTWORK_URL } from '../data/artwork';
+import { mediaArtwork } from './mediaArtwork';
 import type { Track } from '../shared/media';
 
 export function useMediaSession(
@@ -10,14 +10,23 @@ export function useMediaSession(
   actions: Partial<Record<MediaSessionAction, MediaSessionActionHandler>>,
 ) {
   const session = navigator.mediaSession;
+  const { id, title, artist, album, artworkUrl } = track ?? {};
   useEffect(() => {
+    // Window title is also used by taskbar thumbnails and some desktop media widgets.
+    document.title = title ? `${title} — Luma Player` : 'Luma Player';
     if (!session || typeof MediaMetadata === 'undefined') return;
-    session.metadata = track ? new MediaMetadata({
-      title: track.title, artist: track.artist, album: track.album,
-      artwork: [{ src: new URL(track.artworkUrl || DEFAULT_ARTWORK_URL, document.baseURI).href }],
-    }) : null;
-    return () => { session.metadata = null; };
-  }, [session, track]);
+    if (!id) { session.metadata = null; return; }
+    const metadata = new MediaMetadata({ title, artist, album });
+    session.metadata = metadata;
+    let cancelled = false;
+    // Chromium drops artwork with a custom URL scheme when publishing Media Session metadata.
+    void mediaArtwork(artworkUrl).then((image) => {
+      if (!cancelled && image) metadata.artwork = [image];
+    });
+    return () => { cancelled = true; };
+  }, [session, id, title, artist, album, artworkUrl]);
+
+  useEffect(() => () => { if (session) session.metadata = null; }, [session]);
 
   useEffect(() => {
     if (!session) return;

@@ -10,10 +10,13 @@ import { MenuPage } from './components/Menu';
 import { PlayerBar } from './components/PlayerBar';
 import { QueuePanel } from './components/QueuePanel';
 import { SettingsPage } from './components/Settings';
+import { TrackDetailsEditor } from './components/TrackDetailsEditor';
 import { VkModeBar, VkMusicPage } from './components/VkMusic';
 import { useCoverArt } from './data/cover-art';
 import { demoTracks } from './data/demos';
 import { localLibrary } from './data/library';
+import { useTrackDetails } from './data/track-details';
+import type { TrackDetails } from './data/track-details';
 import { useMediaSession } from './player/mediaSession';
 import { readPreferences, savePreferences } from './player/preferences';
 import { useAudio } from './player/useAudio';
@@ -51,6 +54,8 @@ export default function App() {
   const [showEqualizer, setShowEqualizer] = useState(false);
   const [coverTarget, setCoverTarget] = useState<CoverTarget>();
   const { urls: covers, update: updateCover } = useCoverArt();
+  const [detailsId, setDetailsId] = useState<string>();
+  const { details, update: updateDetails } = useTrackDetails();
   const [queueOpen, setQueueOpen] = useState(() => window.matchMedia('(min-width: 1080px)').matches);
   const [dropActive, setDropActive] = useState(false);
   const [notice, setNotice] = useState<Notice>();
@@ -63,9 +68,14 @@ export default function App() {
   const { appearance, playback } = preferences;
   const theme = useMemo(() => themeVariables(appearance), [appearance]);
   const originals = useMemo(() => [...localTracks, ...(preferences.showDemos ? demoTracks : [])], [localTracks, preferences.showDemos]);
-  const tracks = useMemo(() => originals.map((track) => withCover(track, covers.get(trackCoverKey(track.id)))), [originals, covers]);
+  const tracks = useMemo(() => originals.map((track) => {
+    const override = details.get(track.id);
+    return withCover(override ? { ...track, ...override } : track, covers.get(trackCoverKey(track.id)));
+  }), [originals, covers, details]);
   const byId = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
   const current = byId.get(queue.currentId ?? '') ?? null;
+  const detailsTrack = detailsId ? byId.get(detailsId) : undefined;
+  const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer);
   const player = useAudio(preferences.volume, preferences.equalizer, ended);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
   const sampledTone = usePalette(appearance.coverColors ? current : null);
@@ -182,7 +192,7 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || showEqualizer || coverTarget) return;
+      if (event.defaultPrevented || modalOpen) return;
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'Comma') {
         event.preventDefault();
         if (!event.repeat) {
@@ -206,7 +216,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [choose, mute, seek, toggle, showEqualizer, coverTarget, queueOpen, isVkPage, playback.seekStep]);
+  }, [choose, mute, seek, toggle, modalOpen, queueOpen, isVkPage, playback.seekStep]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -229,6 +239,7 @@ export default function App() {
       setLocalTracks(await localLibrary.remove(id));
       removeQueued(id);
       void updateCover(trackCoverKey(id));
+      updateDetails(id);
       setNotice({ message: 'Трек убран из медиатеки', detail: 'Исходный файл не удалён.' });
     } catch {
       setNotice({ message: 'Не удалось убрать трек из медиатеки.', error: true });
@@ -247,9 +258,22 @@ export default function App() {
     setPreferences((data) => ({ ...data, appearance: defaultAppearance, playback: defaultPlayback }));
     setNotice({ message: 'Оформление и параметры воспроизведения сброшены' });
   }
+  function editTrackDetails(id: string) {
+    dropDepth.current = 0;
+    setDropActive(false);
+    setDetailsId(id);
+  }
+  function saveDetails(value?: TrackDetails) {
+    if (!detailsTrack) return;
+    const saved = updateDetails(detailsTrack.id, value);
+    setNotice(saved ? { message: value ? 'Данные трека сохранены' : 'Исходные данные возвращены' } : {
+      message: 'Данные изменены только для этой сессии',
+      detail: 'Не удалось сохранить их в профиле Luma.', error: true,
+    });
+  }
   function editTrackCover(id: string) {
     const track = originals.find((item) => item.id === id);
-    if (track) setCoverTarget({ key: trackCoverKey(id), title: track.title, kind: 'track', originalUrl: track.artworkUrl });
+    if (track) setCoverTarget({ key: trackCoverKey(id), title: byId.get(id)?.title ?? track.title, kind: 'track', originalUrl: track.artworkUrl });
   }
   async function saveCover(image?: Blob) {
     if (!coverTarget) return;
@@ -281,19 +305,19 @@ export default function App() {
   return (
     <div className={`app-shell${isVkPage ? ' vk-mode' : queueOpen ? ' queue-visible' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
       onDragEnter={(event) => {
-        if (coverTarget || !filesDragged(event)) return;
+        if (modalOpen || !filesDragged(event)) return;
         event.preventDefault();
         dropDepth.current++;
         setDropActive(true);
       }}
-      onDragOver={(event) => { if (!coverTarget && filesDragged(event)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } }}
+      onDragOver={(event) => { if (!modalOpen && filesDragged(event)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } }}
       onDragLeave={(event) => {
-        if (coverTarget || !filesDragged(event)) return;
+        if (modalOpen || !filesDragged(event)) return;
         dropDepth.current = Math.max(0, dropDepth.current - 1);
         if (!dropDepth.current) setDropActive(false);
       }}
       onDrop={(event) => {
-        if (coverTarget || !filesDragged(event)) return;
+        if (modalOpen || !filesDragged(event)) return;
         event.preventDefault();
         dropDepth.current = 0;
         setDropActive(false);
@@ -310,9 +334,9 @@ export default function App() {
             openSettings={() => navigate('settings')} openEqualizer={openEqualizer} openLibrary={goToLibrary} openVk={() => navigate('vk')} addMusic={choose} /> :
           page === 'player' ? <PlayerPage track={current} tracks={tracks} tint={tint} heroStyle={appearance.hero} playing={player.playing} position={queue.order.indexOf(current?.id ?? '') + 1}
             count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle} play={(id) => playTrack(id, true)} goToLibrary={goToLibrary}
-            openEqualizer={openEqualizer} editCover={editTrackCover} addMusic={choose} /> :
+            openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} /> :
           <LibraryPage key={page} tracks={tracks} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
-            searchPage={page === 'search'} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} remove={(id) => void removeLocal(id)} />}
+            searchPage={page === 'search'} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={(id) => void removeLocal(id)} />}
       </main>
       {!isVkPage && queueOpen && <>
         <button type="button" className="queue-scrim" onClick={closeQueue} aria-label="Закрыть панель очереди" />
@@ -340,6 +364,7 @@ export default function App() {
         </div>}
       </div>
       {coverTarget && <CoverEditor key={coverTarget.key} target={coverTarget} currentUrl={covers.get(coverTarget.key)} update={saveCover} close={() => setCoverTarget(undefined)} />}
+      {detailsTrack && <TrackDetailsEditor key={detailsTrack.id} track={detailsTrack} edited={details.has(detailsTrack.id)} save={saveDetails} close={() => setDetailsId(undefined)} />}
       {showEqualizer && <Equalizer settings={preferences.equalizer} change={(equalizer) => setPreferences((data) => ({ ...data, equalizer }))} close={() => setShowEqualizer(false)} />}
     </div>
   );
