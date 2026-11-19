@@ -132,13 +132,13 @@ async function smoke() {
   await collapseWithPointer();
   // Simulate a host that never settles its request, without waiting to show or close the player.
   await run(`window.lumaRequestFullscreen = HTMLElement.prototype.requestFullscreen;
-    HTMLElement.prototype.requestFullscreen = () => new Promise(() => {});`);
+    HTMLElement.prototype.requestFullscreen = () => new Promise(() => {}); void 0;`);
   try {
     await expand();
     await waitForDialog();
     await collapseWithPointer();
     assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused && Math.abs(window.testAudio.currentTime - 4) < .2`), true);
-  } finally { await run(`HTMLElement.prototype.requestFullscreen = window.lumaRequestFullscreen;`); }
+  } finally { await run(`HTMLElement.prototype.requestFullscreen = window.lumaRequestFullscreen; void 0;`); }
   await run(`document.querySelector('.title-settings').click()`);
   await waitFor('settings page', () => run(`!!document.querySelector('.settings-page [aria-label="Обновления приложения"]')`));
   await run(`document.querySelector('.settings-page [aria-label="Обновления приложения"]').click()`);
