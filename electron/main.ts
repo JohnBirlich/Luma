@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APP_NAME, APP_USER_MODEL_ID, RELEASES_URL } from '../src/shared/app-info.js';
 import type { AppInfo } from '../src/shared/app-info.js';
+import { readUiLanguage } from '../src/shared/ui-language.js';
+import { textFor } from '../src/i18n/text.js';
 import { desktopAppInfo } from './app-info.js';
 import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js';
 import { DesktopDiagnostics } from './diagnostics.js';
@@ -21,6 +23,7 @@ import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
 import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
+import { DesktopFloatOutput } from './float-output.js';
 import { StreamCache } from './stream-cache.js';
 import { createProtocolHandler } from './protocol.js';
 import { fetchVkCover } from './vk-artwork.js';
@@ -40,6 +43,8 @@ let window: BrowserWindow | null = null;
 let journal: DesktopDiagnostics | undefined;
 let changeWidget: ((enabled: boolean) => boolean) | undefined;
 let changeFullscreen: ((fullscreen: boolean) => void) | undefined;
+const floatOutput = new DesktopFloatOutput(process.platform === 'win32' ? (app.isPackaged
+  ? join(process.resourcesPath, 'audio', 'LumaFloat.exe') : join(app.getAppPath(), 'dist-native', 'LumaFloat.exe')) : undefined);
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -72,6 +77,15 @@ function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
 }
 
 function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo, lastfm: DesktopLastFm, cache: StreamCache) {
+  floatOutput.onLost = () => {
+    if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('float:lost');
+  };
+  ipcMain.handle('float:available', (event) => { appWindow(event); return floatOutput.available(); });
+  ipcMain.handle('float:start', (event, rate: unknown) => { appWindow(event); return floatOutput.start(rate); });
+  ipcMain.handle('float:stop', (event) => { appWindow(event); return floatOutput.stop(); });
+  ipcMain.on('float:pcm', (event, stereo: unknown) => { try { appWindow(event); } catch { return; } floatOutput.drain(stereo); });
+  let t = textFor('ru');
+  ipcMain.handle('ui:language', (event, language: unknown) => { appWindow(event); t = textFor(readUiLanguage(language)); });
   ipcMain.handle('app:info', (event) => { appWindow(event); return info; });
   lastfm.onChange = (status) => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('lastfm:changed', status);
@@ -96,7 +110,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('vk:close', (event) => { appWindow(event); vk.close(); });
   ipcMain.handle('vk:reset', (event) => vk.reset(appWindow(event)));
   const lookupLyrics = createLyricsService(net.fetch, true);
-  const exportMp3 = createOnlineExporter(lookupLyrics);
+  const exportMp3 = createOnlineExporter(lookupLyrics, (...args) => t(...args));
   ipcMain.handle('lyrics:local', (event, id: unknown) => { appWindow(event); return library.lyrics(id); });
   ipcMain.handle('lyrics:edition', (event, url: unknown) => {
     appWindow(event);
@@ -163,7 +177,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('diagnostics:save', async (event) => {
     const owner = appWindow(event);
     const result = await dialog.showSaveDialog(owner, {
-      title: 'Сохранить журнал Luma', defaultPath: reportFilename(), filters: [{ name: 'Журнал', extensions: ['log'] }],
+      title: t("Сохранить журнал Luma"), defaultPath: reportFilename(), filters: [{ name: t("Журнал"), extensions: ['log'] }],
     });
     if (result.canceled || !result.filePath) return false;
     await writeFile(result.filePath, diagnosticsReport(logs.snapshot()), 'utf8');
@@ -175,9 +189,9 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('library:choose', async (event) => {
     const owner = appWindow(event);
     const { filePaths, canceled } = await dialog.showOpenDialog(owner, {
-      title: 'Добавить музыку',
+      title: t("Добавить музыку"),
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Аудиофайлы', extensions: AUDIO_EXTENSIONS }],
+      filters: [{ name: t("Аудиофайлы"), extensions: AUDIO_EXTENSIONS }],
     });
     return canceled ? { ...emptyImport(library.list()), cancelled: true } : library.importPaths(filePaths);
   });
@@ -238,6 +252,8 @@ async function createWindow() {
       autoplayPolicy: 'no-user-gesture-required', // App-controlled local autoplay, off by default.
     },
   });
+  owner.webContents.on('render-process-gone', () => { void floatOutput.stop(); });
+  owner.once('closed', () => { void floatOutput.stop(); });
   window = owner;
   changeWidget = widgetController(owner);
   if (process.platform === 'win32' && app.isPackaged) {
@@ -335,7 +351,7 @@ if (!app.requestSingleInstanceLock()) {
     event.preventDefault();
     flushing = true;
     journal.main('desktop.stopped');
-    void journal.flush().finally(() => app.quit());
+    void Promise.allSettled([journal.flush(), floatOutput.stop()]).finally(() => app.quit());
   });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }

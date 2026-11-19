@@ -1,3 +1,4 @@
+import { useText } from '../i18n/context';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AudioLines, ExternalLink, FileSearch } from 'lucide-react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
@@ -12,6 +13,7 @@ type Method = 'title' | 'sound';
 export function MetadataLookup({ track, artistHint, locale, select }: {
   track: Track; locale: string; artistHint: string; select(candidate: MetadataCandidate, titleOnly: boolean): void;
 }) {
+  const t = useText();
   const [query, setQuery] = useState(track.title.slice(0, 160));
   const [method, setMethod] = useState<Method>();
   const [ready, setReady] = useState(false);
@@ -34,8 +36,8 @@ export function MetadataLookup({ track, artistHint, locale, select }: {
       const result = await (type === 'title' ? lookupByTitle(track, query, artistHint, locale, controller.signal) : lookupBySound(track, controller.signal));
       if (!controller.signal.aborted) setCandidates(result);
     } catch {
-      if (!controller.signal.aborted) setError(type === 'title' ? 'Не удалось получить данные Apple Music. Проверьте сеть или попробуйте позже.'
-        : 'Не удалось распознать файл. Проверьте настройки AcoustID или попробуйте поиск по названию.');
+      if (!controller.signal.aborted) setError(type === 'title' ? t("Не удалось получить данные Apple Music. Проверьте сеть или попробуйте позже.")
+        : t("Не удалось распознать файл. Проверьте настройки AcoustID или попробуйте поиск по названию."));
     } finally {
       if (pending.current === controller) { pending.current = undefined; setMethod(undefined); }
     }
@@ -43,47 +45,47 @@ export function MetadataLookup({ track, artistHint, locale, select }: {
 
   function apply(candidate: MetadataCandidate, titleOnly: boolean) {
     select(candidate, titleOnly);
-    setStatus(titleOnly ? 'Название вставлено. Нажмите «Сохранить», если всё верно.' : 'Данные вставлены. Проверьте исполнителя и нажмите «Сохранить».');
+    setStatus(titleOnly ? t("Название вставлено. Нажмите «Сохранить», если всё верно.") : t("Данные вставлены. Проверьте исполнителя и нажмите «Сохранить»."));
   }
 
   return <details className="metadata-lookup">
-    <summary><FileSearch size={17} /> Найти данные записи</summary>
+    <summary><FileSearch size={17} />{" "}{t("Найти данные записи")}</summary>
     <div className="metadata-lookup-body">
-      <p>Apple Music подбирает версии по названию и пробует кириллицу. Это поиск по тексту, не подтверждение исполнителя.</p>
+      <p>{t("Apple Music подбирает версии по названию и пробует кириллицу. Это поиск по тексту, не подтверждение исполнителя.")}</p>
       <div className="metadata-search-controls">
-        <input type="search" aria-label="Название для поиска в Apple Music" maxLength={160} value={query} disabled={Boolean(method)} onChange={(event) => {
+        <input type="search" aria-label={t("Название для поиска в Apple Music")} maxLength={160} value={query} disabled={Boolean(method)} onChange={(event) => {
           setQuery(event.currentTarget.value); setCandidates(undefined); setStatus(''); setError('');
         }} onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); void search('title'); }
         }} />
         <button className="button outline-button" type="button" disabled={Boolean(method) || !connected || !metadataQueries(query).length} onClick={() => void search('title')}>
-          {method === 'title' ? 'Ищем…' : 'По названию'}
+          {method === 'title' ? t("Ищем…") : t("По названию")}
         </button>
       </div>
       {ready && canFingerprint(track) && <div className="metadata-sound">
         <button className="button outline-button" type="button" disabled={Boolean(method) || !connected} onClick={() => void search('sound')}><AudioLines size={16} />
-          {method === 'sound' ? 'Сравниваем…' : 'По звуку'}
+          {method === 'sound' ? t("Сравниваем…") : t("По звуку")}
         </button>
-        <small>AcoustID получит только отпечаток и длительность, не сам файл.</small>
+        <small>{t("AcoustID получит только отпечаток и длительность, не сам файл.")}</small>
       </div>}
-      {window.luma && !ready && <small>Для поиска по звуку нужен настроенный AcoustID. Поиск по названию работает без ключа.</small>}
-      {!connected && <p role="status">Для сравнения с каталогом нужна сеть.</p>}
+      {window.luma && !ready && <small>{t("Для поиска по звуку нужен настроенный AcoustID. Поиск по названию работает без ключа.")}</small>}
+      {!connected && <p role="status">{t("Для сравнения с каталогом нужна сеть.")}</p>}
       {error && <p className="online-message error" role="alert">{error}</p>}
-      {candidates && !candidates.length && <p role="status">Совпадений нет. Уточните название или найдите другую версию.</p>}
-      {candidates && candidates.length > 0 && <ul className="metadata-results" aria-label="Возможные версии записи">
+      {candidates && !candidates.length && <p role="status">{t("Совпадений нет. Уточните название или найдите другую версию.")}</p>}
+      {candidates && candidates.length > 0 && <ul className="metadata-results" aria-label={t("Возможные версии записи")}>
         {candidates.map((candidate) => {
           const otherArtist = artistHint && artistHint !== 'Неизвестный исполнитель' && musicSearchKey(artistHint) !== musicSearchKey(candidate.artist);
           return <li key={candidate.page}>
             <div className="metadata-recording"><strong>{candidate.title}</strong><span>{candidate.artist}{candidate.duration ? ` · ${formatTime(candidate.duration)}` : ''}</span>
-              <small>{candidate.album || (candidate.score !== undefined && `Оценка AcoustID: ${Math.round(candidate.score * 100)} / 100`)}{otherArtist && ' · Отличается от тега исполнителя'}</small>
+              <small>{candidate.album || (candidate.score !== undefined && t("Оценка AcoustID: {0} / 100", Math.round(candidate.score * 100)))}{otherArtist && t(" · Отличается от тега исполнителя")}</small>
             </div>
             <div className="metadata-result-actions">
-              <button className="text-button" type="button" onClick={() => apply(candidate, true)}>Только название</button>
-              <button className="text-button" type="button" onClick={() => apply(candidate, false)}>Вставить данные</button>
+              <button className="text-button" type="button" onClick={() => apply(candidate, true)}>{t("Только название")}</button>
+              <button className="text-button" type="button" onClick={() => apply(candidate, false)}>{t("Вставить данные")}</button>
               <a className="text-button" href={candidate.page} target="_blank" rel="noopener noreferrer" onClick={(event) => {
                 if (!window.luma) return;
                 event.preventDefault();
-                void window.luma.recognition.openSource(candidate.page).catch(() => setStatus('Не удалось открыть страницу источника.'));
+                void window.luma.recognition.openSource(candidate.page).catch(() => setStatus(t("Не удалось открыть страницу источника.")));
               }}>{candidate.source === 'apple' ? 'Apple Music' : 'MusicBrainz'} <ExternalLink size={12} /></a>
             </div>
           </li>;

@@ -1,3 +1,5 @@
+import type { FloatStart } from './float-output.js';
+import type { UiLanguage } from './ui-language.js';
 import { formatCount } from './customization.js';
 import type { AudioFormat } from './audio-quality.js';
 import type { AppInfo } from './app-info.js';
@@ -53,6 +55,7 @@ export interface ImportResult {
 }
 
 export interface DesktopBridge {
+  setUiLanguage(value: UiLanguage): Promise<void>;
   getAppInfo(): Promise<AppInfo>;
   openReleases(): Promise<void>;
   searchCommunity(id: number, query: string, source: CommunitySource): Promise<OnlineTrack[]>;
@@ -80,6 +83,13 @@ export interface DesktopBridge {
     hasAcoustid(): Promise<boolean>;
     identify(fingerprint: Fingerprint): Promise<MetadataCandidate[]>;
     openSource(url: string): Promise<void>;
+  };
+  floatOutput: {
+    available(): Promise<boolean>;
+    start(rate: number): Promise<FloatStart>;
+    stop(): Promise<void>;
+    write(stereo: ArrayBuffer): void;
+    onLost(callback: () => void): () => void;
   };
   streamCache: {
     url(track: Track): Promise<string | null>;
@@ -171,7 +181,8 @@ export function formatTime(seconds: number): string {
     : `${minutes}:${remainder}`;
 }
 
-export function trackCount(count: number, full = true): string {
+export function trackCount(count: number, full = true, language: UiLanguage = 'ru'): string {
+  if (language === 'en') return `${formatCount(count, full, language)} ${count === 1 ? 'track' : 'tracks'}`;
   const lastTwo = count % 100;
   const last = count % 10;
   const many = (!full && count >= 1000) || (lastTwo >= 11 && lastTwo <= 14);

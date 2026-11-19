@@ -4,6 +4,8 @@ import { BANDS, clamp } from '../shared/equalizer';
 import type { EqualizerSettings } from '../shared/equalizer';
 import { isMetered, streamUrl } from '../shared/audio-quality';
 import type { AudioQuality } from '../shared/audio-quality';
+import { FloatSink } from './float-sink';
+import type { FloatStatus } from '../shared/float-output';
 import { ListeningClock } from '../shared/lastfm';
 import type { Track } from '../shared/media';
 import { recordDiagnostic } from '../data/diagnostics';
@@ -39,7 +41,7 @@ class AudioGraph {
   readonly context = new AudioContext();
   readonly analyser = this.context.createAnalyser();
   private preamp = this.context.createGain();
-  private master = this.context.createGain();
+  readonly master = this.context.createGain();
   private decks = new Map<HTMLAudioElement, GainNode>();
   private filters = BANDS.map(({ hz, type }) => {
     const filter = this.context.createBiquadFilter();
@@ -95,7 +97,7 @@ function unload(audio: HTMLAudioElement) {
   if (audio.getAttribute('src')) { audio.removeAttribute('src'); audio.load(); }
 }
 
-export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQuality, ended: RefObject<() => void>, trackStarted: (id: string) => void, transition: RefObject<Transition>) {
+export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQuality, nativeFloat: boolean, ended: RefObject<() => void>, trackStarted: (id: string) => void, transition: RefObject<Transition>) {
   const ref = useRef<HTMLAudioElement>(null);
   const blendRef = useRef<HTMLAudioElement>(null);
   const streamRef = useRef<HTMLAudioElement>(null);
@@ -108,6 +110,8 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
   const token = useRef(0);
   const playIntent = useRef(0);
   const loadStarted = useRef(0);
+  const native = useRef<FloatSink | undefined>(undefined);
+  const [floatStatus, setFloatStatus] = useState<FloatStatus>('system');
   const [snapshot, setSnapshot] = useState<Snapshot>(stopped);
   const settings = useRef({ volume, eq, quality });
   const errorText = useCallback(() => active.current?.track.online
@@ -119,6 +123,15 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     else if (ref.current) ref.current.volume = volume;
     if (streamRef.current) streamRef.current.volume = volume;
   }, [volume, eq, quality]);
+
+  useEffect(() => {
+    const mixer = graph.current;
+    const bridge = window.luma?.floatOutput;
+    if (nativeFloat && snapshot.playing && active.current && !active.current.track.online && mixer && bridge) {
+      native.current ??= new FloatSink(mixer.context, mixer.master, bridge, setFloatStatus);
+      void native.current.set(true);
+    } else if (native.current) void native.current.set(false);
+  }, [nativeFloat, snapshot.playing, snapshot.stream?.id]);
 
   const cancelWarmup = useCallback(() => {
     const incoming = candidate.current;
@@ -244,7 +257,9 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
       active.current = null;
       cancelTransitions();
       cleanups.forEach((cleanup) => cleanup());
-      if (graph.current) void graph.current.context.close().catch(() => undefined);
+      const mixer = graph.current;
+      if (native.current) void native.current.close().then(() => mixer?.context.close()).catch(() => {});
+      else if (mixer) void mixer.context.close().catch(() => {});
     };
   }, [advanceSmoothly, cancelTransitions, ended, errorText, trackStarted]);
 
@@ -253,6 +268,10 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     const deck = active.current;
     if (!deck) return;
     const { audio, track } = deck;
+    if (track.online && native.current) {
+      await native.current.set(false);
+      if (intent !== playIntent.current || active.current !== deck) return;
+    }
     if (track.online && (!audio.getAttribute('src') || audio.error)) {
       const cached = track.online.source === 'wikimedia_audio' && window.luma?.streamCache
         ? await window.luma.streamCache.url(track).catch(() => null) : null;
@@ -352,5 +371,5 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     engine.analyser.getByteFrequencyData(buffer);
     return true;
   }, []);
-  return { ...snapshot, ref, blendRef, streamRef, load, play, pause, toggle, seek, isPlaying, position, readSpectrum, cancelTransitions };
+  return { ...snapshot, floatStatus, ref, blendRef, streamRef, load, play, pause, toggle, seek, isPlaying, position, readSpectrum, cancelTransitions };
 }

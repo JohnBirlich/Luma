@@ -1,3 +1,4 @@
+import type { UiLanguage } from './ui-language.js';
 import type { Track } from './media.js';
 import { cleanTrackText } from './russian.js';
 
@@ -48,13 +49,16 @@ export function readAudioFormat(value: unknown): AudioFormat | undefined {
   if (codec || bitrate || sampleRate || bitsPerSample) return { codec: codec || undefined, bitrate, sampleRate, bitsPerSample };
 }
 
-export function describeAudioFormat(format: AudioFormat | undefined, locale: string) {
+export function describeAudioFormat(format: AudioFormat | undefined, locale: string, language: UiLanguage = 'ru') {
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2, useGrouping: false });
-  return [format?.codec, format?.bitrate && `${number.format(format.bitrate / 1000)} кбит/с`,
-    format?.sampleRate && `${number.format(format.sampleRate / 1000)} кГц`, format?.bitsPerSample && `${format.bitsPerSample} бит`].filter(Boolean).join(' · ');
+  return [format?.codec, format?.bitrate && `${number.format(format.bitrate / 1000)} ${language === 'en' ? 'kbps' : 'кбит/с'}`,
+    format?.sampleRate && `${number.format(format.sampleRate / 1000)} ${language === 'en' ? 'kHz' : 'кГц'}`, format?.bitsPerSample && `${format.bitsPerSample} ${language === 'en' ? 'bit' : 'бит'}`].filter(Boolean).join(' · ');
 }
 
-export function describeStream(track: Track, url: string) {
+export function describeStream(track: Track, url: string, language: UiLanguage = 'ru') {
+  if (language === 'en') return track.online?.source === 'jamendo' ? new URL(url).searchParams.get('format') === 'mp31'
+    ? 'MP3 96 kbps · ~0.72 MB/min' : 'MP3 VBR · variable bitrate'
+    : `${new URL(url).pathname.split('.').pop()?.toUpperCase() ?? 'Original'} · source bitrate`;
   if (track.online?.source === 'jamendo') return new URL(url).searchParams.get('format') === 'mp31' ? STREAM_QUALITIES.economy : 'MP3 VBR · битрейт переменный';
   return `${new URL(url).pathname.split('.').pop()?.toUpperCase() ?? 'Оригинал'} · битрейт источника`;
 }

@@ -1,3 +1,4 @@
+import { useText } from '../i18n/context';
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { Activity, AudioLines, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Sparkles, Sunset, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
@@ -36,29 +37,30 @@ const EFFECTS = [
 export interface SceneOptionsProps { appearance: Appearance; change(value: Appearance): void }
 
 export function NowPlayingOptions({ appearance, change }: SceneOptionsProps) {
+  const t = useText();
   return <div className="scene-options">
     <div className="scene-option-group">
-      <h3>Компоновка</h3>
-      <div className="scene-layouts" role="group" aria-label="Компоновка «Сейчас играет»">
+      <h3>{t("Компоновка")}</h3>
+      <div className="scene-layouts" role="group" aria-label={t("Компоновка «Сейчас играет»")}>
         {LAYOUTS.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={appearance.hero === id} onClick={() => change({ ...appearance, hero: id })}>
-          <Icon size={17} /><span>{label}</span>
+          <Icon size={17} /><span>{t(label)}</span>
         </button>)}
       </div>
     </div>
     <div className="scene-option-group">
-      <h3>Фоновый эффект</h3>
-      <div className="scene-choice-grid" role="group" aria-label="Фон «Сейчас играет»">
-        {EFFECTS.map(({ id, label, description, icon: Icon }) => <button key={id} type="button" aria-pressed={appearance.effect === id} aria-label={label} title={description}
+      <h3>{t("Фоновый эффект")}</h3>
+      <div className="scene-choice-grid" role="group" aria-label={t("Фон «Сейчас играет»")}>
+        {EFFECTS.map(({ id, label, description, icon: Icon }) => <button key={id} type="button" aria-pressed={appearance.effect === id} aria-label={t(label)} title={t(description)}
           className="scene-choice" onClick={() => change({ ...appearance, effect: id })}>
           <span className="scene-choice-preview">
             <SceneBackground effect={id} strength={0.82} />
             <Icon size={16} aria-hidden="true" />{appearance.effect === id && <Check className="scene-choice-check" size={13} aria-hidden="true" />}
           </span>
-          <strong>{label}</strong><small>{description}</small>
+          <strong>{t(label)}</strong><small>{t(description)}</small>
         </button>)}
       </div>
     </div>
-    <label className="scene-strength"><span>Яркость эффекта</span>
+    <label className="scene-strength"><span>{t("Яркость эффекта")}</span>
       <input className="range" type="range" min="0.25" max="1" step="0.05" value={appearance.effectStrength} disabled={appearance.effect === 'off'}
         aria-valuetext={`${Math.round(appearance.effectStrength * 100)} %`} style={{ '--filled': `${(appearance.effectStrength - 0.25) / 0.75 * 100}%` } as CSSProperties}
         onChange={(event) => change({ ...appearance, effectStrength: event.currentTarget.valueAsNumber })} />
@@ -68,6 +70,7 @@ export function NowPlayingOptions({ appearance, change }: SceneOptionsProps) {
 }
 
 export function NowPlayingDialog({ appearance, change, close, tint, track, playing, sample }: SceneOptionsProps & { close(): void; tint: string; track: Track | null; playing: boolean; sample?: ReadSpectrum }) {
+  const t = useText();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); }, []);
   function dismiss() { ref.current?.close(); close(); }
@@ -77,25 +80,25 @@ export function NowPlayingDialog({ appearance, change, close, tint, track, playi
       <div className="cover-editor">
         <header className="dialog-header">
           <div className="dialog-mark"><Palette size={21} /></div>
-          <div><p className="overline">Сейчас играет</p><h2 id="scene-dialog-title">Оформление</h2></div>
-          <button type="button" className="icon-button" aria-label="Закрыть оформление" title="Закрыть" onClick={dismiss}><X size={20} /></button>
+          <div><p className="overline">{t("Сейчас играет")}</p><h2 id="scene-dialog-title">{t("Оформление")}</h2></div>
+          <button type="button" className="icon-button" aria-label={t("Закрыть оформление")} title={t("Закрыть")} onClick={dismiss}><X size={20} /></button>
         </header>
         <div className={`scene-dialog-preview scene-preview-${appearance.hero}`} style={{ '--preview-tone': tint } as CSSProperties} aria-hidden="true">
           <SceneBackground effect={appearance.effect} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} sample={appearance.audioReactive && playing ? sample : undefined} />
           {appearance.hero === 'vinyl' ? <VinylRecord className="scene-preview-record" track={track} animate={appearance.motion && playing} />
             : <Artwork track={track} imageUrl={appearance.hero === 'blur' || appearance.hero === 'cover' ? track?.backdropUrl : undefined} className="scene-preview-art" />}
-          <div className="scene-preview-copy"><p className="overline">Предпросмотр</p><strong>{track?.title ?? 'Ваша музыка'}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
+          <div className="scene-preview-copy"><p className="overline">{t("Предпросмотр")}</p><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
         </div>
         <NowPlayingOptions appearance={appearance} change={change} />
         <div className="scene-dialog-tuning">
-          <label>Темп фона <select aria-label="Темп фона" value={appearance.effectTempo} disabled={appearance.effect === 'off'} onChange={(event) => change({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
-            {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{label}</option>)}
+          <label>{t("Темп фона")}{" "}<select aria-label={t("Темп фона")} value={appearance.effectTempo} disabled={appearance.effect === 'off'} onChange={(event) => change({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
+            {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{t(label)}</option>)}
           </select></label>
-          <label><input type="checkbox" checked={appearance.audioReactive} disabled={appearance.effect === 'off'} onChange={(event) => change({ ...appearance, audioReactive: event.currentTarget.checked })} /> Реакция на локальный звук</label>
+          <label><input type="checkbox" checked={appearance.audioReactive} disabled={appearance.effect === 'off'} onChange={(event) => change({ ...appearance, audioReactive: event.currentTarget.checked })} />{" "}{t("Реакция на локальный звук")}</label>
         </div>
         <footer className="dialog-footer cover-footer">
-          <span className="scene-dialog-hint">Применяется сразу и сохраняется автоматически.</span>
-          <button type="button" className="button primary-button" onClick={dismiss}>Готово</button>
+          <span className="scene-dialog-hint">{t("Применяется сразу и сохраняется автоматически.")}</span>
+          <button type="button" className="button primary-button" onClick={dismiss}>{t("Готово")}</button>
         </footer>
       </div>
     </dialog>

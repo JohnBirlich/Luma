@@ -108,6 +108,15 @@ async function smoke() {
   assert.equal(new URL(window.webContents.getURL()).hostname, 'app');
   assert.ok(window.webContents.getURL().startsWith(APP_ORIGIN));
   assert.equal(await run('document.documentElement.lang'), 'ru');
+  assert.equal(await run('window.luma.floatOutput.start("48000")'), 'failed', 'Float IPC rejects a non-numeric rate');
+  if (process.platform === 'win32') {
+    assert.equal(await run('window.luma.floatOutput.available()'), true, 'the WASAPI helper was built');
+    const mode = await run('window.luma.floatOutput.start(48000)');
+    assert.ok(['running', 'unsupported'].includes(mode), `WASAPI helper starts or reports device incompatibility: ${mode}`);
+    await run('window.luma.floatOutput.stop()');
+    console.log(`::notice title=WASAPI Float probe::Driver result for stereo 48 kHz Float32 on the runner: ${mode}.`);
+  }
+  assert.equal(await run('window.luma.lastfm.status().then(({ enabled }) => enabled)'), false);
   assert.equal(first.artist, 'Ария');
   assert.equal(first.album, 'Живой звук');
   assert.equal(first.picture.type, 'image/jpeg');
@@ -480,6 +489,34 @@ async function smoke() {
       assert.equal(await readFile(existingLrc, 'utf8'), '[00:01.00] Existing local lyrics');
       assert.equal((await parseFile(existingLrc.replace('.lrc', '.mp3'))).common.lyrics[0].text, plainText);
     } finally { dialog.showSaveDialog = choosePath; }
+
+    // Caching is explicit. Check that playback does not fetch the remote MP3 again.
+    const beforeCache = streamCalls.filter((url) => url === synced.url).length;
+    await click(`button[aria-label="В кэш: ${synced.title}"]`);
+    await waitFor('one licensed MP3 cached', async () => (await run(`window.luma.streamCache.info()`)).count === 1);
+    assert.equal(streamCalls.filter((url) => url === synced.url).length, beforeCache + 1);
+    await waitFor('cached track is bookmarked', async () => (await preferences()).onlineTracks.some(({ id }) => id === `ov-${synced.id}`));
+    await click(`button[aria-label="Слушать онлайн: ${synced.title}"]`);
+    await waitFor('cached stream decodes through the app protocol', () => run(`(() => {
+      const audio = document.querySelector('${onlineAudio}');
+      return audio.currentSrc.startsWith('luma://app/media/cache/') && audio.currentTime > .12;
+    })()`));
+    assert.equal(streamCalls.filter((url) => url === synced.url).length, beforeCache + 1, 'cached playback makes no request for the source audio');
+    await click('.player-bar .play-button');
+    assert.deepEqual(await run('window.luma.streamCache.clear()'), { count: 0, bytes: 0 });
+    assert.ok((await preferences()).onlineTracks.some(({ id }) => id === `ov-${synced.id}`), 'cache cleanup keeps bookmarks');
+
+    await settings('Внешний вид');
+    await select('label:has(select option[value="en"]) select', 'en');
+    await waitFor('English switches Luma controls, not track metadata', () => run(`document.documentElement.lang === 'en'
+      && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.settings-page h1')?.textContent === 'Appearance'`));
+    await click('.settings-return');
+    await waitFor('settings returns to the same page with search input intact', () => run(`document.querySelector('main input[type="search"]')?.value === 'fixture-mp3'`));
+    await click('.title-settings');
+    await waitFor('most recent settings section reopens', () => run(`document.querySelector('.settings-page h1')?.textContent === 'Appearance'`));
+    await select('label:has(select option[value="en"]) select', 'ru');
+    await waitFor('Russian interface restored', () => run(`document.documentElement.lang === 'ru'`));
+    await click('.settings-return');
   } finally {
     session.defaultSession.protocol.unhandle('https');
     vkSession.protocol.unhandle('https');

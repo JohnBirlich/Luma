@@ -1,3 +1,5 @@
+import { readUiLanguage } from '../shared/ui-language';
+import type { UiLanguage } from '../shared/ui-language';
 import { readOnlineShelf } from '../shared/online';
 import type { OnlineTrack } from '../shared/online';
 import { clamp, defaultEqualizer, PRESETS } from '../shared/equalizer';
@@ -13,6 +15,8 @@ export interface Preferences {
   volume: number;
   lastVolume: number;
   showDemos: boolean;
+  uiLanguage: UiLanguage;
+  nativeFloat: boolean;
   equalizer: EqualizerSettings;
   appearance: Appearance;
   playback: PlaybackPreferences;
@@ -32,7 +36,7 @@ export interface Preferences {
 const KEY = 'luma-player:v1';
 export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
-  volume: 0.75, lastVolume: 0.75, showDemos: true, equalizer: defaultEqualizer, appearance: defaultAppearance,
+  volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
   playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false,
   resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], onlineTracks: [], onlineRefs: [],
 };
@@ -64,6 +68,8 @@ export function decodePreferences(value: string | null): Preferences {
       volume: numeric(data.volume, defaults.volume, 0, 1),
       lastVolume: numeric(data.lastVolume, defaults.lastVolume, 0.01, 1),
       showDemos: data.showDemos !== false,
+      uiLanguage: readUiLanguage(data.uiLanguage),
+      nativeFloat: data.nativeFloat === true,
       appearance: readAppearance(data.appearance),
       favorites: readFavorites(data.favorites).filter((id) => !excluded.has(id)), disliked,
       recent: readFavorites(data.recent).slice(0, RECENT_LIMIT),

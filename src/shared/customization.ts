@@ -1,3 +1,5 @@
+import type { UiLanguage } from './ui-language.js';
+
 export const THEMES = {
   amber: { name: 'Тёплая ночь', accent: '#f2bd86', chrome: '#101116', side: '#111218', panel: '#15161e', raised: '#1d1e27', glow: '#1a1a24', stage: '#14151c' },
   ocean: { name: 'Океан', accent: '#8ecffc', chrome: '#101620', side: '#121a27', panel: '#162233', raised: '#1c2c41', glow: '#22354d', stage: '#121c2a' },
@@ -128,9 +130,9 @@ export function scheduledTheme({ theme, autoTheme, dayTheme }: Appearance, hour:
   return autoTheme && hour >= 8 && hour < 20 ? dayTheme : theme;
 }
 
-export function formatCount(count: number, full = false) {
+export function formatCount(count: number, full = false, language: UiLanguage = 'ru') {
   if (full || count < 1000) return String(count);
-  const [scale, suffix] = count >= 1e6 ? [1e6, 'млн'] as const : [1000, 'к'] as const;
+  const [scale, suffix] = count >= 1e6 ? [1e6, language === 'en' ? 'M' : 'млн'] as const : [1000, language === 'en' ? 'K' : 'к'] as const;
   return `${Math.floor(count / (scale / 10)) / 10}${suffix}`;
 }
 

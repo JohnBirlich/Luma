@@ -1,3 +1,4 @@
+import { useText } from '../i18n/context';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlignLeft, Music2 } from 'lucide-react';
 import { createLyricsService } from '../shared/lyrics-service';
@@ -12,6 +13,7 @@ const webLyrics = createLyricsService();
 export function LyricsPanel({ track, elapsed, playing, auto, connected }: {
   track: Track; elapsed: number; playing: boolean; auto: boolean; connected: boolean;
 }) {
+  const t = useText();
   const query = useMemo(() => readLyricsQuery({ ...track, album: track.online && track.album === ONLINE_SOURCES[track.online.source] ? undefined : track.album }), [track]);
   const [attempt, setAttempt] = useState(0);
   const [started, setStarted] = useState(false);
@@ -64,28 +66,28 @@ export function LyricsPanel({ track, elapsed, playing, auto, connected }: {
     } catch { setAttachError(true); }
   }
   return <section className="lyrics-card" aria-labelledby="lyrics-title">
-    <header><AlignLeft size={19} /><div><h2 id="lyrics-title">Текст песни</h2><p>{showEdition ? `Викитека · ${edition.author}` : attached || local ? 'Из файла' : 'LRCLIB'}{lines.length ? ' · синхронизированный текст' : ''}</p></div>
-      {query && !result && <button className="button outline-button" type="button" disabled={busy || !connected || local === undefined} onClick={() => setAttempt((value) => value + 1)}>{busy && connected ? 'Ищем…' : error || result === null ? 'Повторить' : 'Найти текст'}</button>}</header>
+    <header><AlignLeft size={19} /><div><h2 id="lyrics-title">{t("Текст песни")}</h2><p>{showEdition ? t("Викитека · {0}", edition.author) : attached || local ? t("Из файла") : 'LRCLIB'}{lines.length ? t(" · синхронизированный текст") : ''}</p></div>
+      {query && !result && <button className="button outline-button" type="button" disabled={busy || !connected || local === undefined} onClick={() => setAttempt((value) => value + 1)}>{busy && connected ? t("Ищем…") : error || result === null ? t("Повторить") : t("Найти текст")}</button>}</header>
     <div className="lyrics-sources">
       <input hidden type="file" ref={fileInput} accept=".lrc,.txt" onChange={(event) => {
         void attach(event.currentTarget.files?.[0]); event.currentTarget.value = '';
       }} />
-      <button className="text-button" type="button" onClick={() => fileInput.current?.click()}>Открыть .lrc / .txt</button>
-      {attached && <button className="text-button" type="button" onClick={() => setAttached(undefined)}>Убрать текст из файла</button>}
-      {edition && !attached && <button className="text-button" type="button" aria-pressed={Boolean(showEdition)} onClick={() => setEditionOpen((value) => !value)}>Викитека: оригинальный текст</button>}
+      <button className="text-button" type="button" onClick={() => fileInput.current?.click()}>{t("Открыть .lrc / .txt")}</button>
+      {attached && <button className="text-button" type="button" onClick={() => setAttached(undefined)}>{t("Убрать текст из файла")}</button>}
+      {edition && !attached && <button className="text-button" type="button" aria-pressed={Boolean(showEdition)} onClick={() => setEditionOpen((value) => !value)}>{t("Викитека: оригинальный текст")}</button>}
       {showEdition && <a className="text-button" href={edition.page} target="_blank" rel="noopener noreferrer" onClick={(event) => {
         if (window.luma) { event.preventDefault(); void window.luma.lyrics.openEdition(edition.page).catch(() => {}); }
-      }}>Источник издания</a>}
+      }}>{t("Источник издания")}</a>}
     </div>
-    {attachError && <p className="lyrics-status" role="status">Нужен непустой файл UTF-8 .lrc или .txt до 128 КБ.</p>}
-    {showEdition && <p className="lyrics-status">Общественное достояние. Текст издания может отличаться от исполнения.</p>}
-    {!connected && !result && <p className="lyrics-status" role="status">Для поиска нужна сеть.</p>}
-    {connected && error && !result && <p className="lyrics-status" role="status">LRCLIB не ответил. Попробуйте позже.</p>}
-    {result === null && <p className="lyrics-status" role="status">Для этой записи текст не найден.</p>}
-    {result?.instrumental && <p className="lyrics-status"><Music2 size={14} /> Инструментальная запись</p>}
-    {lines.length ? <div className="lyrics-scroll" ref={scroll} tabIndex={0} role="region" aria-label="Строки песни">
+    {attachError && <p className="lyrics-status" role="status">{t("Нужен непустой файл UTF-8 .lrc или .txt до 128 КБ.")}</p>}
+    {showEdition && <p className="lyrics-status">{t("Общественное достояние. Текст издания может отличаться от исполнения.")}</p>}
+    {!connected && !result && <p className="lyrics-status" role="status">{t("Для поиска нужна сеть.")}</p>}
+    {connected && error && !result && <p className="lyrics-status" role="status">{t("LRCLIB не ответил. Попробуйте позже.")}</p>}
+    {result === null && <p className="lyrics-status" role="status">{t("Для этой записи текст не найден.")}</p>}
+    {result?.instrumental && <p className="lyrics-status"><Music2 size={14} />{" "}{t("Инструментальная запись")}</p>}
+    {lines.length ? <div className="lyrics-scroll" ref={scroll} tabIndex={0} role="region" aria-label={t("Строки песни")}>
       {lines.map(({ time, text }, index) => <p key={`${time}-${index}`} ref={index === current ? line : undefined} aria-current={index === current ? 'true' : undefined}>{text || '\u00a0'}</p>)}
-    </div> : result?.plain && <div className="lyrics-scroll lyrics-plain" tabIndex={0} role="region" aria-label="Текст песни">{result.plain}</div>}
-    {query && !busy && result === undefined && !error && connected && <p className="lyrics-status">Поиск отправит название, исполнителя и, если известны, альбом и длительность.</p>}
+    </div> : result?.plain && <div className="lyrics-scroll lyrics-plain" tabIndex={0} role="region" aria-label={t("Текст песни")}>{result.plain}</div>}
+    {query && !busy && result === undefined && !error && connected && <p className="lyrics-status">{t("Поиск отправит название, исполнителя и, если известны, альбом и длительность.")}</p>}
   </section>;
 }

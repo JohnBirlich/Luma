@@ -6,6 +6,7 @@ import type { LastFmStatus } from '../src/shared/lastfm.js';
 import type { VkWebsiteState } from '../src/shared/vk.js';
 
 const bridge: DesktopBridge = {
+  setUiLanguage: (language) => ipcRenderer.invoke('ui:language', language),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   searchCommunity: (id, query, source) => ipcRenderer.invoke('online:search-community', id, query, source),
   cancelCatalogSearch: (id) => ipcRenderer.invoke('online:cancel-search', id),
@@ -37,6 +38,17 @@ const bridge: DesktopBridge = {
     hasAcoustid: () => ipcRenderer.invoke('metadata:has-acoustid'),
     identify: (fingerprint) => ipcRenderer.invoke('metadata:identify', fingerprint),
     openSource: (url) => ipcRenderer.invoke('metadata:open-link', url),
+  },
+  floatOutput: {
+    available: () => ipcRenderer.invoke('float:available'),
+    start: (rate) => ipcRenderer.invoke('float:start', rate),
+    stop: () => ipcRenderer.invoke('float:stop'),
+    write: (stereo) => ipcRenderer.send('float:pcm', stereo),
+    onLost: (callback) => {
+      const listener = () => callback();
+      ipcRenderer.on('float:lost', listener);
+      return () => ipcRenderer.removeListener('float:lost', listener);
+    },
   },
   streamCache: {
     url: (track) => ipcRenderer.invoke('cache:url', track),

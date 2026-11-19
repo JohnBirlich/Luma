@@ -36,7 +36,7 @@ async function fetchMp3(track: OnlineTrack, signal: AbortSignal) {
   return { buffer, duration: format.duration, hasLyrics: Boolean(common.lyrics?.length) };
 }
 
-export function createOnlineExporter(lookup: (query: unknown, signal: AbortSignal) => Promise<Lyrics | null>) {
+export function createOnlineExporter(lookup: (query: unknown, signal: AbortSignal) => Promise<Lyrics | null>, text = (value: string) => value) {
   let busy = false;
   return async (owner: BrowserWindow, value: unknown, wantsLyrics: unknown): Promise<Mp3ExportResult> => {
     const listed = readOnlineTrack(value);
@@ -45,7 +45,7 @@ export function createOnlineExporter(lookup: (query: unknown, signal: AbortSigna
     try {
       const title = listed.title.replace(/[<>:"/\\|?*\p{Cc}]/gu, '_').slice(0, 90).replace(/[. ]+$/, '') || 'Трек';
       const { canceled, filePath } = await dialog.showSaveDialog(owner, {
-        title: 'Сохранить новый MP3', defaultPath: `${title}.mp3`, filters: [{ name: 'MP3', extensions: ['mp3'] }],
+        title: text("Сохранить новый MP3"), defaultPath: `${title}.mp3`, filters: [{ name: 'MP3', extensions: ['mp3'] }],
       });
       if (canceled || !filePath) return { saved: false };
       if (extname(filePath).toLowerCase() !== '.mp3') throw new Error('Выберите имя файла с расширением .mp3.');

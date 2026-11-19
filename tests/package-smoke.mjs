@@ -15,7 +15,7 @@ try {
   assert.equal(JSON.parse(await readFile(join(archive, 'package.json'), 'utf8')).version, version, 'packaged manifest version');
   const assetDir = join(archive, 'dist', 'assets');
   const assets = await readdir(assetDir);
-  for (const expected of [/^fingerprint\.worker-.*\.js$/, /^rusty_chromaprint_wasm_bg-.*\.wasm$/, /^ocean-.*\.webm$/]) {
+  for (const expected of [/^fingerprint\.worker-.*\.js$/, /^rusty_chromaprint_wasm_bg-.*\.wasm$/, /^ocean-.*\.webm$/, /^float\.worklet-.*\.js$/]) {
     const name = assets.find((file) => expected.test(file));
     assert.ok(name && (await stat(join(assetDir, name))).size > 0, `packaged asset ${expected}`);
   }
@@ -23,6 +23,7 @@ try {
   assert.ok(config.split(/\r?\n/).includes(`appId: ${APP_USER_MODEL_ID}`), 'runtime and installer app IDs agree');
   assert.ok(config.split(/\r?\n/).includes(`productName: ${APP_NAME}`), 'runtime and installer product names agree');
   if (process.platform === 'win32') {
+    assert.ok((await stat(join(directory, 'win-unpacked', 'resources', 'audio', 'LumaFloat.exe'))).isFile());
     const metadata = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
       '(Get-Item -LiteralPath $env:LUMA_TEST_EXE).VersionInfo | Select-Object ProductName,FileDescription | ConvertTo-Json -Compress'], {
       env: { ...process.env, LUMA_TEST_EXE: join(directory, 'win-unpacked', `${APP_NAME}.exe`) }, encoding: 'utf8', windowsHide: true, timeout: 15_000,

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
+import { UiText } from './i18n/context';
+import { textFor } from './i18n/text';
 import { CircleAlert, CircleCheck, FileAudio, X } from 'lucide-react';
 import { Sidebar, TitleBar } from './components/Chrome';
 import type { Page } from './components/Chrome';
@@ -67,6 +69,11 @@ function localeOrDefault(value: string | undefined) {
 export default function App() {
   const [boot] = useState(readPreferences);
   const [preferences, setPreferences] = useState(boot);
+  const t = useMemo(() => textFor(preferences.uiLanguage), [preferences.uiLanguage]);
+  useEffect(() => {
+    document.documentElement.lang = preferences.uiLanguage;
+    void window.luma?.setUiLanguage?.(preferences.uiLanguage).catch(() => {});
+  }, [preferences.uiLanguage]);
   const [queue, setQueue] = useState(() => boot.queue ?? startQueue(boot.showDemos ? demoIds : [], undefined, boot.resumeRepeat));
   const queueRef = useRef(queue);
   const commit = useCallback((next: QueueState) => {
@@ -152,7 +159,7 @@ export default function App() {
     const recent = rememberTrack(data.recent, id);
     return recent === data.recent ? data : { ...data, recent };
   }), []);
-  const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, ended, trackStarted, transition);
+  const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
   function openVkWebsite(url: string) {
     if (!window.luma || widget || !connected) return;
@@ -169,7 +176,7 @@ export default function App() {
     if (!window.luma || widgetPending || vkPlayback || presentationOpen) return;
     setWidgetPending(true);
     try { setWidget(await window.luma.window.setWidget(enabled)); }
-    catch { setNotice({ message: 'Не удалось переключить режим виджета.', error: true }); }
+    catch { setNotice({ message: t("Не удалось переключить режим виджета."), error: true }); }
     finally { setWidgetPending(false); }
   }, [presentationOpen, vkPlayback, widgetPending]);
   const sampledTone = usePalette(appearance.coverColors ? current : null);
@@ -197,7 +204,7 @@ export default function App() {
     }).catch(() => {
       if (!ignored) {
         recordDiagnostic('library.failed', { ms: performance.now() - start });
-        setNotice({ message: 'Не удалось открыть локальную медиатеку.', error: true });
+        setNotice({ message: t("Не удалось открыть локальную медиатеку."), error: true });
       }
     }).finally(() => { if (!ignored) setReady(true); });
     return () => { ignored = true; };
@@ -299,21 +306,21 @@ export default function App() {
         commit(initial ? state.beforeShuffle ? toggleShuffle(initial) : initial : appendToQueue(state, result.added));
       }
       const notes: string[] = [];
-      if (result.duplicates) notes.push(`Уже в медиатеке: ${result.duplicates}.`);
-      if (result.failures.length) notes.push(`${result.failures[0].name}: ${result.failures[0].message}${result.failures.length > 1 ? ` Ещё ошибок: ${result.failures.length - 1}.` : ''}`);
-      if (result.temporary) notes.push('Браузер не сохранил часть файлов: они доступны до закрытия вкладки.');
+      if (result.duplicates) notes.push(t("Уже в медиатеке: {0}.", result.duplicates));
+      if (result.failures.length) notes.push(`${result.failures[0].name}: ${t(result.failures[0].message)}${result.failures.length > 1 ? t(" Ещё ошибок: {0}.", result.failures.length - 1) : ''}`);
+      if (result.temporary) notes.push(t("Браузер не сохранил часть файлов: они доступны до закрытия вкладки."));
       setNotice({
-        message: result.added.length ? `Добавлено: ${trackCount(result.added.length, appearance.fullNumbers)}` : result.failures.length ? 'Не удалось добавить файлы' : 'Новых треков нет',
+        message: result.added.length ? t("Добавлено: {0}", trackCount(result.added.length, appearance.fullNumbers, t.language)) : result.failures.length ? t("Не удалось добавить файлы") : t("Новых треков нет"),
         detail: notes.join(' '), error: result.failures.length > 0 || result.temporary,
       });
     } catch {
       recordDiagnostic('library.importFailed', { ms: performance.now() - start });
-      setNotice({ message: 'Не удалось добавить музыку.', detail: 'Проверьте доступ к файлам и повторите попытку.', error: true });
+      setNotice({ message: t("Не удалось добавить музыку."), detail: t("Проверьте доступ к файлам и повторите попытку."), error: true });
     } finally {
       busy.current = false;
       setWorking(false);
     }
-  }, [ready, localTracks.length, isPlaying, position, commit, appearance.fullNumbers]);
+  }, [ready, localTracks.length, isPlaying, position, commit, appearance.fullNumbers, t]);
 
   const choose = useCallback(() => {
     if (!ready || busy.current) return;
@@ -380,9 +387,9 @@ export default function App() {
   function addToQueue(id: string) {
     const state = queueRef.current;
     if (!byId.has(id)) return;
-    if (state.order.includes(id)) { setNotice({ message: 'Трек уже в очереди' }); return; }
+    if (state.order.includes(id)) { setNotice({ message: t("Трек уже в очереди") }); return; }
     commit(appendToQueue(state, [id]));
-    setNotice({ message: 'Трек добавлен в очередь' });
+    setNotice({ message: t("Трек добавлен в очередь") });
   }
   function removeQueued(id: string) {
     const state = queueRef.current;
@@ -400,9 +407,9 @@ export default function App() {
       void updateCover(trackCoverKey(id));
       updateDetails(id);
       setPreferences((data) => ({ ...data, favorites: data.favorites.filter((favorite) => favorite !== id), disliked: data.disliked.filter((item) => item !== id), recent: data.recent.filter((recentId) => recentId !== id) }));
-      setNotice({ message: 'Трек убран из медиатеки', detail: 'Исходный файл не удалён.' });
+      setNotice({ message: t("Трек убран из медиатеки"), detail: t("Исходный файл не удалён.") });
     } catch {
-      setNotice({ message: 'Не удалось убрать трек из медиатеки.', error: true });
+      setNotice({ message: t("Не удалось убрать трек из медиатеки."), error: true });
     } finally { busy.current = false; setWorking(false); }
   }
   function chooseOnline(track: OnlineTrack, action: OnlineAction) {
@@ -411,16 +418,16 @@ export default function App() {
     if (action === 'cache') {
       if (!window.luma?.streamCache || busy.current) return;
       if (!savedOnline.has(track.id) && onlineTracks.length >= MAX_ONLINE_TRACKS) {
-        setNotice({ message: 'Коллекция онлайн-ссылок заполнена', error: true });
+        setNotice({ message: t("Коллекция онлайн-ссылок заполнена"), error: true });
         return;
       }
       busy.current = true; setWorking(true); setNotice(undefined);
       void window.luma.streamCache.save(track).catch(() => false).then((saved) => {
-        if (!saved) { setNotice({ message: 'Не удалось сохранить в кэш', detail: 'Проверьте сеть. Кэш принимает только подходящие MP3 до 32 МБ.', error: true }); return; }
+        if (!saved) { setNotice({ message: t("Не удалось сохранить в кэш"), detail: t("Проверьте сеть. Кэш принимает только подходящие MP3 до 32 МБ."), error: true }); return; }
         setPreferences((data) => data.onlineTracks.some(({ id }) => id === track.id) ? data : {
           ...data, onlineTracks: [...data.onlineTracks, track], onlineRefs: data.onlineRefs.filter(({ id }) => id !== track.id),
         });
-        setNotice({ message: 'Копия в кэше', detail: 'Запись доступна в «Медиатека → Из интернета».' });
+        setNotice({ message: t("Копия в кэше"), detail: t("Запись доступна в «Медиатека → Из интернета».") });
       }).finally(() => { busy.current = false; setWorking(false); });
       return;
     }
@@ -434,37 +441,37 @@ export default function App() {
           const notes: string[] = [];
           if (result.lyrics) {
             const { synced, plain } = result.lyrics;
-            if (synced === 'saved') notes.push('Синхронный текст сохранён в .lrc.');
-            if (plain === 'saved') notes.push('Обычный текст добавлен в тег MP3.');
-            if (synced === 'existing') notes.push('Существующий .lrc не изменён.');
-            if (plain === 'existing') notes.push('Исходный текст в теге MP3 сохранён.');
-            if (synced === 'failed' || plain === 'failed') notes.push('Не удалось записать часть текстов.');
-            if (!synced && !plain) notes.push('Подходящий текст не найден.');
+            if (synced === 'saved') notes.push(t("Синхронный текст сохранён в .lrc."));
+            if (plain === 'saved') notes.push(t("Обычный текст добавлен в тег MP3."));
+            if (synced === 'existing') notes.push(t("Существующий .lrc не изменён."));
+            if (plain === 'existing') notes.push(t("Исходный текст в теге MP3 сохранён."));
+            if (synced === 'failed' || plain === 'failed') notes.push(t("Не удалось записать часть текстов."));
+            if (!synced && !plain) notes.push(t("Подходящий текст не найден."));
           }
-          if (!result.credit) notes.push('Не удалось сохранить файл с источником и лицензией.');
-          setNotice({ message: 'Копия MP3 сохранена', detail: notes.join(' '), error: !result.credit });
+          if (!result.credit) notes.push(t("Не удалось сохранить файл с источником и лицензией."));
+          setNotice({ message: t("Копия MP3 сохранена"), detail: notes.join(' '), error: !result.credit });
         }
       }, (error: unknown) => {
-        const detail = error instanceof Error && /Файл уже существует/.test(error.message) ? 'Файл уже существует. Выберите новое имя.' : 'Запись может быть недоступна для скачивания. Проверьте сеть и путь сохранения.';
-        setNotice({ message: 'Не удалось сохранить MP3', detail, error: true });
+        const detail = error instanceof Error && /Файл уже существует/.test(error.message) ? t("Файл уже существует. Выберите новое имя.") : t("Запись может быть недоступна для скачивания. Проверьте сеть и путь сохранения.");
+        setNotice({ message: t("Не удалось сохранить MP3"), detail, error: true });
       }).finally(() => { busy.current = false; setWorking(false); });
       return;
     }
     if (action === 'save') {
-      if (savedOnline.has(track.id)) { setNotice({ message: 'Запись уже сохранена' }); return; }
+      if (savedOnline.has(track.id)) { setNotice({ message: t("Запись уже сохранена") }); return; }
       if (onlineTracks.length >= MAX_ONLINE_TRACKS) {
-        setNotice({ message: 'Коллекция онлайн-ссылок заполнена', detail: 'Уберите одну из сохранённых записей и попробуйте снова.', error: true });
+        setNotice({ message: t("Коллекция онлайн-ссылок заполнена"), detail: t("Уберите одну из сохранённых записей и попробуйте снова."), error: true });
         return;
       }
       setPreferences((data) => ({ ...data, onlineTracks: [...data.onlineTracks, track], onlineRefs: data.onlineRefs.filter(({ id }) => id !== track.id) }));
-      setNotice({ message: 'Ссылка сохранена в «Из интернета»' });
+      setNotice({ message: t("Ссылка сохранена в «Из интернета»") });
       return;
     }
     const existing = byId.get(track.id);
     if (!existing) {
       const refs = activeOnlineRefs({ ...preferences, queue: state });
       if (refs.length >= MAX_ONLINE_TRACKS) {
-        setNotice({ message: 'Слишком много онлайн-треков в очереди и истории', detail: 'Удалите часть ссылок или очистите историю.', error: true });
+        setNotice({ message: t("Слишком много онлайн-треков в очереди и истории"), detail: t("Удалите часть ссылок или очистите историю."), error: true });
         return;
       }
       setPreferences((data) => ({ ...data, onlineRefs: [...refs, track] }));
@@ -472,8 +479,8 @@ export default function App() {
     if (action === 'play') {
       commit({ ...appendToQueue(state, [track.id]), currentId: track.id });
       load(existing ?? track, true);
-    } else if (state.order.includes(track.id)) setNotice({ message: 'Трек уже в очереди' });
-    else { commit(appendToQueue(state, [track.id])); setNotice({ message: 'Онлайн-трек добавлен в очередь' }); }
+    } else if (state.order.includes(track.id)) setNotice({ message: t("Трек уже в очереди") });
+    else { commit(appendToQueue(state, [track.id])); setNotice({ message: t("Онлайн-трек добавлен в очередь") }); }
   }
   function removeTrack(id: string) {
     if (!byId.get(id)?.online) { void removeLocal(id); return; }
@@ -481,7 +488,7 @@ export default function App() {
     void updateCover(trackCoverKey(id));
     setPreferences((data) => ({ ...data, onlineTracks: data.onlineTracks.filter((track) => track.id !== id), onlineRefs: data.onlineRefs.filter((track) => track.id !== id),
       favorites: data.favorites.filter((item) => item !== id), recent: data.recent.filter((item) => item !== id) }));
-    setNotice({ message: 'Онлайн-ссылка убрана из медиатеки' });
+    setNotice({ message: t("Онлайн-ссылка убрана из медиатеки") });
   }
   function toggleDemos() {
     const state = queueRef.current;
@@ -494,7 +501,7 @@ export default function App() {
   function resetCustomization() {
     if (!preferences.showDemos) toggleDemos();
     setPreferences((data) => ({ ...data, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false }));
-    setNotice({ message: 'Оформление и параметры воспроизведения сброшены' });
+    setNotice({ message: t("Оформление и параметры воспроизведения сброшены") });
   }
   function editTrackDetails(id: string) {
     dropDepth.current = 0;
@@ -504,9 +511,9 @@ export default function App() {
   function saveDetails(value?: TrackDetails) {
     if (!detailsTrack) return;
     const saved = updateDetails(detailsTrack.id, value);
-    setNotice(saved ? { message: value ? 'Данные трека сохранены' : 'Исходные данные возвращены' } : {
-      message: 'Данные изменены только для этой сессии',
-      detail: 'Не удалось сохранить их в профиле Luma.', error: true,
+    setNotice(saved ? { message: value ? t("Данные трека сохранены") : t("Исходные данные возвращены") } : {
+      message: t("Данные изменены только для этой сессии"),
+      detail: t("Не удалось сохранить их в профиле Luma."), error: true,
     });
   }
   function editTrackCover(id: string) {
@@ -516,9 +523,9 @@ export default function App() {
   async function saveCover(image?: Blob) {
     if (!coverTarget) return;
     const saved = await updateCover(coverTarget.key, image);
-    setNotice(saved ? { message: image ? 'Обложка сохранена' : 'Исходная обложка возвращена' } : {
-      message: 'Обложка изменена только для этой сессии',
-      detail: 'Не удалось сохранить её в профиле Luma.',
+    setNotice(saved ? { message: image ? t("Обложка сохранена") : t("Исходная обложка возвращена") } : {
+      message: t("Обложка изменена только для этой сессии"),
+      detail: t("Не удалось сохранить её в профиле Luma."),
       error: true,
     });
   }
@@ -534,7 +541,7 @@ export default function App() {
     const state = queueRef.current;
     const updated = appendToQueue(state, items.map(({ id }) => id));
     commit(updated);
-    setNotice({ message: updated === state ? 'Все треки микса уже в очереди' : `Добавлено: ${trackCount(updated.order.length - state.order.length, appearance.fullNumbers)}` });
+    setNotice({ message: updated === state ? t("Все треки микса уже в очереди") : t("Добавлено: {0}", trackCount(updated.order.length - state.order.length, appearance.fullNumbers, t.language)) });
   }
   function goToLibrary() { navigate('library'); }
   function navigate(target: Page, scope: 'all' | 'offline' = 'all') {
@@ -568,7 +575,7 @@ export default function App() {
   };
 
   return (
-    <div data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${widget ? ' widget-mode' : vkPlayback ? ' vk-mode' : queueOpen ? ' queue-visible' : ''}${appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
+    <UiText.Provider value={t}><div data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${widget ? ' widget-mode' : vkPlayback ? ' vk-mode' : queueOpen ? ' queue-visible' : ''}${appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
       onDragEnter={(event) => {
         if (modalOpen || presentationOpen || widget || vkVisit || !filesDragged(event)) return;
         event.preventDefault();
@@ -610,8 +617,9 @@ export default function App() {
             chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
         </div>
         {page === 'settings' && !vkVisit && !widget && <div className="page-body" key="settings">
-          <SettingsPage appearance={appearance} effectiveAppearance={effectiveAppearance} locale={locale} playback={playback} audioQuality={audioQuality}
+          <SettingsPage uiLanguage={preferences.uiLanguage} changeLanguage={(uiLanguage) => setPreferences((data) => ({ ...data, uiLanguage }))} appearance={appearance} effectiveAppearance={effectiveAppearance} locale={locale} playback={playback} audioQuality={audioQuality}
             playingStream={player.stream?.id === current?.id ? player.stream?.url : undefined} connected={connected}
+            nativeFloat={preferences.nativeFloat} floatStatus={player.floatStatus} changeFloat={(nativeFloat) => setPreferences((data) => ({ ...data, nativeFloat }))}
             metered={audioQuality.network === 'auto' ? metered : audioQuality.network === 'metered'}
             autoLyrics={preferences.autoLyrics} exportLyrics={preferences.exportLyrics} showDemos={preferences.showDemos} libraryReady={ready && !working}
             previewTrack={current} tint={tint} localCount={localTracks.length} recentCount={preferences.recent.length}
@@ -628,7 +636,7 @@ export default function App() {
         {vkVisit && <VkWebsitePanel url={vkVisit} close={closeVkWebsite} />}
       </main>
       {!vkPlayback && !widget && queueOpen && <>
-        <button type="button" className="queue-scrim" onClick={closeQueue} aria-label="Закрыть панель очереди" />
+        <button type="button" className="queue-scrim" onClick={closeQueue} aria-label={t("Закрыть панель очереди")} />
         <QueuePanel active={current} upcoming={upcoming} count={queued.length} fullNumbers={appearance.fullNumbers} duration={queued.reduce((sum, track) => sum + track.duration, 0)} playing={player.playing}
           close={closeQueue} play={(id) => playTrack(id, true)} remove={removeQueued} move={(from, to) => commit(moveUpcoming(queueRef.current, from, to))} goToLibrary={goToLibrary} />
       </>}
@@ -646,18 +654,18 @@ export default function App() {
         handleFiles(Array.from(event.currentTarget.files ?? []));
         event.currentTarget.value = '';
       }} />
-      {dropActive && <div className="drop-overlay" aria-hidden="true"><div><FileAudio size={30} /><strong>Отпустите файлы</strong><span>Добавим аудио в вашу медиатеку</span></div></div>}
+      {dropActive && <div className="drop-overlay" aria-hidden="true"><div><FileAudio size={30} /><strong>{t("Отпустите файлы")}</strong><span>{t("Добавим аудио в вашу медиатеку")}</span></div></div>}
       <div className="notifications" aria-live="polite">
         {(visibleNotice || playbackError) && <div className={`toast${visibleNotice?.error || (!visibleNotice && playbackError) ? ' toast-error' : ''}`}>
           {visibleNotice?.error || (!visibleNotice && playbackError) ? <CircleAlert size={20} /> : <CircleCheck size={20} />}
-          <div><strong>{visibleNotice?.message ?? playbackError}</strong>{visibleNotice?.detail && <small>{visibleNotice.detail}</small>}{!visibleNotice && playbackError && current?.online && <OnlineCredit track={{ online: current.online }} compact />}</div>
-          {visibleNotice && <button type="button" className="icon-button" onClick={() => setNotice(undefined)} aria-label="Скрыть уведомление"><X size={17} /></button>}
+          <div><strong>{visibleNotice?.message ?? (playbackError ? t(playbackError) : '')}</strong>{visibleNotice?.detail && <small>{visibleNotice.detail}</small>}{!visibleNotice && playbackError && current?.online && <OnlineCredit track={{ online: current.online }} compact />}</div>
+          {visibleNotice && <button type="button" className="icon-button" onClick={() => setNotice(undefined)} aria-label={t("Скрыть уведомление")}><X size={17} /></button>}
         </div>}
       </div>
       {coverTarget && <CoverEditor key={coverTarget.key} target={coverTarget} currentUrl={covers.get(coverTarget.key)} update={saveCover} close={() => setCoverTarget(undefined)} />}
       {detailsTrack && <TrackDetailsEditor key={detailsTrack.id} locale={locale} track={detailsTrack} edited={details.has(detailsTrack.id)} save={saveDetails} close={() => setDetailsId(undefined)} />}
       {showAppearance && <NowPlayingDialog appearance={appearance} tint={tint} track={current} playing={player.playing} sample={player.playing && !current?.online ? player.readSpectrum : undefined} change={changeAppearance} close={() => setShowAppearance(false)} />}
       {showEqualizer && <Equalizer settings={preferences.equalizer} change={(equalizer) => setPreferences((data) => ({ ...data, equalizer }))} close={() => setShowEqualizer(false)} />}
-    </div>
+    </div></UiText.Provider>
   );
 }

@@ -1,3 +1,4 @@
+import { useText } from '../i18n/context';
 import { useLayoutEffect, useRef } from 'react';
 import type { CSSProperties, RefObject } from 'react';
 import { AudioLines, ChevronDown, ListMusic, Palette, SlidersHorizontal } from 'lucide-react';
@@ -34,6 +35,7 @@ interface FullscreenPlayerProps extends PlaybackProps {
 }
 
 export function FullscreenPlayer(props: FullscreenPlayerProps) {
+  const t = useText();
   const { track, tint, appearance, playing, favorite, close } = props;
   const { hero, effect, effectStrength, motion } = appearance;
   const ref = useRef<HTMLDialogElement>(null);
@@ -55,12 +57,12 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
       <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
       <div aria-hidden="true" className="immersive-scrim" />
       <header className="immersive-header">
-        <button type="button" className="icon-button immersive-collapse" onClick={close} title="Свернуть (Esc)" aria-label="Свернуть полноэкранный плеер"><ChevronDown size={24} /></button>
-        <div><p className="overline">Сейчас играет</p><strong>{track.online ? 'Онлайн-трек' : track.demo ? 'Демотреки Luma' : 'Локальная медиатека'}</strong></div>
+        <button type="button" className="icon-button immersive-collapse" onClick={close} title={t("Свернуть (Esc)")} aria-label={t("Свернуть полноэкранный плеер")}><ChevronDown size={24} /></button>
+        <div><p className="overline">{t("Сейчас играет")}</p><strong>{track.online ? t("Онлайн-трек") : track.demo ? t("Демотреки Luma") : t("Локальная медиатека")}</strong></div>
         <div className="immersive-header-actions">
           <button type="button" className="icon-button immersive-queue-toggle" onClick={props.toggleQueue}
-            aria-expanded={queueVisible} aria-controls={queueVisible ? 'immersive-upcoming' : undefined} aria-label={queueVisible ? 'Скрыть следующие треки' : 'Показать следующие треки'}
-            title={queueVisible ? 'Скрыть следующие треки' : 'Показать следующие треки'}><ListMusic size={20} /></button>
+            aria-expanded={queueVisible} aria-controls={queueVisible ? 'immersive-upcoming' : undefined} aria-label={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}
+            title={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}><ListMusic size={20} /></button>
           <div className="immersive-brand" aria-hidden="true"><AudioLines size={19} /><span>Luma Player</span></div>
         </div>
       </header>
@@ -79,9 +81,9 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
           <SeekTimeline {...props} />
           <TransportControls {...props} />
           <div className="immersive-tools">
-            <button type="button" className="icon-button" onClick={props.openAppearance} aria-label="Оформление полноэкранного плеера" title="Оформление" aria-haspopup="dialog"><Palette size={20} /></button>
-            <button type="button" className="icon-button" onClick={props.openEqualizer} aria-label="Эквалайзер" title="Эквалайзер" aria-haspopup="dialog"><SlidersHorizontal size={20} /></button>
-            {queueVisible && <button type="button" className="icon-button immersive-queue-jump" aria-label="Перейти к следующим трекам" title="Перейти к следующим трекам" onClick={jumpToQueue}><ListMusic size={20} /></button>}
+            <button type="button" className="icon-button" onClick={props.openAppearance} aria-label={t("Оформление полноэкранного плеера")} title={t("Оформление")} aria-haspopup="dialog"><Palette size={20} /></button>
+            <button type="button" className="icon-button" onClick={props.openEqualizer} aria-label={t("Эквалайзер")} title={t("Эквалайзер")} aria-haspopup="dialog"><SlidersHorizontal size={20} /></button>
+            {queueVisible && <button type="button" className="icon-button immersive-queue-jump" aria-label={t("Перейти к следующим трекам")} title={t("Перейти к следующим трекам")} onClick={jumpToQueue}><ListMusic size={20} /></button>}
             <VolumeControl {...props} />
           </div>
         </div>

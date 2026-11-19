@@ -1,3 +1,4 @@
+import { useText } from '../i18n/context';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { ArrowLeft, ArrowUpCircle, AudioLines, Bell, Bug, Check, HardDrive, Headphones, Keyboard, Monitor, Music2, Palette, Play, Plug, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
@@ -5,7 +6,10 @@ import { ACCENTS, accentFor, CROSSFADE_TIMES, DATA_LANGUAGES, EFFECT_TEMPOS, for
 import type { Appearance, CrossfadeTime, DataLanguage, EffectTempo, LibraryLayout, PlaybackPreferences, SeekStep, StartPage, ThemeName, WidgetBackground } from '../shared/customization';
 import { describeAudioFormat, describeStream, NETWORK_MODES, STREAM_QUALITIES } from '../shared/audio-quality';
 import type { AudioQuality, NetworkMode, StreamQuality } from '../shared/audio-quality';
+import { UI_LANGUAGES } from '../shared/ui-language';
+import type { UiLanguage } from '../shared/ui-language';
 import type { Track } from '../shared/media';
+import type { FloatStatus } from '../shared/float-output';
 import type { LastFmStatus } from '../shared/lastfm';
 import type { StreamCacheInfo } from '../shared/stream-cache';
 import { localLibrary } from '../data/library';
@@ -21,9 +25,10 @@ import { VinylRecord } from './VinylRecord';
 
 
 function ReleaseSettings() {
+  const t = useText();
   const info = useInstalledBuild();
-  return <SettingCard title="Версия Luma" detail={info ? `Установлена версия ${info.version}.` : info === null ? 'Не удалось прочитать версию.' : 'Читаем версию сборки…'}>
-    <p className="setting-body-copy">На GitHub доступны примечания к версиям, установщик и portable. Загрузка и установка запускаются вручную.</p>
+  return <SettingCard title={t("Версия Luma")} detail={info ? t("Установлена версия {0}.", info.version) : info === null ? t("Не удалось прочитать версию.") : t("Читаем версию сборки…")}>
+    <p className="setting-body-copy">{t("На GitHub доступны примечания к версиям, установщик и portable. Загрузка и установка запускаются вручную.")}</p>
     <div className="settings-actions"><ReleaseLink className="button outline-button" /></div>
   </SettingCard>;
 }
@@ -49,14 +54,15 @@ function SettingCard({ title, detail, children }: { title: string; detail?: stri
 }
 
 function ThemeSelect({ value, change }: { value: ThemeName; change(theme: ThemeName): void }) {
+  const t = useText();
   return (
-    <div className="theme-grid" role="group" aria-label="Темы плеера">
+    <div className="theme-grid" role="group" aria-label={t("Темы плеера")}>
       {(Object.entries(THEMES) as [ThemeName, typeof THEMES[ThemeName]][]).map(([id, theme]) => (
         <button key={id} className="theme-option" type="button" aria-pressed={id === value} onClick={() => change(id)}>
           <span className="theme-option-preview" style={{ '--swatch-side': theme.side, '--swatch-panel': theme.panel, '--swatch-glow': theme.glow, '--swatch-accent': theme.accent } as CSSProperties} aria-hidden="true">
             <span /><span><i /><i /><i /></span><b />
           </span>
-          <span className="theme-option-label">{theme.name}{id === value && <Check size={14} aria-hidden="true" />}</span>
+          <span className="theme-option-label">{t(theme.name)}{id === value && <Check size={14} aria-hidden="true" />}</span>
         </button>
       ))}
     </div>
@@ -64,10 +70,11 @@ function ThemeSelect({ value, change }: { value: ThemeName; change(theme: ThemeN
 }
 
 function ThemePreview({ appearance, track, tint }: { appearance: Appearance; track: Track | null; tint: string }) {
+  const t = useText();
   const picture = track?.backdropUrl ?? track?.artworkUrl ?? DEFAULT_ARTWORK_URL;
   return (
-    <aside className="settings-preview" aria-label="Предпросмотр оформления">
-      <div className="settings-preview-heading"><p className="overline">Предпросмотр</p><span>{THEMES[appearance.theme].name}</span></div>
+    <aside className="settings-preview" aria-label={t("Предпросмотр оформления")}>
+      <div className="settings-preview-heading"><p className="overline">{t("Предпросмотр")}</p><span>{t(THEMES[appearance.theme].name)}</span></div>
       <div className="settings-preview-window" aria-hidden="true">
         <div className="settings-preview-chrome"><AudioLines size={13} /><span>Luma Player</span><i /><i /><i /></div>
         <div className={`settings-preview-hero settings-preview-${appearance.hero}${appearance.effect !== 'off' ? ' settings-preview-has-effect' : ''}`} style={{ '--sample-tone': tint, '--scene-tone': tint } as CSSProperties}>
@@ -75,20 +82,25 @@ function ThemePreview({ appearance, track, tint }: { appearance: Appearance; tra
           {picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
           {appearance.hero === 'center' && <Artwork track={track} className="settings-preview-center-art" />}
           {appearance.hero === 'vinyl' && <VinylRecord className="settings-preview-record" track={track} animate={appearance.motion} />}
-          <div><small>СЕЙЧАС ИГРАЕТ</small><strong>{track?.title ?? 'Ваша музыка'}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
+          <div><small>{t("СЕЙЧАС ИГРАЕТ")}</small><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
         </div>
         <div className="settings-preview-controls"><i /><i /><b><Play size={12} fill="currentColor" /></b><i /><i /></div>
       </div>
-      <p>Изменения применяются сразу. Настройки и обложки сохраняются в профиле Luma.</p>
+      <p>{t("Изменения применяются сразу. Настройки и обложки сохраняются в профиле Luma.")}</p>
     </aside>
   );
 }
 
 interface SettingsProps {
+  uiLanguage: UiLanguage;
+  changeLanguage(value: UiLanguage): void;
   appearance: Appearance;
   effectiveAppearance: Appearance;
   locale: string;
   audioQuality: AudioQuality;
+  nativeFloat: boolean;
+  floatStatus: FloatStatus;
+  changeFloat(value: boolean): void;
   playingStream?: string;
   metered: boolean;
   connected: boolean;
@@ -147,6 +159,7 @@ const shortcuts = [
 ];
 
 export function SettingsPage(props: SettingsProps) {
+  const t = useText();
   const { appearance, playback, changeAppearance, changePlayback } = props;
   const section = allSections.find(({ id }) => id === props.sectionId);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -172,194 +185,196 @@ export function SettingsPage(props: SettingsProps) {
   return (
     <div className="page settings-page" ref={root}>
       <header className="page-header settings-header">
-        <button type="button" className="icon-button settings-back" aria-label={section ? 'Назад к настройкам' : 'Вернуться на вкладку'} title="Назад" onClick={back}><ArrowLeft size={19} /></button>
-        <div><p className="overline page-kicker"><span />{section ? 'Настройки' : 'Ваш плеер'}</p><h1>{section?.label ?? 'Настройки'}</h1></div>
-        {section && <button type="button" className="button outline-button settings-return" onClick={props.returnToTab}><ArrowLeft size={15} /> К прежней вкладке</button>}
-        {!section && <button type="button" className="button outline-button settings-reset" aria-label="Сбросить настройки" onClick={props.reset} disabled={!props.libraryReady} title="Вернуть настройки по умолчанию"><RotateCcw size={16} /> <span>Сбросить настройки</span></button>}
+        <button type="button" className="icon-button settings-back" aria-label={section ? t("Назад к настройкам") : t("Вернуться на вкладку")} title={t("Назад")} onClick={back}><ArrowLeft size={19} /></button>
+        <div><p className="overline page-kicker"><span />{section ? t("Настройки") : t("Ваш плеер")}</p><h1>{t(section?.label ?? "Настройки")}</h1></div>
+        {section && <button type="button" className="button outline-button settings-return" onClick={props.returnToTab}><ArrowLeft size={15} />{" "}{t("К прежней вкладке")}</button>}
+        {!section && <button type="button" className="button outline-button settings-reset" aria-label={t("Сбросить настройки")} onClick={props.reset} disabled={!props.libraryReady} title={t("Вернуть настройки по умолчанию")}><RotateCcw size={16} /> <span>{t("Сбросить настройки")}</span></button>}
       </header>
-      <p className="settings-intro">{section?.detail ?? 'Выберите раздел, чтобы настроить Luma под себя.'}</p>
+      <p className="settings-intro">{t(section?.detail ?? "Выберите раздел, чтобы настроить Luma под себя.")}</p>
       <div className="settings-layout">
         <div className="settings-stack">
           {!section && <>
-            <MenuGroup label="Плеер">{SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={item.label} detail={item.detail} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
-            <MenuGroup label="Приложение">{APP_SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={item.label} detail={item.detail} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
+            <MenuGroup label={t("Плеер")}>{SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={t(item.label)} detail={t(item.detail)} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
+            <MenuGroup label={t("Приложение")}>{APP_SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={t(item.label)} detail={t(item.detail)} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
           </>}
           {section?.id === 'look' && <>
-            <SettingCard title="Тема" detail="Меняет фон, панели и цвет элементов управления.">
-              <ToggleRow title="Автоматическая смена темы" detail="Дневная тема с 08:00 до 20:00 по времени устройства. В остальное время — основная тема." enabled={appearance.autoTheme} change={() => changeAppearance({ ...appearance, autoTheme: !appearance.autoTheme })} />
-              {appearance.autoTheme && <label className="setting-row select-row"><span><strong>Дневная тема</strong><small>Сейчас: {THEMES[props.effectiveAppearance.theme].name}.</small></span>
+            <SettingCard title={t("Тема")} detail={t("Меняет фон, панели и цвет элементов управления.")}>
+              <ToggleRow title={t("Автоматическая смена темы")} detail={t("Дневная тема с 08:00 до 20:00 по времени устройства. В остальное время — основная тема.")} enabled={appearance.autoTheme} change={() => changeAppearance({ ...appearance, autoTheme: !appearance.autoTheme })} />
+              {appearance.autoTheme && <label className="setting-row select-row"><span><strong>{t("Дневная тема")}</strong><small>{t("Сейчас:")}{" "}{t(THEMES[props.effectiveAppearance.theme].name)}.</small></span>
                 <select value={appearance.dayTheme} onChange={(event) => changeAppearance({ ...appearance, dayTheme: event.currentTarget.value as ThemeName })}>
-                  {Object.entries(THEMES).map(([id, theme]) => <option key={id} value={id}>{theme.name}</option>)}
+                  {Object.entries(THEMES).map(([id, theme]) => <option key={id} value={id}>{t(theme.name)}</option>)}
                 </select></label>}
-              {appearance.autoTheme && <p className="setting-hint">Основная (вечерняя) тема</p>}
+              {appearance.autoTheme && <p className="setting-hint">{t("Основная (вечерняя) тема")}</p>}
               <ThemeSelect value={appearance.theme} change={(theme) => changeAppearance({ ...appearance, theme })} />
             </SettingCard>
-            <SettingCard title="При запуске">
-              <label className="setting-row select-row"><span><strong>Раздел при запуске</strong><small>Откроется при следующем запуске Luma.</small></span>
+            <SettingCard title={t("При запуске")}>
+              <label className="setting-row select-row"><span><strong>{t("Раздел при запуске")}</strong><small>{t("Откроется при следующем запуске Luma.")}</small></span>
                 <select value={playback.startPage} onChange={(event) => changePlayback({ ...playback, startPage: event.currentTarget.value as StartPage })}>
-                  <option value="player">Главная</option><option value="library">Медиатека</option><option value="local">Локальная библиотека</option><option value="search">Поиск</option><option value="vk">Плейлисты VK</option>
+                  <option value="player">{t("Главная")}</option><option value="library">{t("Медиатека")}</option><option value="local">{t("Локальная библиотека")}</option><option value="search">{t("Поиск")}</option><option value="vk">{t("Плейлисты VK")}</option>
                 </select>
               </label>
-              <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openLocalLibrary}>Открыть локальную библиотеку</button></div>
+              <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openLocalLibrary}>{t("Открыть локальную библиотеку")}</button></div>
             </SettingCard>
-            <SettingCard title="Цвет акцента">
-              <div className="accent-controls" role="group" aria-label="Палитра акцентов">
-                {ACCENTS.map(({ name, color: value }) => <button key={value} type="button" className="accent-swatch" title={name} aria-label={`Акцент: ${name}`}
+            <SettingCard title={t("Цвет акцента")}>
+              <div className="accent-controls" role="group" aria-label={t("Палитра акцентов")}>
+                {ACCENTS.map(({ name, color: value }) => <button key={value} type="button" className="accent-swatch" title={t(name)} aria-label={t("Акцент: {0}", t(name))}
                   aria-pressed={appearance.accent === value} onClick={() => changeAppearance({ ...appearance, accent: value })} style={{ '--swatch': value } as CSSProperties}>
                   {appearance.accent === value && <Check size={15} aria-hidden="true" />}
                 </button>)}
-                <label className="custom-accent"><input type="color" value={color} aria-label="Свой цвет акцента" onChange={(event) => changeAppearance({ ...appearance, accent: event.currentTarget.value })} /><span>{color.toUpperCase()}</span></label>
-                {appearance.accent && <button className="text-button" type="button" onClick={() => changeAppearance({ ...appearance, accent: null })}>Цвет темы</button>}
+                <label className="custom-accent"><input type="color" value={color} aria-label={t("Свой цвет акцента")} onChange={(event) => changeAppearance({ ...appearance, accent: event.currentTarget.value })} /><span>{color.toUpperCase()}</span></label>
+                {appearance.accent && <button className="text-button" type="button" onClick={() => changeAppearance({ ...appearance, accent: null })}>{t("Цвет темы")}</button>}
               </div>
-              {accent !== color && <p className="setting-hint">Акцент слегка осветлён, чтобы текст был читаемым.</p>}
-              <ToggleRow title="Компактная боковая панель" detail="Оставить только иконки на широком экране." enabled={appearance.compactSidebar} change={() => changeAppearance({ ...appearance, compactSidebar: !appearance.compactSidebar })} />
-              <ToggleRow title="Анимации" detail="Плавные переходы, живые фоны и индикатор звука." enabled={appearance.motion} change={() => changeAppearance({ ...appearance, motion: !appearance.motion })} />
+              {accent !== color && <p className="setting-hint">{t("Акцент слегка осветлён, чтобы текст был читаемым.")}</p>}
+              <ToggleRow title={t("Компактная боковая панель")} detail={t("Оставить только иконки на широком экране.")} enabled={appearance.compactSidebar} change={() => changeAppearance({ ...appearance, compactSidebar: !appearance.compactSidebar })} />
+              <ToggleRow title={t("Анимации")} detail={t("Плавные переходы, живые фоны и индикатор звука.")} enabled={appearance.motion} change={() => changeAppearance({ ...appearance, motion: !appearance.motion })} />
             </SettingCard>
-            <SettingCard title="Прочее">
-              <ToggleRow title="Отключить анимацию при смене вкладки" detail="Не влияет на живые фоны и эффекты в плеере." enabled={!appearance.tabMotion} change={() => changeAppearance({ ...appearance, tabMotion: !appearance.tabMotion })} />
-              <ToggleRow title="Показывать полные числа" detail="Например, 1234 вместо 1.2к в счётчиках медиатеки и очереди." enabled={appearance.fullNumbers} change={() => changeAppearance({ ...appearance, fullNumbers: !appearance.fullNumbers })} />
-              <ToggleRow title="Классический стиль докбара" detail="Строгая панель управления и классические вкладки на узком экране." enabled={appearance.classicDock} change={() => changeAppearance({ ...appearance, classicDock: !appearance.classicDock })} />
-              <label className="setting-row select-row"><span><strong>Язык и регион</strong><small>Форматы данных и регион поиска Apple Music. Интерфейс Luma пока на русском.</small></span>
+            <SettingCard title={t("Прочее")}>
+              <ToggleRow title={t("Отключить анимацию при смене вкладки")} detail={t("Не влияет на живые фоны и эффекты в плеере.")} enabled={!appearance.tabMotion} change={() => changeAppearance({ ...appearance, tabMotion: !appearance.tabMotion })} />
+              <ToggleRow title={t("Показывать полные числа")} detail={t("Например, 1234 вместо 1.2к в счётчиках медиатеки и очереди.")} enabled={appearance.fullNumbers} change={() => changeAppearance({ ...appearance, fullNumbers: !appearance.fullNumbers })} />
+              <ToggleRow title={t("Классический стиль докбара")} detail={t("Строгая панель управления и классические вкладки на узком экране.")} enabled={appearance.classicDock} change={() => changeAppearance({ ...appearance, classicDock: !appearance.classicDock })} />
+              <label className="setting-row select-row"><span><strong>{t("Язык интерфейса")}</strong><small>{t("Меню, настройки и кнопки Luma. Теги, тексты песен и сайт VK не переводятся.")}</small></span>
+                <select value={props.uiLanguage} onChange={(event) => props.changeLanguage(event.currentTarget.value as UiLanguage)}>
+                  {Object.entries(UI_LANGUAGES).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
+                </select></label>
+              <label className="setting-row select-row"><span><strong>{t("Язык данных и регион")}</strong><small>{t("Форматы данных и регион поиска Apple Music.")}</small></span>
                 <select value={appearance.dataLanguage} onChange={(event) => changeAppearance({ ...appearance, dataLanguage: event.currentTarget.value as DataLanguage })}>
-                  {Object.entries(DATA_LANGUAGES).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                  {Object.entries(DATA_LANGUAGES).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select></label>
             </SettingCard>
           </>}
           {section?.id === 'now' && <>
-            <SettingCard title="Экран «Сейчас играет»">
+            <SettingCard title={t("Экран «Сейчас играет»")}>
               <NowPlayingOptions appearance={appearance} change={changeAppearance} />
-              <ToggleRow title="Цвет фона из обложки" detail="Если выключено, фон использует акцент темы." enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
-              <ToggleRow title="Реакция на музыку" detail="Спектр и свет в некоторых фонах откликаются на локальный трек. При отключении остаётся обычная анимация." enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
-              <label className="setting-row select-row"><span><strong>Темп фона</strong><small>Скорость анимации, не скорость песни.</small></span>
+              <ToggleRow title={t("Цвет фона из обложки")} detail={t("Если выключено, фон использует акцент темы.")} enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
+              <ToggleRow title={t("Реакция на музыку")} detail={t("Спектр и свет в некоторых фонах откликаются на локальный трек. При отключении остаётся обычная анимация.")} enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
+              <label className="setting-row select-row"><span><strong>{t("Темп фона")}</strong><small>{t("Скорость анимации, не скорость песни.")}</small></span>
                 <select value={appearance.effectTempo} disabled={appearance.effect === 'off'} onChange={(event) => changeAppearance({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
-                  {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{label}</option>)}
+                  {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select>
               </label>
             </SettingCard>
-            <SettingCard title="Полноэкранный плеер">
-              <ToggleRow title="Разворачивать на весь монитор" detail="Если выключено, большой плеер открывается внутри окна Luma." enabled={appearance.nativeFullscreen} change={() => changeAppearance({ ...appearance, nativeFullscreen: !appearance.nativeFullscreen })} />
-              <ToggleRow title="Показывать следующие треки" detail="Это же положение переключателя запоминается после выхода из большого плеера." enabled={appearance.fullscreenQueue} change={() => changeAppearance({ ...appearance, fullscreenQueue: !appearance.fullscreenQueue })} />
+            <SettingCard title={t("Полноэкранный плеер")}>
+              <ToggleRow title={t("Разворачивать на весь монитор")} detail={t("Если выключено, большой плеер открывается внутри окна Luma.")} enabled={appearance.nativeFullscreen} change={() => changeAppearance({ ...appearance, nativeFullscreen: !appearance.nativeFullscreen })} />
+              <ToggleRow title={t("Показывать следующие треки")} detail={t("Это же положение переключателя запоминается после выхода из большого плеера.")} enabled={appearance.fullscreenQueue} change={() => changeAppearance({ ...appearance, fullscreenQueue: !appearance.fullscreenQueue })} />
             </SettingCard>
           </>}
           {section?.id === 'sound' && <>
-            <SettingCard title="Качество воспроизведения" detail="Выбор действует для новых потоков Jamendo. Wikimedia Commons и файлы играют в исходном формате.">
-              <label className="setting-row select-row"><span><strong>Режим сети</strong><small>{props.metered ? 'Используется профиль лимитной сети.' : 'Используется профиль обычной сети.'} Если устройство не сообщает тип сети, его можно выбрать здесь.</small></span>
+            <SettingCard title={t("Качество воспроизведения")} detail={t("Выбор действует для новых потоков Jamendo. Wikimedia Commons и файлы играют в исходном формате.")}>
+              <label className="setting-row select-row"><span><strong>{t("Режим сети")}</strong><small>{props.metered ? t("Используется профиль лимитной сети.") : t("Используется профиль обычной сети.")}{" "}{t("Если устройство не сообщает тип сети, его можно выбрать здесь.")}</small></span>
                 <select value={props.audioQuality.network} onChange={(event) => props.changeQuality({ ...props.audioQuality, network: event.currentTarget.value as NetworkMode })}>
-                  {Object.entries(NETWORK_MODES).map(([id, title]) => <option value={id} key={id}>{title}</option>)}
+                  {Object.entries(NETWORK_MODES).map(([id, title]) => <option value={id} key={id}>{t(title)}</option>)}
                 </select></label>
-              {([['normal', 'Воспроизведение через Wi-Fi'], ['metered', 'Воспроизведение через сотовую связь']] as const).map(([id, label]) => <label key={id} className="setting-row select-row">
-                <span><strong>{label}</strong><small>{id === 'normal' ? 'Также для проводного подключения.' : 'Также для лимитных сетей.'}</small></span>
+              {([['normal', t("Воспроизведение через Wi-Fi")], ['metered', t("Воспроизведение через сотовую связь")]] as const).map(([id, label]) => <label key={id} className="setting-row select-row">
+                <span><strong>{label}</strong><small>{id === 'normal' ? t("Также для проводного подключения.") : t("Также для лимитных сетей.")}</small></span>
                 <select value={props.audioQuality[id]} onChange={(event) => props.changeQuality({ ...props.audioQuality, [id]: event.currentTarget.value as StreamQuality })}>
-                  {Object.entries(STREAM_QUALITIES).map(([option, title]) => <option value={option} key={option}>{title}</option>)}
+                  {Object.entries(STREAM_QUALITIES).map(([option, title]) => <option value={option} key={option}>{t(title)}</option>)}
                 </select></label>)}
             </SettingCard>
-            <SettingCard title="Текущий трек" detail={props.previewTrack ? props.previewTrack.title : 'Выберите трек, чтобы посмотреть его формат.'}>
-              {props.previewTrack && <p className="setting-body-copy">{props.playingStream ? describeStream(props.previewTrack, props.playingStream)
-                : props.previewTrack.online ? 'Поток ещё не запущен.'
-                : formatId && formatProbe?.id !== formatId ? 'Читаем сведения о файле…'
-                : describeAudioFormat(props.previewTrack.format ?? (formatProbe?.id === formatId ? formatProbe?.result ?? undefined : undefined), props.locale) || 'Файл воспроизводится без перекодирования. Битрейт не определён.'}</p>}
-              <div className="setting-row settings-volume"><span><strong>Громкость плеера</strong><small>Меняется и в нижней панели.</small></span><VolumeControl {...props.volumeControls} /></div>
+            <SettingCard title={t("Текущий трек")} detail={props.previewTrack ? props.previewTrack.title : t("Выберите трек, чтобы посмотреть его формат.")}>
+              {props.previewTrack && <p className="setting-body-copy">{props.playingStream ? describeStream(props.previewTrack, props.playingStream, t.language)
+                : props.previewTrack.online ? t("Поток ещё не запущен.")
+                : formatId && formatProbe?.id !== formatId ? t("Читаем сведения о файле…")
+                : describeAudioFormat(props.previewTrack.format ?? (formatProbe?.id === formatId ? formatProbe?.result ?? undefined : undefined), props.locale, t.language) || t("Файл воспроизводится без перекодирования. Битрейт не определён.")}</p>}
+              <div className="setting-row settings-volume"><span><strong>{t("Громкость плеера")}</strong><small>{t("Меняется и в нижней панели.")}</small></span><VolumeControl {...props.volumeControls} /></div>
             </SettingCard>
-            <SettingCard title="Float-вывод" detail="Формат вывода выбирает система. Аппаратный 24/32-битный режим зависит от драйвера и устройства; в этой сборке его нельзя включить вручную.">
-              <span className="setting-status">Не поддерживается в этой сборке</span>
-            </SettingCard>
+            <FloatSettings requested={props.nativeFloat} status={props.floatStatus} change={props.changeFloat} />
           </>}
           {section?.id === 'playback' && <>
-            <SettingCard title="Воспроизведение в Luma">
-              <ToggleRow title="Аудиоэффекты" detail="Применять эквалайзер и предусиление к локальным файлам." enabled={props.eqEnabled} change={props.toggleEffects} />
-              <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openEqualizer} aria-haspopup="dialog">Настроить эквалайзер</button></div>
-              <ToggleRow title="Автозапуск" detail="Начать воспроизведение локального трека при запуске Luma. Потоки и VK автоматически не запускаются." enabled={playback.autoPlay} change={() => changePlayback({ ...playback, autoPlay: !playback.autoPlay })} />
-              <ToggleRow title="Следующий трек автоматически" detail="Если выключено, плеер остановится в конце. Повтор одного трека действует отдельно." enabled={playback.autoNext} change={() => changePlayback({ ...playback, autoNext: !playback.autoNext })} />
-              <label className="setting-row select-row"><span><strong>Кроссфейд</strong><small>Плавный переход при автосмене между двумя файлами. Для онлайн-потоков и повтора одного трека не применяется.</small></span>
+            <SettingCard title={t("Воспроизведение в Luma")}>
+              <ToggleRow title={t("Аудиоэффекты")} detail={t("Применять эквалайзер и предусиление к локальным файлам.")} enabled={props.eqEnabled} change={props.toggleEffects} />
+              <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openEqualizer} aria-haspopup="dialog">{t("Настроить эквалайзер")}</button></div>
+              <ToggleRow title={t("Автозапуск")} detail={t("Начать воспроизведение локального трека при запуске Luma. Потоки и VK автоматически не запускаются.")} enabled={playback.autoPlay} change={() => changePlayback({ ...playback, autoPlay: !playback.autoPlay })} />
+              <ToggleRow title={t("Следующий трек автоматически")} detail={t("Если выключено, плеер остановится в конце. Повтор одного трека действует отдельно.")} enabled={playback.autoNext} change={() => changePlayback({ ...playback, autoNext: !playback.autoNext })} />
+              <label className="setting-row select-row"><span><strong>{t("Кроссфейд")}</strong><small>{t("Плавный переход при автосмене между двумя файлами. Для онлайн-потоков и повтора одного трека не применяется.")}</small></span>
                 <select value={playback.crossfade} disabled={!playback.autoNext} onChange={(event) => changePlayback({ ...playback, crossfade: Number(event.currentTarget.value) as CrossfadeTime })}>
-                  {CROSSFADE_TIMES.map((seconds) => <option key={seconds} value={seconds}>{seconds ? `${seconds} с` : 'Выключен'}</option>)}
+                  {CROSSFADE_TIMES.map((seconds) => <option key={seconds} value={seconds}>{seconds ? t("{0} с", seconds) : t("Выключен")}</option>)}
                 </select></label>
-              <label className="setting-row select-row"><span><strong>Шаг перемотки</strong><small>Для горячих клавиш ← и →.</small></span>
+              <label className="setting-row select-row"><span><strong>{t("Шаг перемотки")}</strong><small>{t("Для горячих клавиш ← и →.")}</small></span>
                 <select value={playback.seekStep} onChange={(event) => changePlayback({ ...playback, seekStep: Number(event.currentTarget.value) as SeekStep })}>
-                  {SEEK_STEPS.map((value) => <option key={value} value={value}>{value} с</option>)}
+                  {SEEK_STEPS.map((value) => <option key={value} value={value}>{value}{" "}{t("с")}</option>)}
                 </select>
               </label>
             </SettingCard>
-            <SettingCard title="Сохранять между перезапусками" detail="Настройки независимы и не меняют текущую очередь.">
-              <ToggleRow title="Очередь воспроизведения" detail="Сохранять порядок и выбранный трек. Позиция в треке не сохраняется." enabled={playback.rememberQueue} change={() => changePlayback({ ...playback, rememberQueue: !playback.rememberQueue })} />
-              <ToggleRow title="Режим повтора" detail="Сохранять повтор трека или всей очереди." enabled={playback.rememberRepeat} change={() => changePlayback({ ...playback, rememberRepeat: !playback.rememberRepeat })} />
-              <ToggleRow title="Режим перемешивания" detail="Помнить перемешивание даже при отключённом сохранении очереди." enabled={playback.rememberShuffle} change={() => changePlayback({ ...playback, rememberShuffle: !playback.rememberShuffle })} />
+            <SettingCard title={t("Сохранять между перезапусками")} detail={t("Настройки независимы и не меняют текущую очередь.")}>
+              <ToggleRow title={t("Очередь воспроизведения")} detail={t("Сохранять порядок и выбранный трек. Позиция в треке не сохраняется.")} enabled={playback.rememberQueue} change={() => changePlayback({ ...playback, rememberQueue: !playback.rememberQueue })} />
+              <ToggleRow title={t("Режим повтора")} detail={t("Сохранять повтор трека или всей очереди.")} enabled={playback.rememberRepeat} change={() => changePlayback({ ...playback, rememberRepeat: !playback.rememberRepeat })} />
+              <ToggleRow title={t("Режим перемешивания")} detail={t("Помнить перемешивание даже при отключённом сохранении очереди.")} enabled={playback.rememberShuffle} change={() => changePlayback({ ...playback, rememberShuffle: !playback.rememberShuffle })} />
             </SettingCard>
-            <div className="settings-footer-note"><Settings2 size={16} /><span>Эти параметры действуют в плеере Luma. Сайт и публичный виджет VK управляют звуком отдельно.</span></div>
+            <div className="settings-footer-note"><Settings2 size={16} /><span>{t("Эти параметры действуют в плеере Luma. Сайт и публичный виджет VK управляют звуком отдельно.")}</span></div>
           </>}
-          {section?.id === 'library' && <SettingCard title="Коллекция Luma">
-            <label className="setting-row select-row"><span><strong>Вид медиатеки</strong><small>Списком или плиткой с крупными обложками.</small></span>
+          {section?.id === 'library' && <SettingCard title={t("Коллекция Luma")}>
+            <label className="setting-row select-row"><span><strong>{t("Вид медиатеки")}</strong><small>{t("Списком или плиткой с крупными обложками.")}</small></span>
               <select value={appearance.libraryLayout} onChange={(event) => changeAppearance({ ...appearance, libraryLayout: event.currentTarget.value as LibraryLayout })}>
-                <option value="list">Списком</option><option value="grid">Плиткой</option>
+                <option value="list">{t("Списком")}</option><option value="grid">{t("Плиткой")}</option>
               </select>
             </label>
-            <ToggleRow title="Встроенные демотреки" detail="Показывать демотреки в локальной медиатеке." enabled={props.showDemos} change={props.toggleDemos} disabled={!props.libraryReady} />
+            <ToggleRow title={t("Встроенные демотреки")} detail={t("Показывать демотреки в локальной медиатеке.")} enabled={props.showDemos} change={props.toggleDemos} disabled={!props.libraryReady} />
           </SettingCard>}
-          {section?.id === 'notices' && <SettingCard title="Подсказки Luma">
-            <ToggleRow title="Показывать уведомления об успехе" detail="Сообщения об импорте, очереди и сохранении. Ошибки видны всегда." enabled={playback.successNotices} change={() => changePlayback({ ...playback, successNotices: !playback.successNotices })} />
+          {section?.id === 'notices' && <SettingCard title={t("Подсказки Luma")}>
+            <ToggleRow title={t("Показывать уведомления об успехе")} detail={t("Сообщения об импорте, очереди и сохранении. Ошибки видны всегда.")} enabled={playback.successNotices} change={() => changePlayback({ ...playback, successNotices: !playback.successNotices })} />
           </SettingCard>}
           {section?.id === 'integrations' && <>
-            <SettingCard title="Виджеты рабочего стола" detail="Компактный плеер поверх окон Windows. Продолжает то же воспроизведение; полноразмерное окно можно вернуть кнопкой или Esc.">
-              <label className="setting-row select-row"><span><strong>Фон</strong><small>Применяется к компактному плееру.</small></span>
+            <SettingCard title={t("Виджеты рабочего стола")} detail={t("Компактный плеер поверх окон Windows. Продолжает то же воспроизведение; полноразмерное окно можно вернуть кнопкой или Esc.")}>
+              <label className="setting-row select-row"><span><strong>{t("Фон")}</strong><small>{t("Применяется к компактному плееру.")}</small></span>
                 <select value={appearance.widgetBackground} onChange={(event) => changeAppearance({ ...appearance, widgetBackground: event.currentTarget.value as WidgetBackground })}>
-                  {Object.entries(WIDGET_BACKGROUNDS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                  {Object.entries(WIDGET_BACKGROUNDS).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select></label>
-              <div className="desktop-widget widget-sample" aria-label="Предпросмотр фона виджета" data-widget-background={appearance.widgetBackground} style={{ '--widget-tint': props.tint } as CSSProperties}>
+              <div className="desktop-widget widget-sample" aria-label={t("Предпросмотр фона виджета")} data-widget-background={appearance.widgetBackground} style={{ '--widget-tint': props.tint } as CSSProperties}>
                 {appearance.widgetBackground === 'blur' && <Artwork track={props.previewTrack} className="widget-backdrop" />}
-                <div className="widget-track"><Artwork track={props.previewTrack} /><div><strong>{props.previewTrack?.title ?? 'Ваша музыка'}</strong><small>Предпросмотр виджета Luma</small></div><Play size={16} /></div>
+                <div className="widget-track"><Artwork track={props.previewTrack} /><div><strong>{props.previewTrack?.title ?? t("Ваша музыка")}</strong><small>{t("Предпросмотр виджета Luma")}</small></div><Play size={16} /></div>
               </div>
               <div className="settings-actions">
-                {window.luma ? <button className="button outline-button" type="button" onClick={props.openWidget}><Monitor size={16} /> Открыть виджет Luma</button> : <span className="setting-status">В приложении Windows</span>}
+                {window.luma ? <button className="button outline-button" type="button" onClick={props.openWidget}><Monitor size={16} />{" "}{t("Открыть виджет Luma")}</button> : <span className="setting-status">{t("В приложении Windows")}</span>}
               </div>
             </SettingCard>
-            <SettingCard title="Системная медиапанель">
-              <ToggleRow title="Передавать данные трека системе" detail="Название, исполнитель и обложка для медиапанели. Медиаклавиши работают отдельно." enabled={playback.publishTrack} change={() => changePlayback({ ...playback, publishTrack: !playback.publishTrack })} />
+            <SettingCard title={t("Системная медиапанель")}>
+              <ToggleRow title={t("Передавать данные трека системе")} detail={t("Название, исполнитель и обложка для медиапанели. Медиаклавиши работают отдельно.")} enabled={playback.publishTrack} change={() => changePlayback({ ...playback, publishTrack: !playback.publishTrack })} />
             </SettingCard>
-            <SettingCard title="Сервисы">
+            <SettingCard title={t("Сервисы")}>
               <VkAccountSettings connected={props.connected} openVk={props.openVk} />
               <LastFmSettings connected={props.connected} />
-              <Service title="Тексты песен" status="LRCLIB">
-                <p>Теги и локальные .lrc / .lyrics.txt, LRCLIB и несколько оригинальных изданий из Викитеки. Для полного каталога Musixmatch нужен отдельный договор.</p>
-                <ToggleRow title="Автопоиск текстов" detail="Искать для играющего трека на главной. LRCLIB получит название, исполнителя, альбом и длительность, если они известны." enabled={props.autoLyrics} change={() => props.toggleLyrics('autoLyrics')} />
-                {window.luma && <ToggleRow title="Сохранять текст с новым MP3" detail="Для личной копии MP3: синхронный текст в соседний .lrc, обычный — в тег MP3. Если найдены оба, сохраняются оба. Существующие файлы не меняются." enabled={props.exportLyrics} change={() => props.toggleLyrics('exportLyrics')} />}
+              <Service title={t("Тексты песен")} status="LRCLIB">
+                <p>{t("Теги и локальные .lrc / .lyrics.txt, LRCLIB и несколько оригинальных изданий из Викитеки. Для полного каталога Musixmatch нужен отдельный договор.")}</p>
+                <ToggleRow title={t("Автопоиск текстов")} detail={t("Искать для играющего трека на главной. LRCLIB получит название, исполнителя, альбом и длительность, если они известны.")} enabled={props.autoLyrics} change={() => props.toggleLyrics('autoLyrics')} />
+                {window.luma && <ToggleRow title={t("Сохранять текст с новым MP3")} detail={t("Для личной копии MP3: синхронный текст в соседний .lrc, обычный — в тег MP3. Если найдены оба, сохраняются оба. Существующие файлы не меняются.")} enabled={props.exportLyrics} change={() => props.toggleLyrics('exportLyrics')} />}
               </Service>
-              <Service title="iTunes" status="Только метаданные">
-                <p>Название и теги можно найти в редакторе трека. Условия iTunes Search API не дают права использовать рекламные изображения как постоянные обложки Luma.</p>
-                {props.openTrackInfo && <div className="settings-actions"><button className="button outline-button" type="button" onClick={props.openTrackInfo}>Данные текущего трека</button></div>}
+              <Service title="iTunes" status={t("Только метаданные")}>
+                <p>{t("Название и теги можно найти в редакторе трека. Условия iTunes Search API не дают права использовать рекламные изображения как постоянные обложки Luma.")}</p>
+                {props.openTrackInfo && <div className="settings-actions"><button className="button outline-button" type="button" onClick={props.openTrackInfo}>{t("Данные текущего трека")}</button></div>}
               </Service>
-              <Service title="VK Recommendations" status="Нужно разрешение VK">
-                <p>Подборки VK доступны на официальной странице после входа. В очереди Luma они не появятся без разрешённого аудио API. Рекомендации Luma остаются локальными.</p>
+              <Service title="VK Recommendations" status={t("Нужно разрешение VK")}>
+                <p>{t("Подборки VK доступны на официальной странице после входа. В очереди Luma они не появятся без разрешённого аудио API. Рекомендации Luma остаются локальными.")}</p>
               </Service>
             </SettingCard>
           </>}
           {section?.id === 'storage' && <>
             <StreamCacheSettings />
-            <SettingCard title="Локальный профиль" detail="Настройки, обложки и история остаются на устройстве; на Windows исходные аудиофайлы не копируются при добавлении.">
-              <dl className="settings-storage"><div><dt>Треков с устройства</dt><dd>{formatCount(props.localCount, appearance.fullNumbers)}</dd></div><div><dt>Недавних треков</dt><dd>{formatCount(props.recentCount, appearance.fullNumbers)}</dd></div></dl>
-              <ToggleRow title="Запоминать прослушанные треки" detail="Хранить локально до 60 последних треков. При отключении новая история не записывается." enabled={playback.rememberRecent} change={() => changePlayback({ ...playback, rememberRecent: !playback.rememberRecent })} />
+            <SettingCard title={t("Локальный профиль")} detail={t("Настройки, обложки и история остаются на устройстве; на Windows исходные аудиофайлы не копируются при добавлении.")}>
+              <dl className="settings-storage"><div><dt>{t("Треков с устройства")}</dt><dd>{formatCount(props.localCount, appearance.fullNumbers, t.language)}</dd></div><div><dt>{t("Недавних треков")}</dt><dd>{formatCount(props.recentCount, appearance.fullNumbers, t.language)}</dd></div></dl>
+              <ToggleRow title={t("Запоминать прослушанные треки")} detail={t("Хранить локально до 60 последних треков. При отключении новая история не записывается.")} enabled={playback.rememberRecent} change={() => changePlayback({ ...playback, rememberRecent: !playback.rememberRecent })} />
               <div className="settings-actions">
-                <button type="button" className="button outline-button" onClick={props.openRecent}>Недавно слушали</button>
-                <button type="button" className="button outline-button" disabled={!props.recentCount} onClick={() => setConfirmClear((value) => !value)} aria-expanded={confirmClear}>Очистить историю</button>
+                <button type="button" className="button outline-button" onClick={props.openRecent}>{t("Недавно слушали")}</button>
+                <button type="button" className="button outline-button" disabled={!props.recentCount} onClick={() => setConfirmClear((value) => !value)} aria-expanded={confirmClear}>{t("Очистить историю")}</button>
               </div>
-              {confirmClear && <div className="settings-confirm"><p>Очистить список прослушанного? Музыка и избранное останутся.</p>
-                <button type="button" className="text-button" onClick={() => { props.clearRecent(); setConfirmClear(false); }}>Удалить историю</button>
-                <button type="button" className="text-button" onClick={() => setConfirmClear(false)}>Отмена</button>
+              {confirmClear && <div className="settings-confirm"><p>{t("Очистить список прослушанного? Музыка и избранное останутся.")}</p>
+                <button type="button" className="text-button" onClick={() => { props.clearRecent(); setConfirmClear(false); }}>{t("Удалить историю")}</button>
+                <button type="button" className="text-button" onClick={() => setConfirmClear(false)}>{t("Отмена")}</button>
               </div>}
             </SettingCard>
-            <SettingCard title="Журнал диагностики" detail="До 300 событий запуска и воспроизведения. Здесь нет названий песен, паролей или путей к файлам.">
-              <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openDiagnostics}>Открыть диагностику</button></div>
+            <SettingCard title={t("Журнал диагностики")} detail={t("До 300 событий запуска и воспроизведения. Здесь нет названий песен, паролей или путей к файлам.")}>
+              <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openDiagnostics}>{t("Открыть диагностику")}</button></div>
             </SettingCard>
           </>}
           {section?.id === 'labs' && <>
-            <SettingCard title="Аудиореактивные фоны" detail="Экспериментальный спектр и подсветка для файлов в Luma.">
-              <ToggleRow title="Реакция на музыку" detail="Выключите, если нужен более спокойный фон или меньше нагрузки." enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
+            <SettingCard title={t("Аудиореактивные фоны")} detail={t("Экспериментальный спектр и подсветка для файлов в Luma.")}>
+              <ToggleRow title={t("Реакция на музыку")} detail={t("Выключите, если нужен более спокойный фон или меньше нагрузки.")} enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
             </SettingCard>
-            <SettingCard title="Поиск записи по звуку" detail="При настроенном доступе к AcoustID появляется кнопка «По звуку» в редакторе данных. Для сравнения передаются только отпечаток и длительность.">
-              {props.openTrackInfo && <div className="settings-actions"><button className="button outline-button" type="button" onClick={props.openTrackInfo}>Данные текущего трека</button></div>}
+            <SettingCard title={t("Поиск записи по звуку")} detail={t("При настроенном доступе к AcoustID появляется кнопка «По звуку» в редакторе данных. Для сравнения передаются только отпечаток и длительность.")}>
+              {props.openTrackInfo && <div className="settings-actions"><button className="button outline-button" type="button" onClick={props.openTrackInfo}>{t("Данные текущего трека")}</button></div>}
             </SettingCard>
           </>}
-          {section?.id === 'keys' && <SettingCard title="Клавиатура" detail="Команды треков действуют при локальном воспроизведении.">
-            <dl className="settings-shortcuts">{shortcuts.map(([key, label]) => <div key={key}><dt><kbd>{key}</kbd></dt><dd>{label}</dd></div>)}</dl>
+          {section?.id === 'keys' && <SettingCard title={t("Клавиатура")} detail={t("Команды треков действуют при локальном воспроизведении.")}>
+            <dl className="settings-shortcuts">{shortcuts.map(([key, label]) => <div key={key}><dt><kbd>{t(key)}</kbd></dt><dd>{t(label)}</dd></div>)}</dl>
           </SettingCard>}
           {section?.id === 'updates' && <ReleaseSettings />}
         </div>
@@ -376,7 +391,31 @@ function Service({ title, status, children }: { title: string; status: string; c
   </section>;
 }
 
+function FloatSettings({ requested, status, change }: { requested: boolean; status: FloatStatus; change(value: boolean): void }) {
+  const t = useText();
+  const [available, setAvailable] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void window.luma?.floatOutput?.available().then((value) => { if (live) setAvailable(value); }, () => {});
+    return () => { live = false; };
+  }, []);
+  const labels: Record<FloatStatus, string> = {
+    system: requested ? 'Ждём воспроизведения файла' : 'Системный вывод',
+    starting: 'Проверяем формат устройства…',
+    running: 'WASAPI Exclusive · IEEE Float32',
+    unsupported: 'Устройство занято или не приняло Float32. Используется системный вывод.',
+    failed: 'Сбой Float-вывода. Используется системный вывод.',
+    missing: 'Float-вывод недоступен в этом окружении.',
+  };
+  return <SettingCard title={t("Float-вывод")} detail={t("Для локальных файлов: выделенный WASAPI Exclusive в стерео IEEE Float32, только если драйвер принимает точный формат. Не меняет разрядность исходника и не гарантирует bit-perfect.")}>
+    <ToggleRow title={t("Попробовать Float-вывод")} detail={t("Устройство может быть временно занято Luma. При несовместимости звук остаётся на системном выходе. VK и онлайн-потоки не затрагиваются.")}
+      enabled={requested && available} disabled={!available} change={() => change(!requested)} />
+    <p className="setting-body-copy" role="status">{t(labels[available ? status : 'missing'])}</p>
+  </SettingCard>;
+}
+
 function LastFmSettings({ connected }: { connected: boolean }) {
+  const t = useText();
   const bridge = window.luma?.lastfm;
   const [status, setStatus] = useState<LastFmStatus>();
   const [busy, setBusy] = useState(false);
@@ -391,29 +430,30 @@ function LastFmSettings({ connected }: { connected: boolean }) {
     setBusy(true);
     void action().then(setStatus, () => setStatus((value) => value && { ...value, issue: 'offline' })).finally(() => setBusy(false));
   }
-  const issues = { authorize: 'Подтвердите доступ в браузере, затем завершите подключение.', offline: 'Last.fm не ответил. Проверьте сеть.',
-    rejected: 'Last.fm не принял запрос. Проверьте настройки приложения и аккаунта.', expired: 'Сессия Last.fm отозвана. Подключите аккаунт снова.' };
-  return <Service title="Last.fm" status={status?.user ?? (bridge ? 'Не подключён' : 'В приложении Windows')}>
-    <p>Скробблинг выключен до вашего согласия. При включении Last.fm получит название, исполнителя, альбом, длительность и время начала трека. Демо и звук со страницы VK не отправляются.</p>
-    {status && !status.configured && <p>Создайте API-аккаунт и запустите Luma с переменными LUMA_LASTFM_API_KEY и LUMA_LASTFM_SECRET. Пошаговая инструкция — в репозитории.</p>}
+  const issues = { authorize: t("Подтвердите доступ в браузере, затем завершите подключение."), offline: t("Last.fm не ответил. Проверьте сеть."),
+    rejected: t("Last.fm не принял запрос. Проверьте настройки приложения и аккаунта."), expired: t("Сессия Last.fm отозвана. Подключите аккаунт снова.") };
+  return <Service title="Last.fm" status={status?.user ?? (bridge ? t("Не подключён") : t("В приложении Windows"))}>
+    <p>{t("Скробблинг выключен до вашего согласия. При включении Last.fm получит название, исполнителя, альбом, длительность и время начала трека. Демо и звук со страницы VK не отправляются.")}</p>
+    {status && !status.configured && <p>{t("Создайте API-аккаунт и запустите Luma с переменными LUMA_LASTFM_API_KEY и LUMA_LASTFM_SECRET. Пошаговая инструкция — в репозитории.")}</p>}
     {status?.user && <>
-      {!status.persistent && <p>Системное хранилище недоступно. Сессия останется только до закрытия Luma.</p>}
-      <ToggleRow title="Отправлять прослушивания в Last.fm" detail="Не менее половины трека или 4 минут. Перемотка не считается." enabled={status.enabled} disabled={busy} change={() => bridge && run(() => bridge.enable(!status.enabled))} />
+      {!status.persistent && <p>{t("Системное хранилище недоступно. Сессия останется только до закрытия Luma.")}</p>}
+      <ToggleRow title={t("Отправлять прослушивания в Last.fm")} detail={t("Не менее половины трека или 4 минут. Перемотка не считается.")} enabled={status.enabled} disabled={busy} change={() => bridge && run(() => bridge.enable(!status.enabled))} />
     </>}
     {bridge && <div className="settings-actions">
-      {status?.user ? <button className="button outline-button" type="button" disabled={busy} onClick={() => run(bridge.disconnect)}>Отключить Last.fm</button> : <>
+      {status?.user ? <button className="button outline-button" type="button" disabled={busy} onClick={() => run(bridge.disconnect)}>{t("Отключить Last.fm")}</button> : <>
         <button className="button outline-button" type="button" disabled={busy || !connected || !status} onClick={() => run(bridge.begin)}>
-          {status?.configured ? status.waiting ? 'Открыть вход заново' : 'Подключить Last.fm' : 'Создать API-аккаунт'}
+          {status?.configured ? status.waiting ? t("Открыть вход заново") : t("Подключить Last.fm") : t("Создать API-аккаунт")}
         </button>
-        {status?.waiting && <button className="button primary-button" type="button" disabled={busy || !connected} onClick={() => run(bridge.finish)}>Завершить подключение</button>}
+        {status?.waiting && <button className="button primary-button" type="button" disabled={busy || !connected} onClick={() => run(bridge.finish)}>{t("Завершить подключение")}</button>}
       </>}
     </div>}
-    {status?.waiting && !status.issue && <p role="status">Разрешите Luma доступ на сайте Last.fm и вернитесь сюда.</p>}
+    {status?.waiting && !status.issue && <p role="status">{t("Разрешите Luma доступ на сайте Last.fm и вернитесь сюда.")}</p>}
     {status?.issue && <p role="status">{issues[status.issue]}</p>}
   </Service>;
 }
 
 function StreamCacheSettings() {
+  const t = useText();
   const bridge = window.luma?.streamCache;
   const [info, setInfo] = useState<StreamCacheInfo>();
   const [busy, setBusy] = useState(false);
@@ -424,34 +464,35 @@ function StreamCacheSettings() {
     void bridge.info().then((value) => { if (current) setInfo(value); }, () => {});
     return () => { current = false; };
   }, [bridge]);
-  return <SettingCard title="Кэш потоков" detail="В поиске выберите «В кэш» у разрешённого MP3 из Wikimedia Commons. Копия играет без сети из «Медиатека → Из интернета». Автоматических загрузок нет.">
-    <p className="setting-body-copy">До 128 МБ на 14 дней. Старые копии удаляются первыми; закладки и исходные файлы остаются.</p>
+  return <SettingCard title={t("Кэш потоков")} detail={t("В поиске выберите «В кэш» у разрешённого MP3 из Wikimedia Commons. Копия играет без сети из «Медиатека → Из интернета». Автоматических загрузок нет.")}>
+    <p className="setting-body-copy">{t("До 128 МБ на 14 дней. Старые копии удаляются первыми; закладки и исходные файлы остаются.")}</p>
     {bridge && <div className="settings-actions">
-      <span className="setting-status">{info ? `${info.count} · ${Math.round(info.bytes / 1024 / 1024 * 10) / 10} МБ` : 'Читаем размер…'}</span>
+      <span className="setting-status">{info ? t("{0} · {1} МБ", info.count, Math.round(info.bytes / 1024 / 1024 * 10) / 10) : t("Читаем размер…")}</span>
       <button className="button outline-button" type="button" disabled={busy || !info?.count} onClick={() => {
         setBusy(true); setFailed(false);
         void bridge.clear().then(setInfo, () => setFailed(true)).finally(() => setBusy(false));
-      }}>Очистить кэш</button>
+      }}>{t("Очистить кэш")}</button>
     </div>}
-    {!bridge && <span className="setting-status">В приложении Windows</span>}
-    {failed && <p role="status">Не удалось полностью очистить кэш. Остановите воспроизведение и повторите.</p>}
+    {!bridge && <span className="setting-status">{t("В приложении Windows")}</span>}
+    {failed && <p role="status">{t("Не удалось полностью очистить кэш. Остановите воспроизведение и повторите.")}</p>}
   </SettingCard>;
 }
 
 function VkAccountSettings({ connected, openVk }: { connected: boolean; openVk(): void }) {
+  const t = useText();
   const [resetting, setResetting] = useState(false);
   const [notice, setNotice] = useState('');
-  return <Service title="VK Music" status="Официальный сайт">
-    <p><strong>Статус аккаунта:</strong> проверьте на странице VK. Luma не читает данные входа и не может подтвердить ваш аккаунт.</p>
-    <p>Звуком на сайте и в виджете управляет VK. У Luma нет доступа к аудио API VK, поэтому VK Микс, радио и личные подборки недоступны в очереди Luma.</p>
+  return <Service title="VK Music" status={t("Официальный сайт")}>
+    <p><strong>{t("Статус аккаунта:")}</strong>{" "}{t("проверьте на странице VK. Luma не читает данные входа и не может подтвердить ваш аккаунт.")}</p>
+    <p>{t("Звуком на сайте и в виджете управляет VK. У Luma нет доступа к аудио API VK, поэтому VK Микс, радио и личные подборки недоступны в очереди Luma.")}</p>
     {window.luma && <div className="settings-actions">
-      <button className="button outline-button" type="button" disabled={resetting || !connected} onClick={openVk}>Войти в VK в Luma</button>
+      <button className="button outline-button" type="button" disabled={resetting || !connected} onClick={openVk}>{t("Войти в VK в Luma")}</button>
       <button className="button outline-button" type="button" disabled={resetting} onClick={() => {
         setResetting(true); setNotice('');
-        void window.luma?.vk.reset().then((done) => { if (done) setNotice('Данные входа в Luma очищены.'); }, () => setNotice('Не удалось очистить данные входа VK.')).finally(() => setResetting(false));
-      }}>{resetting ? 'Сбрасываем…' : 'Сбросить данные аккаунта'}</button>
+        void window.luma?.vk.reset().then((done) => { if (done) setNotice(t("Данные входа в Luma очищены.")); }, () => setNotice(t("Не удалось очистить данные входа VK."))).finally(() => setResetting(false));
+      }}>{resetting ? t("Сбрасываем…") : t("Сбросить данные аккаунта")}</button>
     </div>}
     {notice && <p className="setting-hint" role="status">{notice}</p>}
-    {!window.luma && <p className="setting-hint">Вход доступен только на странице VK в настольном приложении.</p>}
+    {!window.luma && <p className="setting-hint">{t("Вход доступен только на странице VK в настольном приложении.")}</p>}
   </Service>;
 }

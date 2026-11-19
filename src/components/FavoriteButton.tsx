@@ -1,10 +1,12 @@
+import { useText } from '../i18n/context';
 import { Heart, ThumbsDown } from 'lucide-react';
 import type { Track } from '../shared/media';
 
 export function FavoriteButton({ track, selected, toggle, immersive }: {
   track: Track; selected: boolean; toggle(id: string): void; immersive?: boolean;
 }) {
-  const label = selected ? 'Убрать из избранного' : 'В избранное';
+  const t = useText();
+  const label = selected ? t("Убрать из избранного") : t("В избранное");
   return <button type="button" className={`icon-button like-button ${immersive ? 'immersive-favorite' : 'favorite-toggle'}`}
     aria-pressed={selected} aria-label={immersive ? label : `${label}: ${track.title}`} title={label} onClick={({ currentTarget }) => {
       toggle(track.id);
@@ -25,7 +27,8 @@ export function FavoriteButton({ track, selected, toggle, immersive }: {
 export function DislikeButton({ track, selected, toggle, immersive }: {
   track: Track; selected: boolean; toggle(id: string): void; immersive?: boolean;
 }) {
-  const label = selected ? 'Вернуть в рекомендации' : 'Не рекомендовать';
+  const t = useText();
+  const label = selected ? t("Вернуть в рекомендации") : t("Не рекомендовать");
   return <button type="button" className={`icon-button dislike-toggle${immersive ? ' immersive-favorite' : ''}`}
     aria-pressed={selected} aria-label={immersive ? label : `${label}: ${track.title}`} title={label} onClick={() => toggle(track.id)}>
     <ThumbsDown size={immersive ? 21 : 16} fill={selected ? 'currentColor' : 'none'} aria-hidden="true" />

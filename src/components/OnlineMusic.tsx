@@ -1,3 +1,5 @@
+import type { Text } from '../i18n/text';
+import { useText } from '../i18n/context';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { ArrowUpRight, BookmarkPlus, Check, HardDriveDownload, Cloud, CloudOff, Download, Globe2, Link2, ListPlus, Play, Search } from 'lucide-react';
@@ -11,13 +13,14 @@ import { Artwork } from './Artwork';
 export type OnlineAction = 'play' | 'queue' | 'save' | 'export' | 'cache';
 
 function SourceLink({ url, children }: { url: string; children: ReactNode }) {
+  const t = useText();
   const [failed, setFailed] = useState(false);
   return <><a href={url} target="_blank" rel="noopener noreferrer" onClick={(event) => {
     if (!window.luma) return;
     event.preventDefault();
     setFailed(false);
     void window.luma.openOnlineLink(url).catch(() => setFailed(true));
-  }}>{children}</a>{failed && <span role="status">Не удалось открыть ссылку.</span>}</>;
+  }}>{children}</a>{failed && <span role="status">{t("Не удалось открыть ссылку.")}</span>}</>;
 }
 
 export function OnlineCredit({ track, compact }: { track: { online: OnlineTrack['online'] }; compact?: boolean }) {
@@ -26,14 +29,17 @@ export function OnlineCredit({ track, compact }: { track: { online: OnlineTrack[
     {!compact && <> · <SourceLink url={licenseUrl}>{license}</SourceLink></>}</span>;
 }
 
-function message(error: unknown) {
+function message(error: unknown, t: Text) {
+  const code = error instanceof Error && /^Каталог сейчас недоступен \(HTTP (\d+)\)\. Повторите попытку позже\.$/.exec(error.message);
+  if (code) return t("Каталог сейчас недоступен (HTTP {0}). Повторите попытку позже.", code[1]);
   return error instanceof Error && !(error instanceof TypeError) && !(error instanceof SyntaxError) && error.name !== 'TimeoutError'
-    ? error.message : 'Не удалось связаться с каталогом. Проверьте подключение и повторите попытку.';
+    ? t(error.message) : t("Не удалось связаться с каталогом. Проверьте подключение и повторите попытку.");
 }
 
 export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabled, choose }: {
   query: string; hasLocal: boolean; filter: OnlineFilter; setFilter(value: OnlineFilter): void; saved: ReadonlySet<string>; disabled: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
 }) {
+  const t = useText();
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
   const [tracks, setTracks] = useState<OnlineTrack[] | undefined>();
   const [busy, setBusy] = useState(false);
@@ -51,49 +57,50 @@ export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabl
     try {
       const items = await findOnlineTracks(query, filter, request.signal);
       if (!request.signal.aborted) setTracks(items);
-    } catch (error) { if (!request.signal.aborted) setError(message(error)); }
+    } catch (error) { if (!request.signal.aborted) setError(message(error, t)); }
     finally { if (!request.signal.aborted) setBusy(false); }
   }
 
   return <section className="online-panel" aria-labelledby="online-title" aria-busy={busy}>
     <header><div className="online-mark"><Globe2 size={20} /></div><div>
-      <p className="overline">Слушать в Luma</p><h2 id="online-title">Найти в музыкальных сервисах</h2>
-      <p>{hasLocal ? 'Хотите больше вариантов? Нажмите «Искать онлайн», чтобы отправить запрос в выбранный каталог.'
-        : 'Отправьте запрос в выбранный каталог кнопкой «Искать онлайн» или клавишей Enter.'}</p>
+      <p className="overline">{t("Слушать в Luma")}</p><h2 id="online-title">{t("Найти в музыкальных сервисах")}</h2>
+      <p>{hasLocal ? t("Хотите больше вариантов? Нажмите «Искать онлайн», чтобы отправить запрос в выбранный каталог.")
+        : t("Отправьте запрос в выбранный каталог кнопкой «Искать онлайн» или клавишей Enter.")}</p>
     </div></header>
-    {!connected && <p className="online-offline" role="status"><CloudOff size={17} /> Устройство вне сети. Онлайн-поиск пока недоступен.</p>}
+    {!connected && <p className="online-offline" role="status"><CloudOff size={17} />{" "}{t("Устройство вне сети. Онлайн-поиск пока недоступен.")}</p>}
     <form id="online-search-form" className="online-search-form" onSubmit={search}>
-      <select value={filter} aria-label="Источник онлайн-поиска" onChange={(event) => {
+      <select value={filter} aria-label={t("Источник онлайн-поиска")} onChange={(event) => {
         pending.current?.abort(); setBusy(false); setTracks(undefined); setError(''); setFilter(event.currentTarget.value as OnlineFilter);
       }}>
         <option value="all">Jamendo + Wikimedia Commons</option>
-        {Object.entries(ONLINE_FILTERS).map(([id, name]) => <option key={id} value={id}>{name}{!window.luma && (id === 'southern_city' || id === 'netlabels') ? ' · Windows' : ''}</option>)}
+        {Object.entries(ONLINE_FILTERS).map(([id, name]) => <option key={id} value={id}>{t(name)}{!window.luma && (id === 'southern_city' || id === 'netlabels') ? ' · Windows' : ''}</option>)}
       </select>
-      <button className="button primary-button" type="submit" disabled={busy || !connected || query.trim().length < 2}><Search size={16} /> {busy ? 'Ищем…' : 'Искать онлайн'}</button>
+      <button className="button primary-button" type="submit" disabled={busy || !connected || query.trim().length < 2}><Search size={16} /> {busy ? t("Ищем…") : t("Искать онлайн")}</button>
     </form>
     {error && <p className="online-message error" role="alert">{error}</p>}
-    {tracks && <p className="online-message" role="status">{tracks.length ? `Доступно записей: ${tracks.length}` : 'Подходящих записей нет. Попробуйте другой запрос или источник.'}</p>}
+    {tracks && <p className="online-message" role="status">{tracks.length ? t("Доступно записей: {0}", tracks.length) : t("Подходящих записей нет. Попробуйте другой запрос или источник.")}</p>}
     {tracks && tracks.length > 0 && <ul className="online-results">
       {tracks.map((track) => <li key={track.id}>
         <Artwork track={track} />
         <div className="online-result-copy"><strong title={track.title}>{track.title}</strong><span>{track.artist}{track.duration > 0 ? ` · ${formatTime(track.duration)}` : ''}</span>
           <OnlineCredit track={track} /></div>
         <div className="online-result-actions">
-          <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={`Слушать онлайн: ${track.title}`} title="Слушать онлайн" onClick={() => choose(track, 'play')}><Play size={17} /></button>
-          <button type="button" className="icon-button" disabled={disabled} aria-label={`В очередь: ${track.title}`} title="В очередь" onClick={() => choose(track, 'queue')}><ListPlus size={17} /></button>
-          <button type="button" className="icon-button" disabled={disabled || saved.has(track.id)} aria-label={saved.has(track.id) ? `Сохранено: ${track.title}` : `Сохранить: ${track.title}`} title="Сохранить ссылку в медиатеке" onClick={() => choose(track, 'save')}>
+          <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("Слушать онлайн: {0}", track.title)} title={t("Слушать онлайн")} onClick={() => choose(track, 'play')}><Play size={17} /></button>
+          <button type="button" className="icon-button" disabled={disabled} aria-label={t("В очередь: {0}", track.title)} title={t("В очередь")} onClick={() => choose(track, 'queue')}><ListPlus size={17} /></button>
+          <button type="button" className="icon-button" disabled={disabled || saved.has(track.id)} aria-label={saved.has(track.id) ? t("Сохранено: {0}", track.title) : t("Сохранить: {0}", track.title)} title={t("Сохранить ссылку в медиатеке")} onClick={() => choose(track, 'save')}>
             {saved.has(track.id) ? <Check size={17} /> : <BookmarkPlus size={17} />}
           </button>
-          {window.luma?.streamCache && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={`В кэш: ${track.title}`} title="Сохранить временную копию для офлайн-прослушивания" onClick={() => choose(track, 'cache')}><HardDriveDownload size={17} /></button>}
-          {window.luma && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={`Скачать MP3: ${track.title}`} title="Сохранить копию MP3" onClick={() => choose(track, 'export')}><Download size={17} /></button>}
+          {window.luma?.streamCache && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("В кэш: {0}", track.title)} title={t("Сохранить временную копию для офлайн-прослушивания")} onClick={() => choose(track, 'cache')}><HardDriveDownload size={17} /></button>}
+          {window.luma && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("Скачать MP3: {0}", track.title)} title={t("Сохранить копию MP3")} onClick={() => choose(track, 'export')}><Download size={17} /></button>}
         </div>
       </li>)}
     </ul>}
-    <p className="online-footnote">Закладка сохраняет ссылку. Загрузить файл можно отдельно, если источник разрешает. Без сети играют файлы и доступные копии в кэше. Эквалайзер и реакция фона на звук работают с файлами.</p>
+    <p className="online-footnote">{t("Закладка сохраняет ссылку. Загрузить файл можно отдельно, если источник разрешает. Без сети играют файлы и доступные копии в кэше. Эквалайзер и реакция фона на звук работают с файлами.")}</p>
   </section>;
 }
 
 export function OnlineImport({ disabled, save }: { disabled: boolean; save(track: OnlineTrack): void }) {
+  const t = useText();
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
@@ -109,15 +116,15 @@ export function OnlineImport({ disabled, save }: { disabled: boolean; save(track
     try {
       const track = await importOnlineTrack(link, request.signal);
       if (!request.signal.aborted) { save(track); setLink(''); }
-    } catch (error) { if (!request.signal.aborted) setError(message(error)); }
+    } catch (error) { if (!request.signal.aborted) setError(message(error, t)); }
     finally { if (!request.signal.aborted) setBusy(false); }
   }
   return <section className="online-import" aria-labelledby="online-import-heading">
-    <h2 id="online-import-heading"><Cloud size={17} /> Импорт онлайн-трека</h2>
-    <p>Вставьте ссылку на аудиозапись Jamendo или Wikimedia Commons из карточки на Openverse. Luma сохранит запись без скачивания файла.</p>
+    <h2 id="online-import-heading"><Cloud size={17} />{" "}{t("Импорт онлайн-трека")}</h2>
+    <p>{t("Вставьте ссылку на аудиозапись Jamendo или Wikimedia Commons из карточки на Openverse. Luma сохранит запись без скачивания файла.")}</p>
     <form onSubmit={add} className="online-search-form">
-      <input type="url" required maxLength={2048} aria-label="Ссылка на запись Openverse" placeholder="https://openverse.org/audio/…" value={link} onChange={(event) => setLink(event.currentTarget.value)} />
-      <button className="button outline-button" disabled={busy || disabled || !connected || !link.trim()} type="submit"><Link2 size={16} /> {busy ? 'Проверяем…' : 'Сохранить ссылку'}</button>
+      <input type="url" required maxLength={2048} aria-label={t("Ссылка на запись Openverse")} placeholder="https://openverse.org/audio/…" value={link} onChange={(event) => setLink(event.currentTarget.value)} />
+      <button className="button outline-button" disabled={busy || disabled || !connected || !link.trim()} type="submit"><Link2 size={16} /> {busy ? t("Проверяем…") : t("Сохранить ссылку")}</button>
     </form>
     {error && <p className="online-message error" role="alert">{error}</p>}
   </section>;

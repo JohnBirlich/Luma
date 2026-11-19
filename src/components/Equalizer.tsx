@@ -1,11 +1,10 @@
+import { useText } from '../i18n/context';
 import { useEffect, useRef } from 'react';
 import { AudioLines, RotateCcw, X } from 'lucide-react';
 import { BANDS, PRESETS } from '../shared/equalizer';
 import { formatRussianNumber } from '../shared/russian';
 import type { EqualizerSettings, Preset } from '../shared/equalizer';
 import type { CSSProperties } from 'react';
-
-const db = (value: number) => `${value > 0 ? '+' : ''}${formatRussianNumber(value)} дБ`;
 
 interface EqualizerProps {
   settings: EqualizerSettings;
@@ -14,6 +13,8 @@ interface EqualizerProps {
 }
 
 export function Equalizer({ settings, change, close }: EqualizerProps) {
+  const t = useText();
+  const db = (value: number) => `${value > 0 ? '+' : ''}${t.language === 'en' ? `${value} dB` : `${formatRussianNumber(value)} дБ`}`;
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); }, []);
   function dismiss() {
@@ -29,18 +30,17 @@ export function Equalizer({ settings, change, close }: EqualizerProps) {
       <div className="equalizer-content">
         <header className="dialog-header">
           <div className="dialog-mark"><AudioLines size={23} /></div>
-          <div><p className="overline">Настройки звука</p><h2 id="eq-title">Эквалайзер</h2></div>
-          <button type="button" className="icon-button" onClick={dismiss} aria-label="Закрыть эквалайзер" title="Закрыть"><X size={20} /></button>
+          <div><p className="overline">{t("Настройки звука")}</p><h2 id="eq-title">{t("Эквалайзер")}</h2></div>
+          <button type="button" className="icon-button" onClick={dismiss} aria-label={t("Закрыть эквалайзер")} title={t("Закрыть")}><X size={20} /></button>
         </header>
         <div className="eq-toolbar">
-          <label className="preset-label">Пресет
-            <select value={settings.preset} onChange={(event) => preset(event.currentTarget.value as Preset)}>
-              {Object.entries(PRESETS).map(([id, data]) => <option value={id} key={id}>{data.label}</option>)}
-              <option value="custom" disabled>Пользовательский</option>
+          <label className="preset-label">{t("Пресет")}{" "}<select value={settings.preset} onChange={(event) => preset(event.currentTarget.value as Preset)}>
+              {Object.entries(PRESETS).map(([id, data]) => <option value={id} key={id}>{t(data.label)}</option>)}
+              <option value="custom" disabled>{t("Пользовательский")}</option>
             </select>
           </label>
           <button type="button" role="switch" aria-checked={settings.enabled} onClick={() => change({ ...settings, enabled: !settings.enabled })} className="eq-switch">
-            <span>Эквалайзер</span><i aria-hidden="true" />
+            <span>{t("Эквалайзер")}</span><i aria-hidden="true" />
           </button>
         </div>
         <div className="eq-board">
@@ -48,22 +48,22 @@ export function Equalizer({ settings, change, close }: EqualizerProps) {
           {BANDS.map(({ hz, label }, index) => (
             <label className="eq-band" key={hz}>
               <output>{db(settings.gains[index])}</output>
-              <input type="range" min={-12} max={12} step={1} value={settings.gains[index]} aria-label={label} aria-valuetext={db(settings.gains[index])}
+              <input type="range" min={-12} max={12} step={1} value={settings.gains[index]} aria-label={t(label)} aria-valuetext={db(settings.gains[index])}
                 onChange={(event) => change({ ...settings, enabled: true, preset: 'custom', gains: settings.gains.map((gain, i) => i === index ? event.currentTarget.valueAsNumber : gain) })} />
-              <span>{label}</span>
+              <span>{t(label)}</span>
             </label>
           ))}
         </div>
         <div className="eq-preamp">
-          <label htmlFor="preamp">Предусиление</label>
+          <label htmlFor="preamp">{t("Предусиление")}</label>
           <input id="preamp" type="range" className="range" min={-12} max={12} step={0.5} value={settings.preamp} aria-valuetext={db(settings.preamp)}
             onChange={(event) => change({ ...settings, enabled: true, preset: 'custom', preamp: event.currentTarget.valueAsNumber })}
             style={{ '--filled': `${(settings.preamp + 12) / 24 * 100}%` } as CSSProperties} />
           <output htmlFor="preamp">{db(settings.preamp)}</output>
         </div>
         <footer className="dialog-footer">
-          <button type="button" className="button ghost-button" onClick={() => change({ ...PRESETS.flat, enabled: settings.enabled, preset: 'flat' })}><RotateCcw size={15} /> Сбросить</button>
-          <button type="button" className="button primary-button" onClick={dismiss}>Готово</button>
+          <button type="button" className="button ghost-button" onClick={() => change({ ...PRESETS.flat, enabled: settings.enabled, preset: 'flat' })}><RotateCcw size={15} />{" "}{t("Сбросить")}</button>
+          <button type="button" className="button primary-button" onClick={dismiss}>{t("Готово")}</button>
         </footer>
       </div>
     </dialog>
