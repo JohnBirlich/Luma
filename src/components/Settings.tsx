@@ -404,7 +404,8 @@ function FloatSettings({ requested, status, change }: { requested: boolean; stat
     starting: 'Проверяем формат устройства…',
     running: 'WASAPI Exclusive · IEEE Float32',
     unsupported: 'Устройство занято или не приняло Float32. Используется системный вывод.',
-    failed: 'Сбой Float-вывода. Используется системный вывод.',
+    failed: 'Сбой Float-вывода. Проверьте устройство или выключите этот режим.',
+    'no-device': 'Системный выход не найден. Подключите устройство и попробуйте снова.',
     missing: 'Float-вывод недоступен в этом окружении.',
   };
   return <SettingCard title={t("Float-вывод")} detail={t("Для локальных файлов: выделенный WASAPI Exclusive в стерео IEEE Float32, только если драйвер принимает точный формат. Не меняет разрядность исходника и не гарантирует bit-perfect.")}>

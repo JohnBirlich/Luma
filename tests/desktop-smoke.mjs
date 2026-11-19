@@ -111,6 +111,7 @@ async function smoke() {
   assert.ok(window.webContents.getURL().startsWith(APP_ORIGIN));
   assert.equal(await run('document.documentElement.lang'), 'ru');
   assert.equal(await run('window.luma.floatOutput.start("48000")'), 'failed', 'Float IPC rejects a non-numeric rate');
+  let hasSystemSink = true;
   if (process.platform === 'win32') {
     assert.equal(await run('window.luma.floatOutput.available()'), true, 'the WASAPI helper was built');
     const mode = await run('window.luma.floatOutput.start(48000)');
@@ -128,10 +129,14 @@ async function smoke() {
         stage = 'AudioContext.setSinkId(default)';
         await ctx.setSinkId('');
         return 'ok';
-      } catch (error) { return stage + ': ' + error.name + ': ' + error.message; }
+      } catch (error) {
+        if (stage === 'AudioContext.setSinkId(default)' && error.name === 'NotFoundError') return 'no-system-output';
+        return stage + ': ' + error.name + ': ' + error.message;
+      }
       finally { await ctx.close(); }
     })()`);
-    assert.equal(graphCheck, 'ok', `Chromium Float audio graph preflight: ${graphCheck}`);
+    assert.ok(['ok', 'no-system-output'].includes(graphCheck), `Chromium Float audio graph preflight: ${graphCheck}`);
+    hasSystemSink = graphCheck === 'ok';
     console.log(`::notice title=WASAPI Float probe::Driver result for stereo 48 kHz Float32 on the runner: ${mode}.`);
   }
   assert.equal(await run('window.luma.lastfm.status().then(({ enabled }) => enabled)'), false);
@@ -403,14 +408,16 @@ async function smoke() {
       await waitFor('experimental Float toggle available', () => run(`document.querySelector('${toggle}')?.disabled === false`));
       await click(toggle);
       await click('.player-bar .play-button');
+      const statusSelector = '.settings-page .setting-body-copy[role="status"]';
       const status = await waitFor('Float graph reaches driver result', () => run(`(() => {
-        const state = document.querySelector('.settings-page .setting-body-copy[role="status"]')?.textContent;
-        return /WASAPI Exclusive|Устройство занято или не приняло Float32|Сбой Float-вывода|Float-вывод недоступен/.test(state ?? '') ? state : false;
+        const state = document.querySelector(${JSON.stringify(statusSelector)})?.textContent;
+        return /WASAPI Exclusive|Устройство занято или не приняло Float32|Системный выход не найден|Сбой Float-вывода|Float-вывод недоступен/.test(state ?? '') ? state : false;
       })()`));
-      assert.match(status, /WASAPI Exclusive|Устройство занято или не приняло Float32/);
+      assert.match(status, hasSystemSink ? /WASAPI Exclusive|Устройство занято или не приняло Float32/ : /WASAPI Exclusive|Системный выход не найден/);
       await waitFor('local decoding continues', () => run(`[...document.querySelectorAll('audio:not([data-online-audio])')].some((audio) => !audio.paused && audio.currentTime > .5)`));
       await click(toggle);
-      await waitFor('system output restored', () => run(`document.querySelector('.settings-page .setting-body-copy[role="status"]')?.textContent === 'Системный вывод'`));
+      const systemLabel = hasSystemSink ? 'Системный вывод' : 'Системный выход не найден. Подключите устройство и попробуйте снова.';
+      await waitFor('system output fallback or explicit missing device', () => run(`document.querySelector(${JSON.stringify(statusSelector)})?.textContent === ${JSON.stringify(systemLabel)}`));
       await click('.player-bar .play-button');
       await click('.settings-return');
       console.log(`::notice title=Float output in playback::${status}`);

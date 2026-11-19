@@ -43,6 +43,7 @@ import type { Appearance, LibraryLayout } from './shared/customization';
 import { clamp } from './shared/equalizer';
 import { defaultAudioQuality, isMetered } from './shared/audio-quality';
 import { VK_MUSIC_URL } from './shared/vk';
+import { dataLocale } from './shared/app-info';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
 import { MAX_ONLINE_TRACKS } from './shared/online';
 import type { OnlineTrack } from './shared/online';
@@ -63,12 +64,6 @@ function subscribeNetwork(listener: () => void) {
   connection?.addEventListener('change', listener);
   return () => connection?.removeEventListener('change', listener);
 }
-function localeOrDefault(value: string | undefined) {
-  try { return Intl.getCanonicalLocales(value ?? [])[0] ?? navigator.language; }
-  catch { return navigator.language; }
-}
-
-
 export default function App() {
   const [boot] = useState(readPreferences);
   const [preferences, setPreferences] = useState(boot);
@@ -118,10 +113,10 @@ export default function App() {
   const scrollArea = useRef<HTMLElement>(null);
 
   const { appearance, playback, onlineTracks, onlineRefs, audioQuality } = preferences;
-  const [systemLocale, setSystemLocale] = useState(() => navigator.language);
+  const [systemLocale, setSystemLocale] = useState(() => dataLocale(navigator.language));
   useEffect(() => {
-    void window.luma?.getAppInfo().then(({ systemLocale }) => setSystemLocale(localeOrDefault(systemLocale)), () => {});
-    const change = () => setSystemLocale(navigator.language);
+    void window.luma?.getAppInfo().then(({ systemLocale }) => setSystemLocale(dataLocale(systemLocale, navigator.language)), () => {});
+    const change = () => setSystemLocale(dataLocale(navigator.language));
     window.addEventListener('languagechange', change);
     return () => window.removeEventListener('languagechange', change);
   }, []);

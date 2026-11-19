@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { textFor } from '../src/i18n/text';
 import { english } from '../src/i18n/en';
+import { dataLocale } from '../src/shared/app-info';
+import { describeAudioFormat } from '../src/shared/audio-quality';
 import { trackCount } from '../src/shared/media';
 import { diagnosticSystem, diagnosticsReport, displayValues, logEntry } from '../src/shared/diagnostics';
 import { decodePreferences, encodePreferences } from '../src/player/preferences';
@@ -38,4 +40,12 @@ test('English diagnostic values and reports translate labels without changing ev
   assert.match(report, /Network: device online/);
   assert.match(report, /\(audio\.ready\).*Time: 127 ms/);
   assert.doesNotMatch(report, /[А-Яа-яЁё]/u);
+});
+
+
+test('source format labels remain usable when a host exposes a POSIX or invalid locale', () => {
+  assert.equal(dataLocale('de_DE.UTF-8'), 'de-DE');
+  assert.equal(dataLocale('not a locale', 'en-US'), 'en-US');
+  assert.equal(dataLocale(''), 'ru-RU');
+  assert.equal(describeAudioFormat({ codec: 'PCM', sampleRate: 44100, bitsPerSample: 24 }, 'bad locale', 'en'), 'PCM · 44,1 kHz · 24 bit');
 });

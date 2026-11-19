@@ -13,10 +13,14 @@ export class FloatSink {
   private silent = false;
   private stopListening: () => void;
   private closed = false;
+  private deviceChanged = () => {
+    if (this.silent && !this.node && !this.closed) void this.set(false);
+  };
   constructor(private context: SwitchableContext, private master: GainNode, private bridge: DesktopBridge['floatOutput'], private status: (status: FloatStatus) => void) {
     this.stopListening = bridge.onLost(() => { void this.set(false, 'failed'); });
+    navigator.mediaDevices?.addEventListener('devicechange', this.deviceChanged);
   }
-  private async restoreSystem() {
+  private async restoreSystem(): Promise<'system' | 'no-device' | 'failed'> {
     if (this.node) {
       try { this.master.disconnect(this.node); } catch { /* Audio graph already closed or never connected. */ }
       this.node.disconnect();
@@ -25,9 +29,11 @@ export class FloatSink {
     }
     await this.bridge.stop().catch(() => {});
     if (this.silent && this.context.state !== 'closed') {
-      await this.context.setSinkId?.('');
+      try { await this.context.setSinkId?.(''); }
+      catch (error) { return error instanceof DOMException && error.name === 'NotFoundError' ? 'no-device' : 'failed'; }
       this.silent = false;
     }
+    return 'system';
   }
   set(wanted: boolean, stopped: 'system' | 'failed' = 'system') {
     if (this.closed && wanted) return this.chain;
@@ -37,7 +43,11 @@ export class FloatSink {
     this.chain = this.chain.then(async () => {
       if (!current()) return;
       try {
-        if (!wanted) { await this.restoreSystem(); status(stopped); return; }
+        if (!wanted) {
+          const result = await this.restoreSystem();
+          status(result === 'system' ? stopped : result);
+          return;
+        }
         if (this.node) return;
         if (!this.context.setSinkId || !this.context.audioWorklet) { status('missing'); return; }
         if (!await this.bridge.available() || !current()) { status('missing'); return; }
@@ -49,7 +59,11 @@ export class FloatSink {
         this.silent = true;
         if (!current()) { await this.restoreSystem(); return; }
         const result = await this.bridge.start(this.context.sampleRate);
-        if (result !== 'running' || !current()) { await this.restoreSystem(); status(result); return; }
+        if (result !== 'running' || !current()) {
+          const fallback = await this.restoreSystem();
+          status(fallback === 'system' ? result : fallback);
+          return;
+        }
         const node = new AudioWorkletNode(this.context, 'luma-float-tap', {
           numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit', outputChannelCount: [2],
         });
@@ -61,11 +75,16 @@ export class FloatSink {
         this.master.connect(node).connect(this.context.destination);
         status('running');
       } catch {
-        await this.restoreSystem().catch(() => {});
-        status('failed');
+        const fallback = await this.restoreSystem().catch(() => 'failed' as const);
+        status(fallback === 'no-device' ? fallback : 'failed');
       }
     });
     return this.chain;
   }
-  close() { this.closed = true; this.stopListening(); return this.set(false); }
+  close() {
+    this.closed = true;
+    this.stopListening();
+    navigator.mediaDevices?.removeEventListener('devicechange', this.deviceChanged);
+    return this.set(false);
+  }
 }

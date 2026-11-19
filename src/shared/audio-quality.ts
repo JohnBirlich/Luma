@@ -1,3 +1,4 @@
+import { dataLocale } from './app-info.js';
 import type { UiLanguage } from './ui-language.js';
 import type { Track } from './media.js';
 import { cleanTrackText } from './russian.js';
@@ -50,7 +51,7 @@ export function readAudioFormat(value: unknown): AudioFormat | undefined {
 }
 
 export function describeAudioFormat(format: AudioFormat | undefined, locale: string, language: UiLanguage = 'ru') {
-  const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2, useGrouping: false });
+  const number = new Intl.NumberFormat(dataLocale(locale), { maximumFractionDigits: 2, useGrouping: false });
   return [format?.codec, format?.bitrate && `${number.format(format.bitrate / 1000)} ${language === 'en' ? 'kbps' : 'кбит/с'}`,
     format?.sampleRate && `${number.format(format.sampleRate / 1000)} ${language === 'en' ? 'kHz' : 'кГц'}`, format?.bitsPerSample && `${format.bitsPerSample} ${language === 'en' ? 'bit' : 'бит'}`].filter(Boolean).join(' · ');
 }

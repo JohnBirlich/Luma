@@ -1,4 +1,4 @@
-export type FloatStatus = 'system' | 'starting' | 'running' | 'unsupported' | 'failed' | 'missing';
+export type FloatStatus = 'system' | 'starting' | 'running' | 'unsupported' | 'failed' | 'missing' | 'no-device';
 export type FloatStart = Extract<FloatStatus, 'running' | 'unsupported' | 'failed' | 'missing'>;
 
 export const validFloatRate = (rate: unknown): rate is number => typeof rate === 'number' && Number.isSafeInteger(rate) && rate >= 8000 && rate <= 192000;
