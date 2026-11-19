@@ -35,7 +35,7 @@ async function waitFor(label, check) {
   throw new Error(`Timed out: ${label}`);
 }
 
-const timer = setTimeout(() => { console.error('Desktop smoke test did not finish'); app.exit(1); }, 80_000);
+const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), 80_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
 const cover = await readFile(join(root, 'public/artwork/afterimage.webp'));
@@ -98,9 +98,12 @@ async function smoke() {
   await waitFor('appearance button', () => run(`!!document.querySelector('.scene-open')`));
   await run(`document.querySelector('.scene-open').click()`);
   await waitFor('appearance dialog', () => run(`!!document.querySelector('.scene-dialog[open]')`));
-  await run(`[...document.querySelectorAll('.scene-layouts button')].find((item) => item.textContent === 'Винил').click();
-    document.querySelector('.scene-choice[aria-label="Призма"]').click();
-    document.querySelector('.scene-dialog .primary-button').click()`);
+  await run(`[...document.querySelectorAll('.scene-layouts button')].find((item) => item.textContent === 'Винил').click()`);
+  // Each user click commits React state before the next choice; do not batch them into a single script.
+  await waitFor('vinyl preview', () => run(`!!document.querySelector('.scene-preview-record')`));
+  await run(`document.querySelector('.scene-choice[aria-label="Призма"]').click()`);
+  await waitFor('prism preview', () => run(`!!document.querySelector('.scene-dialog-preview .scene-prism')`));
+  await run(`document.querySelector('.scene-dialog .primary-button').click()`);
   await waitFor('spinning record', () => run(`!!document.querySelector('.hero .record-rotating')`));
   await run(`window.testAudio = document.querySelector('audio'); document.querySelector('.hero-fullscreen').click()`);
   await waitFor('expanded player', () => run(`document.querySelector('.immersive-player[open] h1')?.textContent === "Ty Zdes'"`));
@@ -172,8 +175,16 @@ async function smoke() {
   console.log('Desktop smoke: Cyrillic and embedded/fallback artwork published from luma:// with production CSP.');
 }
 
-void smoke().then(() => finish(0), (error) => { console.error(error); return finish(1); });
+void smoke().then(() => finish(0), fail);
 process.on('exit', () => { try { rmSync(profile, { recursive: true, force: true }); } catch { /* Windows may still have cache files open. */ } });
+function fail(error) {
+  console.error(error);
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const message = (error instanceof Error ? error.message : String(error)).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+    console.log(`::error title=Electron smoke::${message}`);
+  }
+  finish(1);
+}
 function finish(code) {
   clearTimeout(timer);
   app.exit(code);
