@@ -282,6 +282,7 @@ async function smoke() {
   console.log('Desktop smoke: native diagnostics recorded, persisted, exported, and cleared.');
   console.log('Desktop smoke: Cyrillic and embedded/fallback artwork published from luma:// with production CSP.');
   if (liveCatalog) {
+    await session.defaultSession.clearCache();
     const failed = [];
     for (const source of ['jamendo', 'wikimedia_audio']) {
       let result;
@@ -320,7 +321,7 @@ async function smoke() {
         result = error instanceof Error ? error.message : String(error);
         failed.push(source);
       }
-      console.log(`::notice title=Live catalog ${source}::${result.replace(/\r?\n/g, ' ')}`);
+      console.log(`::notice title=Live catalog ${source}::${result.replace(/%/g, '%25').replace(/\r?\n/g, ' ')}`);
     }
     assert.deepEqual(failed, [], 'Live provider check (optional, depends on the network and these services)');
   }

@@ -73,8 +73,18 @@ test('rate limits and oversized bodies surface clear errors instead of unbounded
   const fetch = t.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 429 }));
   const signal = new AbortController().signal;
   await assert.rejects(findOnlineTracks('jazz', 'all', signal), /ограничил поиск/);
+  assert.equal(fetch.mock.callCount(), 1);
   fetch.mock.mockImplementation(async () => new Response('x'.repeat(512 * 1024 + 1)));
   await assert.rejects(findOnlineTracks('jazz', 'all', signal), /слишком большой/);
+});
+
+test('one retry handles a temporary upstream failure without repeating rate-limited requests', async (t) => {
+  let calls = 0;
+  const fetch = t.mock.method(globalThis, 'fetch', async () => ++calls === 1
+    ? new Response(null, { status: 502 }) : Response.json({ results: [commonsRecording] }));
+  const signal = new AbortController().signal;
+  assert.deepEqual(await findOnlineTracks('Bach', 'wikimedia_audio', signal), [commons]);
+  assert.equal(fetch.mock.callCount(), 2);
 });
 
 test('saved links and queue references restore without trusting the browser storage payload', () => {

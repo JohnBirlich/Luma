@@ -4,11 +4,22 @@ import type { OnlineFilter, OnlineTrack } from '../shared/online';
 const MAX_JSON = 512 * 1024;
 
 async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
-  const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(11_000)]), redirect: 'error', credentials: 'omit',
-    referrerPolicy: 'no-referrer', headers: { Accept: 'application/json' } });
+  const options = { signal: AbortSignal.any([signal, AbortSignal.timeout(11_000)]), redirect: 'error', credentials: 'omit',
+    referrerPolicy: 'no-referrer', headers: { Accept: 'application/json' } } as const;
+  let response = await fetch(url, options);
+  if ([500, 502, 503, 504].includes(response.status)) {
+    // Retry a temporary upstream error once, within the original deadline. Never retry a rate limit.
+    void response.body?.cancel().catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    options.signal.throwIfAborted();
+    response = await fetch(url, options);
+  }
   if (response.status === 429) throw new Error('Openverse временно ограничил поиск. Попробуйте чуть позже.');
   if (response.status === 404) throw new Error('Запись не найдена. Возможно, её убрали из каталога.');
-  if (!response.ok || !response.body) throw new Error('Каталог сейчас недоступен.');
+  if (!response.ok || !response.body) {
+    void response.body?.cancel().catch(() => undefined);
+    throw new Error(`Каталог сейчас недоступен (HTTP ${response.status}). Повторите попытку позже.`);
+  }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let bytes = 0;
