@@ -14,6 +14,14 @@ export type OnlineFilter = OnlineSource | 'all';
 export const MAX_ONLINE_TRACKS = 180;
 export interface OnlineCreditData { source: OnlineSource; page: string; license: string; licenseUrl: string }
 export interface OnlineTrack extends Track { online: OnlineCreditData }
+type LyricWrite = 'saved' | 'existing' | 'failed';
+export interface Mp3ExportResult { saved: boolean; lyrics?: { synced?: LyricWrite; plain?: LyricWrite }; credit?: boolean }
+
+/** Only original MP3s offered from Wikimedia Commons under supported reusable licenses. */
+export function commonsMp3Export(track: OnlineTrack) {
+  return track.online.source === 'wikimedia_audio' && /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/[\da-f]\/[\da-f]{2}\/[^/?#]+\.mp3$/i.test(track.audioUrl)
+    && /^https:\/\/creativecommons\.org\/(?:licenses\/by(?:-sa)?|publicdomain\/(?:mark|zero))\/\d\.\d\/$/.test(track.online.licenseUrl);
+}
 
 const uuid = /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i;
 const title = (value: unknown, fallback = '') => typeof value === 'string' ? cleanTrackText(value).slice(0, 240) || fallback : fallback;

@@ -18,7 +18,7 @@ const LAYOUTS = [
 const EFFECTS = [
   { id: 'off', label: 'Без эффекта', description: 'Только оформление трека', icon: CircleSlash },
   { id: 'aurora', label: 'Сияние', description: 'Северное сияние и переливы', icon: Sparkles },
-  { id: 'waves', label: 'Волны', description: 'Световые линии в такт музыке', icon: Waves },
+  { id: 'waves', label: 'Волны', description: 'Морской прибой в сумерках', icon: Waves },
   { id: 'stars', label: 'Звёзды', description: 'Созвездия и звёздное поле', icon: Sparkles },
   { id: 'spectrum', label: 'Спектр', description: 'Световые полосы частот', icon: AudioLines },
   { id: 'orbits', label: 'Орбиты', description: 'Планета и световые кольца', icon: Orbit },
@@ -27,7 +27,8 @@ const EFFECTS = [
   { id: 'nebula', label: 'Туманность', description: 'Цветное облако и звёздная пыль', icon: Wind },
   { id: 'horizon', label: 'Неон', description: 'Линии горизонта и синтвейв', icon: Sunset },
   { id: 'kaleidoscope', label: 'Калейдоскоп', description: 'Вращение цветных граней', icon: Grid2X2 },
-  { id: 'rain', label: 'Дождь', description: 'Световые капли на стекле', icon: CloudRain },
+  { id: 'fireworks', label: 'Фейерверк', description: 'Мягкие цветные искры', icon: Sparkles },
+  { id: 'rain', label: 'Дождь', description: 'Огни города сквозь мокрое стекло', icon: CloudRain },
 ] as const;
 
 export interface SceneOptionsProps { appearance: Appearance; change(value: Appearance): void }

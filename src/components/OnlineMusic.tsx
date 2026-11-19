@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { ArrowUpRight, BookmarkPlus, Check, Cloud, CloudOff, Globe2, Link2, ListPlus, Play, Search } from 'lucide-react';
+import { ArrowUpRight, BookmarkPlus, Check, Cloud, CloudOff, Download, Globe2, Link2, ListPlus, Play, Search } from 'lucide-react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { findOnlineTracks, importOnlineTrack } from '../data/online';
 import { formatTime } from '../shared/media';
-import { ONLINE_SOURCES } from '../shared/online';
+import { commonsMp3Export, ONLINE_SOURCES } from '../shared/online';
 import type { OnlineFilter, OnlineTrack } from '../shared/online';
 import { Artwork } from './Artwork';
 
-export type OnlineAction = 'play' | 'queue' | 'save';
+export type OnlineAction = 'play' | 'queue' | 'save' | 'export';
 
 function SourceLink({ url, children }: { url: string; children: ReactNode }) {
   const [failed, setFailed] = useState(false);
@@ -31,11 +31,10 @@ function message(error: unknown) {
     ? error.message : 'Не удалось связаться с Openverse. Проверьте подключение и повторите попытку.';
 }
 
-export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
-  query: string; hasLocal: boolean; saved: ReadonlySet<string>; disabled: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
+export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabled, choose }: {
+  query: string; hasLocal: boolean; filter: OnlineFilter; setFilter(value: OnlineFilter): void; saved: ReadonlySet<string>; disabled: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
 }) {
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
-  const [filter, setFilter] = useState<OnlineFilter>('all');
   const [tracks, setTracks] = useState<OnlineTrack[] | undefined>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -58,15 +57,16 @@ export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
 
   return <section className="online-panel" aria-labelledby="online-title" aria-busy={busy}>
     <header><div className="online-mark"><Globe2 size={20} /></div><div>
-      <p className="overline">Открытые записи</p><h2 id="online-title">Поиск в интернете</h2>
-      <p>{hasLocal ? 'Хотите больше вариантов? Проверьте онлайн-каталоги.' : 'Не нашли в медиатеке? Проверьте онлайн-каталоги.'} Запрос отправляется в Openverse только по кнопке.</p>
+      <p className="overline">Слушать в Luma</p><h2 id="online-title">Найти в музыкальных сервисах</h2>
+      <p>{hasLocal ? 'Хотите больше вариантов? Нажмите «Искать онлайн», чтобы отправить запрос в Openverse.'
+        : 'Отправьте запрос в Openverse кнопкой «Искать онлайн» или клавишей Enter.'}</p>
     </div></header>
     {!connected && <p className="online-offline" role="status"><CloudOff size={17} /> Устройство вне сети. Онлайн-поиск пока недоступен.</p>}
     <form id="online-search-form" className="online-search-form" onSubmit={search}>
       <select value={filter} aria-label="Источник онлайн-поиска" onChange={(event) => {
         pending.current?.abort(); setBusy(false); setTracks(undefined); setError(''); setFilter(event.currentTarget.value as OnlineFilter);
       }}>
-        <option value="all">Все источники</option>
+        <option value="all">Все открытые каталоги</option>
         {Object.entries(ONLINE_SOURCES).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
       </select>
       <button className="button primary-button" type="submit" disabled={busy || !connected || query.trim().length < 2}><Search size={16} /> {busy ? 'Ищем…' : 'Искать онлайн'}</button>
@@ -84,10 +84,11 @@ export function OnlineSearch({ query, hasLocal, saved, disabled, choose }: {
           <button type="button" className="icon-button" disabled={disabled || saved.has(track.id)} aria-label={saved.has(track.id) ? `Сохранено: ${track.title}` : `Сохранить: ${track.title}`} title="Сохранить ссылку в медиатеке" onClick={() => choose(track, 'save')}>
             {saved.has(track.id) ? <Check size={17} /> : <BookmarkPlus size={17} />}
           </button>
+          {window.luma && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={`Скачать MP3: ${track.title}`} title="Сохранить копию MP3" onClick={() => choose(track, 'export')}><Download size={17} /></button>}
         </div>
       </li>)}
     </ul>}
-    <p className="online-footnote">Сохраняется ссылка, не аудиофайл. Для воспроизведения нужна сеть. Эквалайзер и реакция фона на звук работают с файлами.</p>
+    <p className="online-footnote">Закладка сохраняет ссылку. Загрузить файл можно отдельно, если источник разрешает. Для потоков нужна сеть. Эквалайзер и реакция фона на звук работают с файлами.</p>
   </section>;
 }
 

@@ -1,9 +1,13 @@
+import { formatCount } from './customization.js';
+import type { AudioFormat } from './audio-quality.js';
 import type { AppInfo } from './app-info.js';
 import type { DiagnosticsBridge } from './diagnostics.js';
 import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
 import { cleanTrackText, musicSearchKey, readTrackTag } from './russian.js';
-import type { OnlineCreditData } from './online.js';
-import type { VkCoverImage, VkPlaylist } from './vk.js';
+import type { Mp3ExportResult, OnlineCreditData, OnlineTrack } from './online.js';
+import type { Lyrics, LyricsQuery } from './lyrics.js';
+import type { VkCoverImage, VkPlaylist, VkViewBounds, VkWebsiteState } from './vk.js';
+import type { Fingerprint, MetadataCandidate } from './recognition.js';
 
 export const AUDIO_MIMES = {
   mp3: 'audio/mpeg',
@@ -27,6 +31,8 @@ export interface Track {
   album: string;
   duration: number;
   genres?: string[];
+  format?: AudioFormat;
+  embeddedLyrics?: string;
   audioUrl: string;
   artworkUrl?: string;
   backdropUrl?: string;
@@ -49,17 +55,37 @@ export interface DesktopBridge {
   openReleases(): Promise<void>;
   openOnlineLink(url: string): Promise<void>;
   getTracks(): Promise<Track[]>;
+  getAudioFormat(id: string): Promise<AudioFormat | null>;
   chooseTracks(): Promise<ImportResult>;
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
   openVkLink(url: string): Promise<void>;
+  vk: {
+    open(url: string, bounds: VkViewBounds): Promise<void>;
+    layout(bounds: VkViewBounds): Promise<void>;
+    command(action: 'back' | 'reload' | 'return'): Promise<void>;
+    close(): Promise<void>;
+    reset(): Promise<boolean>;
+    onState(callback: (state: VkWebsiteState) => void): () => void;
+  };
   getVkCover(playlist: VkPlaylist): Promise<VkCoverImage | null>;
+  lyrics: { lookup(query: LyricsQuery): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null> };
+  exportMp3(track: OnlineTrack, saveLyrics: boolean): Promise<Mp3ExportResult>;
+  recognition: {
+    search(query: string, locale: string): Promise<MetadataCandidate[]>;
+    hasAcoustid(): Promise<boolean>;
+    identify(fingerprint: Fingerprint): Promise<MetadataCandidate[]>;
+    openSource(url: string): Promise<void>;
+  };
   diagnostics: DiagnosticsBridge;
   window: {
     minimize(): void;
     toggleMaximize(): void;
     close(): void;
     isMaximized(): Promise<boolean>;
+    setFullscreen(fullscreen: boolean): Promise<void>;
+    setWidget(enabled: boolean): Promise<boolean>;
+    onFullscreen(callback: (fullscreen: boolean) => void): () => void;
     onMaximized(callback: (maximized: boolean) => void): () => void;
   };
 }
@@ -126,8 +152,9 @@ export function formatTime(seconds: number): string {
     : `${minutes}:${remainder}`;
 }
 
-export function trackCount(count: number): string {
+export function trackCount(count: number, full = true): string {
   const lastTwo = count % 100;
   const last = count % 10;
-  return `${count} ${lastTwo >= 11 && lastTwo <= 14 ? 'треков' : last === 1 ? 'трек' : last >= 2 && last <= 4 ? 'трека' : 'треков'}`;
+  const many = (!full && count >= 1000) || (lastTwo >= 11 && lastTwo <= 14);
+  return `${formatCount(count, full)} ${many ? 'треков' : last === 1 ? 'трек' : last >= 2 && last <= 4 ? 'трека' : 'треков'}`;
 }

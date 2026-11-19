@@ -2,16 +2,19 @@ import { useMemo, useState, useSyncExternalStore } from 'react';
 import { Cloud, CloudOff, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
-import { musicGroups, tracksInGroup } from '../shared/mix';
+import { formatCount } from '../shared/customization';
+import { LyricsPanel } from './LyricsPanel';
+import { homeRecommendations, musicGroups, tracksInGroup } from '../shared/mix';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
-import type { OnlineTrack } from '../shared/online';
+import type { OnlineFilter, OnlineTrack } from '../shared/online';
 import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
 import type { OnlineAction } from './OnlineMusic';
 import type { Track } from '../shared/media';
 import type { Appearance, LibraryLayout } from '../shared/customization';
 import { musicSearchKey } from '../shared/russian';
 import { Artwork } from './Artwork';
+import { FavoriteButton } from './FavoriteButton';
 import { Signal } from './QueuePanel';
 import { SceneBackground } from './SceneBackground';
 import { VinylRecord } from './VinylRecord';
@@ -58,16 +61,15 @@ function TrackCard({ track, active, playing, row, play, add, editCover, editDeta
   );
 }
 
-function FavoriteButton({ track, selected, toggle }: { track: Track; selected: boolean; toggle(id: string): void }) {
-  return <button type="button" className="icon-button favorite-toggle" aria-pressed={selected} onClick={() => toggle(track.id)}
-    aria-label={`${selected ? 'Убрать из избранного' : 'В избранное'}: ${track.title}`} title={selected ? 'Убрать из избранного' : 'В избранное'}>
-    <Heart size={16} fill={selected ? 'currentColor' : 'none'} />
-  </button>;
-}
-
 interface PlayerPageProps {
   track: Track | null;
   tracks: Track[];
+  recent: Track[];
+  favoriteIds: ReadonlySet<string>;
+  connected: boolean;
+  elapsed: number;
+  autoLyrics: boolean;
+  openMixes(): void;
   tint: string;
   appearance: Appearance;
   favorite: boolean;
@@ -98,6 +100,12 @@ export function PlayerPage(props: PlayerPageProps) {
   const artwork = fallback ? DEFAULT_ARTWORK_URL : source;
   const showPicture = !!track && (hero === 'cover' || hero === 'blur');
   const centered = hero === 'center';
+  const picks = useMemo(() => homeRecommendations(tracks, props.recent, props.favoriteIds, !props.connected), [tracks, props.recent, props.favoriteIds, props.connected]);
+  const homeSections = [
+    { label: 'Похожее на прослушанное', items: picks.related, icon: Headphones },
+    { label: 'Открытия в медиатеке', items: picks.discoveries, icon: Sparkles },
+    { label: 'Недавно слушали', items: picks.recent, icon: History },
+  ];
   const featured = (tracks.length > 1 ? tracks.filter(({ id }) => id !== track?.id) : tracks).slice(0, 4);
   return (
     <div className="page player-page">
@@ -114,7 +122,7 @@ export function PlayerPage(props: PlayerPageProps) {
           </button>
         </div>
       </header>
-      <section aria-label="Текущий трек" className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
+      <section aria-label="Текущий трек" data-effect={effect} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
         <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
         {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
           onError={() => { if (!fallback) setFailedPicture(source); }} />}
@@ -138,8 +146,21 @@ export function PlayerPage(props: PlayerPageProps) {
             </>}
           </div>
         </div>
-        {track && <span className="hero-index" title="Позиция в очереди"><span>{String(props.position).padStart(2, '0')}</span><b>/</b>{String(props.count).padStart(2, '0')}</span>}
+        {track && <span className="hero-index" title="Позиция в очереди"><span>{formatCount(props.position, appearance.fullNumbers).padStart(2, '0')}</span><b>/</b>{formatCount(props.count, appearance.fullNumbers).padStart(2, '0')}</span>}
       </section>
+      {track && !track.demo && <LyricsPanel key={track.id} track={track} elapsed={props.elapsed} playing={playing} auto={props.autoLyrics} connected={props.connected} />}
+      {homeSections.some(({ items }) => items.length) && <section className="home-personal" aria-labelledby="home-personal-title">
+        <header className="section-header"><div><p className="overline">Только на этом устройстве</p><h2 id="home-personal-title">Для вас в Luma</h2></div>
+          <button className="text-button" type="button" onClick={props.openMixes}>Миксы Luma <ArrowRight size={16} /></button></header>
+        <div className="home-personal-grid">{homeSections.map(({ label, items, icon: Icon }, index) => items.length > 0 && <section key={label} className={`home-pick home-pick-${index}`} aria-label={label}>
+          <div className="home-pick-title"><Icon size={17} /><h3>{label}</h3></div>
+          <ul>{items.map((item) => <li key={item.id}>
+            <button type="button" className="home-pick-track" aria-label={`Слушать: ${item.title}`} onClick={() => props.play(item.id)}>
+              <Artwork track={item} /><span><strong>{item.title}</strong><small>{item.artist}</small></span><Play size={13} />
+            </button>
+          </li>)}</ul>
+        </section>)}</div>
+      </section>}
       {featured.length > 0 && <section aria-labelledby="featured-title" className="featured">
         <header className="section-header">
           <div><p className="overline">Коллекция</p><h2 id="featured-title">В медиатеке</h2></div>
@@ -160,6 +181,8 @@ interface LibraryPageProps {
   showDemos: boolean;
   busy: boolean;
   mode: 'library' | 'search' | 'favorites' | 'recent';
+  initialScope?: 'all' | 'offline';
+  fullNumbers: boolean;
   favorites: ReadonlySet<string>;
   toggleFavorite(id: string): void;
   goToLibrary(): void;
@@ -188,7 +211,8 @@ export function LibraryPage(props: LibraryPageProps) {
   const isRecent = props.mode === 'recent';
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
   const [search, setSearch] = useState('');
-  const [scopeId, setScope] = useState<'all' | 'offline' | 'online'>('all');
+  const [catalogSource, setCatalogSource] = useState<OnlineFilter>('all');
+  const [scopeId, setScope] = useState<'all' | 'offline' | 'online'>(props.initialScope ?? 'all');
   const files = useMemo(() => props.tracks.filter(({ online }) => !online), [props.tracks]);
   const online = useMemo(() => props.tracks.filter(({ online }) => online), [props.tracks]);
   const saved = useMemo(() => new Set(online.map(({ id }) => id)), [online]);
@@ -210,9 +234,9 @@ export function LibraryPage(props: LibraryPageProps) {
       </header>
       {isRecent && <p className="recent-intro">Локальные и онлайн-треки, которые играли в Luma. История хранится на устройстве.</p>}
       {isLibrary && <div className="collection-tabs" role="group" aria-label="Разделы медиатеки">
-        <button type="button" aria-pressed={scopeId === 'all'} onClick={() => { setScope('all'); setGroupKind(undefined); setGroupId(''); }}>Все треки <small>{props.tracks.length}</small></button>
-        <button type="button" aria-pressed={scopeId === 'offline'} onClick={() => setScope('offline')}>Без сети <small>{files.length}</small></button>
-        <button type="button" aria-pressed={scopeId === 'online'} onClick={() => setScope('online')}>Из интернета <small>{online.length}</small></button>
+        <button type="button" aria-pressed={scopeId === 'all'} onClick={() => { setScope('all'); setGroupKind(undefined); setGroupId(''); }}>Все треки <small>{formatCount(props.tracks.length, props.fullNumbers)}</small></button>
+        <button type="button" aria-pressed={scopeId === 'offline'} onClick={() => setScope('offline')}>Без сети <small>{formatCount(files.length, props.fullNumbers)}</small></button>
+        <button type="button" aria-pressed={scopeId === 'online'} onClick={() => setScope('online')}>Из интернета <small>{formatCount(online.length, props.fullNumbers)}</small></button>
       </div>}
       {isLibrary && scopeId === 'all' && !term && <div className="collection-shortcuts" aria-label="Каталоги медиатеки">
         <button type="button" onClick={props.openMixes}><span><Sparkles size={18} />Микс Luma</span><small>Подборка ваших треков</small></button>
@@ -225,7 +249,7 @@ export function LibraryPage(props: LibraryPageProps) {
       {isLibrary && scopeId === 'all' && groupKind && <label className="collection-facet">{groupKind === 'artist' ? 'Исполнитель' : 'Альбом'}
         <select aria-label={groupKind === 'artist' ? 'Исполнитель' : 'Альбом'} value={groupId} onChange={(event) => setGroupId(event.currentTarget.value)}>
           <option value="">{groupKind === 'artist' ? 'Все исполнители' : 'Все альбомы'}</option>
-          {groups.map(({ id, label, count }) => <option key={id} value={id}>{label} · {count}</option>)}
+          {groups.map(({ id, label, count }) => <option key={id} value={id}>{label} · {formatCount(count, props.fullNumbers)}</option>)}
         </select>
       </label>}
       {isLibrary && scopeId !== 'offline' && !connected && <p className="online-offline" role="status"><CloudOff size={17} /> Устройство вне сети. Файлы доступны во вкладке «Без сети».</p>}
@@ -250,7 +274,7 @@ export function LibraryPage(props: LibraryPageProps) {
       </div>
       {isSearch && <div className="search-scope"><span>Сначала в медиатеке</span><button className="text-button" type="button" onClick={props.openVk}><Radio size={14} /> Перейти к VK</button></div>}
       <div className="library-caption">
-        <div><Disc3 size={16} />{trackCount(results.length)}</div>
+        <div><Disc3 size={16} />{trackCount(results.length, props.fullNumbers)}</div>
         <div className="library-actions">
           <button className="text-button library-play-all" onClick={() => props.playAll(results)} type="button" aria-label="Воспроизвести все" title="Воспроизвести все" disabled={!results.length}>
             <Play size={14} fill="currentColor" /> <span>Воспроизвести все</span>
@@ -271,7 +295,7 @@ export function LibraryPage(props: LibraryPageProps) {
           : scopeId === 'online' ? <button type="button" className="button outline-button" onClick={props.openSearch}>Открыть поиск <Search size={16} /></button>
           : <button type="button" className="button outline-button" onClick={props.addMusic} disabled={props.busy}><Plus size={17} /> Выбрать файлы</button>)}
       </div>}
-      {isSearch && search.trim().length >= 2 && <OnlineSearch key={search.trim()} query={search.trim()} hasLocal={results.length > 0} saved={saved} disabled={props.busy} choose={props.chooseOnline} />}
+      {isSearch && search.trim().length >= 2 && <OnlineSearch key={search.trim()} query={search.trim()} hasLocal={results.length > 0} filter={catalogSource} setFilter={setCatalogSource} saved={saved} disabled={props.busy} choose={props.chooseOnline} />}
     </div>
   );
 }

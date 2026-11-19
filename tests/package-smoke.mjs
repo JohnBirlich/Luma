@@ -1,7 +1,7 @@
 // Run with Electron so fs can read the packaged application manifest inside the ASAR.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app } from 'electron';
@@ -13,6 +13,12 @@ try {
   const directory = join(root, 'release');
   const archive = join(directory, 'win-unpacked', 'resources', 'app.asar');
   assert.equal(JSON.parse(await readFile(join(archive, 'package.json'), 'utf8')).version, version, 'packaged manifest version');
+  const assetDir = join(archive, 'dist', 'assets');
+  const assets = await readdir(assetDir);
+  for (const expected of [/^fingerprint\.worker-.*\.js$/, /^rusty_chromaprint_wasm_bg-.*\.wasm$/, /^ocean-.*\.webm$/]) {
+    const name = assets.find((file) => expected.test(file));
+    assert.ok(name && (await stat(join(assetDir, name))).size > 0, `packaged asset ${expected}`);
+  }
   const config = await readFile(join(root, 'electron-builder.yml'), 'utf8');
   assert.ok(config.split(/\r?\n/).includes(`appId: ${APP_USER_MODEL_ID}`), 'runtime and installer app IDs agree');
   assert.ok(config.split(/\r?\n/).includes(`productName: ${APP_NAME}`), 'runtime and installer product names agree');

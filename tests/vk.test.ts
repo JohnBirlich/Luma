@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  editorialPlaylist, isVkExternalUrl, isVkPlaylist, isVkWidgetFrameUrl, parseVkPlaylist, parseVkShareLink, vkPlaylistUrl, vkShelfUrl, vkWidgetUrl,
+  editorialPlaylist, isVkExternalUrl, isVkPlaylist, isVkMusicDestination, isVkWebsiteUrl, isVkWidgetFrameUrl, parseVkPlaylist, parseVkShareLink, vkPlaylistUrl, vkShelfUrl, vkWidgetUrl,
   VK_MUSIC_URL, VK_WIDGET_DOCS_URL,
 } from '../src/shared/vk.js';
 
@@ -34,9 +34,12 @@ test('VK navigation allows only the canonical frame and narrow external links', 
   assert.equal(isVkWidgetFrameUrl(`${frame}&url=https://example.com`), false);
   assert.equal(isVkWidgetFrameUrl(frame.replace('vk.ru', 'vk.ru:9999')), false);
   assert.equal(isVkWidgetFrameUrl(frame.replace('vk.ru', 'user@vk.ru')), false);
-  assert.equal(isVkExternalUrl(VK_MUSIC_URL), true);
+  assert.equal(isVkExternalUrl(VK_MUSIC_URL), false);
+  assert.equal(isVkMusicDestination(VK_MUSIC_URL), true);
   assert.equal(isVkExternalUrl(VK_WIDGET_DOCS_URL), true);
-  assert.equal(isVkExternalUrl(vkPlaylistUrl(playlist)), true);
+  assert.equal(isVkExternalUrl(vkPlaylistUrl(playlist)), false);
+  assert.equal(isVkMusicDestination(vkPlaylistUrl(playlist)), true);
+  assert.equal(isVkMusicDestination(`${VK_MUSIC_URL}?q=джаз`), false);
   assert.equal(isVkExternalUrl(`${vkPlaylistUrl(playlist)}?next=https://example.com`), false);
   assert.equal(isVkExternalUrl(`${vkPlaylistUrl(playlist)}\n`), false);
   assert.equal(isVkExternalUrl('https://vk.ru/away.php?to=https://example.com'), false);
@@ -52,11 +55,35 @@ test('VK share links are canonicalized and remain bookmarks until a widget hash 
   assert.equal(isVkPlaylist(data), false);
   assert.equal(parseVkPlaylist(url), null);
   assert.equal(vkShelfUrl({ ...data!, name: 'Вечер' }), 'https://vk.ru/music/playlist/-14_5_Shared-Key');
-  assert.equal(isVkExternalUrl(vkShelfUrl({ ...data!, name: 'Вечер' })), true);
+  assert.equal(isVkMusicDestination(vkShelfUrl({ ...data!, name: 'Вечер' })), true);
   assert.equal(isVkWidgetFrameUrl(VK_MUSIC_URL), false);
   for (const url of ['http://vk.ru/music/playlist/-14_5', 'https://vk.ru.example.test/music/playlist/-14_5',
     'https://someone@vk.ru/music/playlist/-14_5', 'https://vk.ru:8080/music/playlist/-14_5', 'file:///music/playlist/-14_5',
     'https://vk.ru/music/playlist/-14_5_abc%2f', 'https://vk.ru/music/playlist/-14_0']) {
     assert.equal(parseVkShareLink(url), undefined, url);
+  }
+});
+
+test('VK import reads copied overlay links without turning a share key into a widget credential', () => {
+  const expected = { ownerId: -42, playlistId: 7, shareKey: 'Shared-42_abc' };
+  for (const url of ['https://vk.ru/music?z=audio_playlist-42_7/Shared-42_abc',
+    'https://vk.com/audios-42?z=audio_playlist-42_7%2FShared-42_abc', 'https://vk.ru/audio?z=audio_playlist-42_7_Shared-42_abc']) {
+    assert.deepEqual(parseVkShareLink(url), expected);
+    assert.equal(parseVkPlaylist(url), null);
+  }
+  assert.equal(parseVkShareLink('https://vk.ru/audio?z=audio_playlist-42_7&z=audio_playlist-42_8'), undefined);
+  assert.equal(parseVkShareLink('https://vk.ru/away.php?z=audio_playlist-42_7'), undefined);
+  const embedded = `<iframe src="https://vk.com/widget_playlist.php?oid=-147845620&amp;pid=5&amp;hash=c09c1c34cdf7190efb" onload="alert(1)"></iframe>`;
+  assert.deepEqual(parseVkPlaylist(embedded), playlist);
+  assert.equal(parseVkPlaylist(embedded.replace('vk.com', 'vk.com.attacker.test')), null);
+});
+
+test('first-party VK or VK ID can navigate; unrelated origins and redirects cannot', () => {
+  for (const url of ['https://vk.ru/?to=abc', 'https://id.vk.ru/auth', 'https://login.vk.com/?act=connect', 'https://vk.com/challenge.html']) {
+    assert.equal(isVkWebsiteUrl(url), true);
+  }
+  for (const url of ['https://vk.ru.attacker.test/', 'https://vk.ru:8888/', 'https://e@vk.ru/', 'http://vk.ru/',
+    'luma://app/', 'https://vk.ru/away.php?to=https://example.test', 'javascript:void(0)', 'about:blank']) {
+    assert.equal(isVkWebsiteUrl(url), false);
   }
 });

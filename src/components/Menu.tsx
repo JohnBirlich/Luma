@@ -31,6 +31,7 @@ export function MenuGroup({ label, children }: { label: string; children: ReactN
 
 interface MenuPageProps {
   localCount: number;
+  fullNumbers: boolean;
   ready: boolean;
   eqEnabled: boolean;
   openSettings(): void;
@@ -56,7 +57,7 @@ export function MenuPage(props: MenuPageProps) {
         {about ? <About /> : <>
           <section className="menu-profile" aria-label="Профиль Luma">
             <div className="menu-profile-logo"><AudioLines size={27} strokeWidth={1.85} /></div>
-            <div><h2>Luma Player</h2><p>{trackCount(props.localCount)} с устройства</p></div>
+            <div><h2>Luma Player</h2><p>{trackCount(props.localCount, props.fullNumbers)} с устройства</p></div>
             <span className="menu-profile-status"><i /> Локальный профиль</span>
           </section>
           <MenuGroup label="Коллекция">
@@ -65,7 +66,7 @@ export function MenuPage(props: MenuPageProps) {
             <MenuItem icon={Sparkles} title="Миксы" detail="Подборки из медиатеки, избранного и истории" select={props.openMixes} />
             <MenuItem icon={History} title="Недавно слушали" detail="История воспроизведения на этом устройстве" select={props.openRecent} />
             <MenuItem icon={FolderOpen} title="Импортировать треки" detail="Добавьте аудиофайлы или перетащите их в окно" select={props.addMusic} disabled={!props.ready} />
-            <MenuItem icon={Radio} title="VK Музыка" detail="Плейлисты, ссылки и официальный виджет" select={props.openVk} />
+            <MenuItem icon={Radio} title="VK Музыка" detail="Официальный сайт в Luma, закладки и публичный виджет" select={props.openVk} />
           </MenuGroup>
           <MenuGroup label="Плеер">
             <MenuItem icon={Settings2} title="Настройки" detail="Внешний вид, медиатека и воспроизведение" select={props.openSettings} />

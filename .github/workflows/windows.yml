@@ -9,6 +9,10 @@ on:
         description: 'Also check playback from the public music catalogs (requires network access)'
         type: boolean
         default: false
+      live_services:
+        description: 'Check live Apple Music, LRCLIB and first-party VK navigation (no login)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -33,6 +37,7 @@ jobs:
       - run: npm run test:desktop
         env:
           LUMA_LIVE_CATALOG: ${{ inputs.live_catalog && '1' || '0' }}
+          LUMA_LIVE_SERVICES: ${{ inputs.live_services && '1' || '0' }}
       - run: npm run package:win
       - run: npm run test:package
       - uses: actions/upload-artifact@v4

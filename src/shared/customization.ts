@@ -12,10 +12,16 @@ export const ACCENTS = [
 ] as const;
 
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
-export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain'] as const;
+export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks'] as const;
 export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
-export const START_PAGES = ['player', 'library', 'vk'] as const;
+export const START_PAGES = ['player', 'library', 'local', 'search', 'vk'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
+export const CROSSFADE_TIMES = [0, 2, 4, 6, 8] as const;
+export const DATA_LANGUAGES = { system: 'Системный', 'ru-RU': 'Русский', 'en-US': 'English', 'de-DE': 'Deutsch' } as const;
+export const WIDGET_BACKGROUNDS = { blur: 'Размытый', cover: 'Цвет обложки', white: 'Белый', dark: 'Тёмный', black: 'Чёрный' } as const;
+export type CrossfadeTime = typeof CROSSFADE_TIMES[number];
+export type DataLanguage = keyof typeof DATA_LANGUAGES;
+export type WidgetBackground = keyof typeof WIDGET_BACKGROUNDS;
 export type ThemeName = keyof typeof THEMES;
 export type HeroStyle = typeof HERO_STYLES[number];
 export type BackgroundEffect = typeof BACKGROUND_EFFECTS[number];
@@ -37,6 +43,13 @@ export interface Appearance {
   compactSidebar: boolean;
   coverColors: boolean;
   motion: boolean;
+  tabMotion: boolean;
+  fullNumbers: boolean;
+  classicDock: boolean;
+  dataLanguage: DataLanguage;
+  autoTheme: boolean;
+  dayTheme: ThemeName;
+  widgetBackground: WidgetBackground;
   libraryLayout: LibraryLayout;
 }
 
@@ -44,13 +57,27 @@ export interface PlaybackPreferences {
   startPage: StartPage;
   seekStep: SeekStep;
   autoNext: boolean;
+  autoPlay: boolean;
+  crossfade: CrossfadeTime;
+  rememberQueue: boolean;
+  rememberRepeat: boolean;
+  rememberShuffle: boolean;
   rememberRecent: boolean;
   publishTrack: boolean;
   successNotices: boolean;
 }
 
-export const defaultAppearance: Appearance = { theme: 'amber', accent: null, hero: 'cover', effect: 'aurora', effectStrength: 0.75, effectTempo: 'normal', audioReactive: true, nativeFullscreen: true, fullscreenQueue: true, compactSidebar: false, coverColors: true, motion: true, libraryLayout: 'list' };
-export const defaultPlayback: PlaybackPreferences = { startPage: 'player', seekStep: 5, autoNext: true, rememberRecent: true, publishTrack: true, successNotices: true };
+export const defaultAppearance: Appearance = {
+  theme: 'amber', accent: null, hero: 'cover', effect: 'aurora', effectStrength: 0.75, effectTempo: 'normal',
+  audioReactive: true, nativeFullscreen: true, fullscreenQueue: true, compactSidebar: false, coverColors: true, motion: true,
+  tabMotion: true, fullNumbers: false, classicDock: false, dataLanguage: 'system', autoTheme: false, dayTheme: 'ocean',
+  widgetBackground: 'blur', libraryLayout: 'list',
+};
+export const defaultPlayback: PlaybackPreferences = {
+  startPage: 'player', seekStep: 5, autoNext: true, autoPlay: false, crossfade: 0,
+  rememberQueue: true, rememberRepeat: true, rememberShuffle: true,
+  rememberRecent: true, publishTrack: true, successNotices: true,
+};
 export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 
 export function readAppearance(value: unknown): Appearance {
@@ -69,6 +96,13 @@ export function readAppearance(value: unknown): Appearance {
     compactSidebar: data?.compactSidebar === true,
     coverColors: data?.coverColors !== false,
     motion: data?.motion !== false,
+    tabMotion: data?.tabMotion !== false,
+    fullNumbers: data?.fullNumbers === true,
+    classicDock: data?.classicDock === true,
+    dataLanguage: typeof data?.dataLanguage === 'string' && Object.hasOwn(DATA_LANGUAGES, data.dataLanguage) ? data.dataLanguage : 'system',
+    autoTheme: data?.autoTheme === true,
+    dayTheme: typeof data?.dayTheme === 'string' && Object.hasOwn(THEMES, data.dayTheme) ? data.dayTheme : defaultAppearance.dayTheme,
+    widgetBackground: typeof data?.widgetBackground === 'string' && Object.hasOwn(WIDGET_BACKGROUNDS, data.widgetBackground) ? data.widgetBackground : 'blur',
     libraryLayout: data?.libraryLayout === 'grid' ? 'grid' : 'list',
   };
 }
@@ -79,10 +113,25 @@ export function readPlayback(value: unknown): PlaybackPreferences {
     startPage: data?.startPage && START_PAGES.includes(data.startPage) ? data.startPage : defaultPlayback.startPage,
     seekStep: data?.seekStep && SEEK_STEPS.includes(data.seekStep) ? data.seekStep : defaultPlayback.seekStep,
     autoNext: data?.autoNext !== false,
+    autoPlay: data?.autoPlay === true,
+    crossfade: data?.crossfade && CROSSFADE_TIMES.includes(data.crossfade) ? data.crossfade : 0,
+    rememberQueue: data?.rememberQueue !== false,
+    rememberRepeat: data?.rememberRepeat !== false,
+    rememberShuffle: data?.rememberShuffle !== false,
     rememberRecent: data?.rememberRecent !== false,
     publishTrack: data?.publishTrack !== false,
     successNotices: data?.successNotices !== false,
   };
+}
+
+export function scheduledTheme({ theme, autoTheme, dayTheme }: Appearance, hour: number): ThemeName {
+  return autoTheme && hour >= 8 && hour < 20 ? dayTheme : theme;
+}
+
+export function formatCount(count: number, full = false) {
+  if (full || count < 1000) return String(count);
+  const [scale, suffix] = count >= 1e6 ? [1e6, 'млн'] as const : [1000, 'к'] as const;
+  return `${Math.floor(count / (scale / 10)) / 10}${suffix}`;
 }
 
 function rgb(hex: string): number[] {

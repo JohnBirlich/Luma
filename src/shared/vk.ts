@@ -15,6 +15,9 @@ export interface VkPlaylist {
   hash: string;
 }
 
+export interface VkViewBounds { x: number; y: number; width: number; height: number }
+export interface VkWebsiteState { host: string; loading: boolean; failed: boolean; canGoBack: boolean }
+
 export interface VkCoverImage {
   mime: CoverMime;
   bytes: Uint8Array;
@@ -68,8 +71,12 @@ export function parseVkPlaylist(input: string): VkPlaylist | null {
   if (!text || text.length > 8192) return null;
   try { return readWidgetUrl(new URL(text)); } catch { /* The official generator returns a snippet. */ }
   const match = /\bVK\.Widgets\.Playlist\s*\(\s*(['"])[A-Za-z0-9_-]{1,128}\1\s*,\s*(-?[1-9]\d{0,14})\s*,\s*([1-9]\d{0,14})\s*,\s*(['"])([A-Za-z0-9_-]{1,128})\4\s*[,)]/.exec(text);
-  if (!match) return null;
-  return { ownerId: Number(match[2]), playlistId: Number(match[3]), hash: match[5] };
+  if (match) return { ownerId: Number(match[2]), playlistId: Number(match[3]), hash: match[5] };
+  const frame = /<iframe\b[^<>]*?\ssrc\s*=\s*(['"])(https:\/\/[^'"<>]+)\1/i.exec(text);
+  if (frame) {
+    try { return readWidgetUrl(new URL(frame[2].replaceAll('&amp;', '&'))); } catch { /* Invalid iframe URL. */ }
+  }
+  return null;
 }
 
 /** Only the canonical official widget URL may navigate an iframe in Electron. */
@@ -80,13 +87,16 @@ export function isVkWidgetFrameUrl(value: string): boolean {
   } catch { return false; }
 }
 
+const overlayPattern = /^audio_playlist(-?[1-9]\d{0,14})_([1-9]\d{0,14})(?:[\/_]([A-Za-z0-9_-]{1,128}))?\/?$/;
 const sharePattern = /^\/music\/playlist\/(-?[1-9]\d{0,14})_([1-9]\d{0,14})(?:_([A-Za-z0-9_-]{1,128}))?\/?$/;
 
 export function parseVkShareLink(value: string): Omit<VkShelfItem, 'name' | 'hash'> | undefined {
   try {
     const url = new URL(value.trim());
     if (!['https://vk.ru', 'https://vk.com'].includes(url.origin) || url.username || url.password) return;
-    const match = sharePattern.exec(url.pathname);
+    const overlay = url.searchParams.getAll('z');
+    const match = sharePattern.exec(url.pathname)
+      ?? (overlay.length === 1 && /^\/(?:music|audio|audios-?\d+)?\/?$/.test(url.pathname) ? overlayPattern.exec(overlay[0]) : null);
     if (match) return { ownerId: Number(match[1]), playlistId: Number(match[2]), shareKey: match[3] };
   } catch { /* Not an official playlist URL. */ }
 }
@@ -96,9 +106,24 @@ export function vkShelfUrl(item: VkShelfItem) {
 }
 
 /** The desktop bridge opens only canonical VK destinations selected by the user. */
-export function isVkExternalUrl(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  if (value === VK_MUSIC_URL || value === VK_WIDGET_DOCS_URL) return true;
+export function isVkMusicDestination(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 8192) return false;
+  if (value === VK_MUSIC_URL) return true;
   const item = parseVkShareLink(value);
   return !!item && value === vkShelfUrl({ ...item, name: '' });
+}
+
+export function isVkExternalUrl(value: unknown): value is string {
+  return value === VK_WIDGET_DOCS_URL;
+}
+
+// The account surface is first-party VK web content, not a general browser or an OAuth client.
+const vkWebHosts = new Set(['vk.ru', 'vk.com', 'm.vk.ru', 'm.vk.com', 'music.vk.com', 'music.vk.ru',
+  'id.vk.ru', 'id.vk.com', 'login.vk.ru', 'login.vk.com', 'oauth.vk.ru', 'oauth.vk.com']);
+export function isVkWebsiteUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port && vkWebHosts.has(url.hostname)
+      && !/^\/away(?:\.php|\/|$)/i.test(url.pathname);
+  } catch { return false; }
 }

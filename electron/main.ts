@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,12 +9,18 @@ import { desktopAppInfo } from './app-info.js';
 import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js';
 import { DesktopDiagnostics } from './diagnostics.js';
 import { isOnlineExternalUrl } from '../src/shared/online.js';
+import { createLyricsService } from '../src/shared/lyrics-service.js';
+import { createOnlineExporter } from './online-export.js';
+import { MAIN_MINIMUM, widgetController } from './desktop-widget.js';
+import { createMetadataService, validAcoustidClient } from '../src/shared/metadata-service.js';
+import { isMetadataPage } from '../src/shared/recognition.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
-import { isVkExternalUrl, isVkWidgetFrameUrl, VK_MUSIC_URL } from '../src/shared/vk.js';
+import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { createProtocolHandler } from './protocol.js';
 import { fetchVkCover } from './vk-artwork.js';
+import { VkWebsite } from './vk-window.js';
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'luma',
@@ -28,6 +34,8 @@ const devUrl = getDevUrl();
 app.setPath('userData', join(app.getPath('appData'), devUrl ? 'Luma Player Dev' : 'Luma Player'));
 let window: BrowserWindow | null = null;
 let journal: DesktopDiagnostics | undefined;
+let changeWidget: ((enabled: boolean) => boolean) | undefined;
+let changeFullscreen: ((fullscreen: boolean) => void) | undefined;
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -61,6 +69,37 @@ function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
 
 function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo) {
   ipcMain.handle('app:info', (event) => { appWindow(event); return info; });
+  const vk = new VkWebsite(logs);
+  ipcMain.handle('vk:open-website', (event, url: unknown, bounds: unknown) => vk.open(appWindow(event), url, bounds));
+  ipcMain.handle('vk:layout', (event, bounds: unknown) => vk.layout(appWindow(event), bounds));
+  ipcMain.handle('vk:command', (event, action: unknown) => vk.command(appWindow(event), action));
+  ipcMain.handle('vk:close', (event) => { appWindow(event); vk.close(); });
+  ipcMain.handle('vk:reset', (event) => vk.reset(appWindow(event)));
+  const lookupLyrics = createLyricsService(net.fetch, true);
+  const exportMp3 = createOnlineExporter(lookupLyrics);
+  ipcMain.handle('lyrics:local', (event, id: unknown) => { appWindow(event); return library.lyrics(id); });
+  ipcMain.handle('lyrics:lookup', (event, query: unknown) => {
+    appWindow(event);
+    return lookupLyrics(query, AbortSignal.timeout(9000));
+  });
+  ipcMain.handle('online:export-mp3', (event, track: unknown, withLyrics: unknown) => exportMp3(appWindow(event), track, withLyrics));
+  const metadata = createMetadataService(net.fetch);
+  const acoustidClient = process.env.LUMA_ACOUSTID_CLIENT;
+  ipcMain.handle('metadata:search', (event, query: unknown, locale: unknown) => {
+    appWindow(event);
+    return metadata.search(query, locale, AbortSignal.timeout(21_000));
+  });
+  ipcMain.handle('metadata:has-acoustid', (event) => { appWindow(event); return validAcoustidClient(acoustidClient); });
+  ipcMain.handle('metadata:identify', (event, fingerprint: unknown) => {
+    appWindow(event);
+    if (!validAcoustidClient(acoustidClient)) throw new Error('AcoustID is not configured');
+    return metadata.identify(fingerprint, acoustidClient, AbortSignal.timeout(9000));
+  });
+  ipcMain.handle('metadata:open-link', (event, url: unknown) => {
+    appWindow(event);
+    if (!isMetadataPage(url)) throw new Error('Unsupported recording link');
+    return shell.openExternal(url);
+  });
   ipcMain.handle('online:open-link', (event, url: unknown) => {
     appWindow(event);
     if (!isOnlineExternalUrl(url)) throw new Error('Unsupported catalog link');
@@ -87,6 +126,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     return true;
   });
   let pendingCovers = 0;
+  ipcMain.handle('library:audio-format', (event, id: unknown) => { appWindow(event); return library.audioFormat(id); });
   ipcMain.handle('library:list', (event) => { appWindow(event); return library.list(); });
   ipcMain.handle('library:choose', async (event) => {
     const owner = appWindow(event);
@@ -107,16 +147,10 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     if (typeof id !== 'string') throw new TypeError('Expected track ID');
     return library.remove(id);
   });
-  ipcMain.handle('vk:open-link', async (event, url: unknown) => {
+  ipcMain.handle('vk:open-link', (event, url: unknown) => {
     appWindow(event);
     if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
-    try {
-      await shell.openExternal(url);
-      if (url === VK_MUSIC_URL) logs.main('vk.browserOpened');
-    } catch {
-      if (url === VK_MUSIC_URL) logs.main('vk.browserFailed');
-      throw new Error('VK browser launch failed');
-    }
+    return shell.openExternal(url);
   });
   ipcMain.handle('vk:cover', async (event, playlist: unknown) => {
     appWindow(event);
@@ -137,19 +171,31 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     else owner.maximize();
   });
   ipcMain.handle('window:is-maximized', (event) => appWindow(event).isMaximized());
+  ipcMain.handle('window:set-fullscreen', (event, fullscreen: unknown) => {
+    appWindow(event);
+    if (typeof fullscreen !== 'boolean') throw new TypeError('Expected a fullscreen state');
+    changeFullscreen?.(fullscreen);
+  });
+  ipcMain.handle('window:widget', (event, enabled: unknown) => {
+    appWindow(event);
+    if (typeof enabled !== 'boolean') throw new TypeError('Expected widget state');
+    return changeWidget?.(enabled) ?? false;
+  });
   ipcMain.handle('window:close', (event) => appWindow(event).close());
 }
 
 async function createWindow() {
   const owner = new BrowserWindow({
-    title: APP_NAME, width: 1440, height: 900, minWidth: 620, minHeight: 520,
+    title: APP_NAME, width: 1440, height: 900, minWidth: MAIN_MINIMUM[0], minHeight: MAIN_MINIMUM[1],
     frame: false, show: false, backgroundColor: '#101116',
     webPreferences: {
       preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)),
       nodeIntegration: false, nodeIntegrationInSubFrames: false, contextIsolation: true, sandbox: true,
+      autoplayPolicy: 'no-user-gesture-required', // App-controlled local autoplay, off by default.
     },
   });
   window = owner;
+  changeWidget = widgetController(owner);
   if (process.platform === 'win32' && app.isPackaged) {
     // Windows taskbar and native media clients can resolve the AppUserModelID to this name.
     // Keep the app origin unchanged so existing IndexedDB and localStorage survive updates.
@@ -174,7 +220,33 @@ async function createWindow() {
   owner.webContents.on('render-process-gone', (_event, { reason, exitCode }) => {
     if (reason !== 'clean-exit') journal?.main('desktop.rendererExited', { code: exitCode });
   });
-  owner.on('closed', () => { if (window === owner) window = null; });
+  // Use native window fullscreen, not Chromium's HTML fullscreen inside a frameless window.
+  // On macOS a second request can arrive before the first Space transition completes.
+  let goal = false;
+  let transitioning = false;
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  function applyFullscreen() {
+    if (owner.isDestroyed() || transitioning || owner.isFullScreen() === goal) return;
+    if (process.platform === 'darwin') {
+      transitioning = true;
+      settle = setTimeout(() => { transitioning = false; }, 3000);
+    }
+    owner.setFullScreen(goal);
+  }
+  changeFullscreen = (fullscreen) => { goal = fullscreen; applyFullscreen(); };
+  const syncFullscreen = (fullscreen: boolean) => {
+    if (!transitioning) goal = fullscreen; // Includes exits initiated by the operating system.
+    clearTimeout(settle);
+    transitioning = false;
+    owner.webContents.send('window:fullscreen', fullscreen);
+    if (goal !== fullscreen) setImmediate(applyFullscreen);
+  };
+  owner.on('enter-full-screen', () => syncFullscreen(true));
+  owner.on('leave-full-screen', () => syncFullscreen(false));
+  owner.on('closed', () => {
+    clearTimeout(settle);
+    if (window === owner) { window = null; changeFullscreen = undefined; changeWidget = undefined; }
+  });
   const sendMaximized = () => owner.webContents.send('window:maximized', owner.isMaximized());
   owner.on('maximize', sendMaximized);
   owner.on('unmaximize', sendMaximized);

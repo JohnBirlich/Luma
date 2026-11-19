@@ -12,9 +12,9 @@ const CONTENT_TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8', '.json': 'application/json',
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png',
   '.jpg': 'image/jpeg', '.gif': 'image/gif', '.avif': 'image/avif', '.woff2': 'font/woff2',
-  '.txt': 'text/plain; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8', '.wasm': 'application/wasm',
 };
-const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: ${ONLINE_ORIGINS.images}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media}; object-src 'none'; frame-src ${VK_WIDGET_URL}; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
+const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: ${ONLINE_ORIGINS.images}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media}; worker-src 'self'; object-src 'none'; frame-src ${VK_WIDGET_URL}; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
 
 export function parseByteRange(header: string, size: number): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
@@ -45,7 +45,7 @@ async function streamFile(path: string, request: Request, headers: Headers) {
   const metadata = await stat(path).catch(() => null);
   if (!metadata?.isFile()) return new Response(null, { status: 404, headers });
   const { size } = metadata;
-  headers.set('Content-Type', audioMime(path) ?? CONTENT_TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream');
+  headers.set('Content-Type', headers.get('Content-Type') ?? audioMime(path) ?? CONTENT_TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream');
   headers.set('Accept-Ranges', 'bytes');
   const rawRange = request.headers.get('Range');
   const range = rawRange && parseByteRange(rawRange, size);
@@ -67,8 +67,12 @@ export function createProtocolHandler(root: string, library: DesktopLibrary, dev
     if (url.protocol !== 'luma:' || url.hostname !== 'app' || url.port || url.username || url.password) return new Response(null, { status: 404 });
     const origin = request.headers.get('Origin');
     if (origin && origin !== APP_ORIGIN && origin !== devOrigin) return new Response(null, { status: 403 });
+    // Allow WASM compilation only in the bundled fingerprint worker, never in the app page.
+    const fingerprintWorker = /^\/assets\/fingerprint\.worker-[\w-]+\.js$/.test(url.pathname);
     const headers = new Headers({
-      'Content-Security-Policy': CSP,
+      'Content-Security-Policy': fingerprintWorker
+        ? "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; base-uri 'none'"
+        : CSP,
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'no-referrer',
       'Cache-Control': 'no-store',
@@ -86,6 +90,7 @@ export function createProtocolHandler(root: string, library: DesktopLibrary, dev
     const path = match
       ? library.mediaPath(match[2], match[1] as 'audio' | 'cover')
       : staticPath(root, url.pathname);
+    if (!match && path && extname(path) === '.webm') headers.set('Content-Type', 'video/webm');
     return path ? streamFile(path, request, headers) : new Response(null, { status: 404, headers });
   };
 }
