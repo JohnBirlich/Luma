@@ -12,11 +12,11 @@ import sys
 import wave
 
 TRACKS = [
-    ("afterimage", "Afterimage", "Arden Vale", "Midnight Signals", 32, 82, [45, 41, 48, 43], 0),
-    ("low-tide", "Low Tide", "Mira Cove", "Saltwater Tapes", 28, 94, [38, 45, 36, 43], 1),
-    ("violet-hour", "Violet Hour", "Arden Vale", "Midnight Signals", 34, 73, [49, 45, 52, 47], 2),
-    ("paper-satellites", "Paper Satellites", "Halden", "In Soft Focus", 30, 106, [43, 38, 46, 41], 3),
-    ("blue-meridian", "Blue Meridian", "North Relay", "Polar Drift", 36, 67, [40, 36, 43, 38], 4),
+    ("afterimage", "Отблеск", "Арден Вейл", "Полуночные сигналы", 32, 82, [45, 41, 48, 43], 0),
+    ("low-tide", "Отлив", "Мира Коув", "Записи у моря", 28, 94, [38, 45, 36, 43], 1),
+    ("violet-hour", "Фиолетовый час", "Арден Вейл", "Полуночные сигналы", 34, 73, [49, 45, 52, 47], 2),
+    ("paper-satellites", "Бумажные спутники", "Халден", "Мягкий фокус", 30, 106, [43, 38, 46, 41], 3),
+    ("blue-meridian", "Синий меридиан", "Северный сигнал", "Полярный дрейф", 36, 67, [40, 36, 43, 38], 4),
 ]
 RATE = 44100
 TAU = 2 * pi
@@ -73,7 +73,7 @@ def main():
                 wav.setparams((1, 2, RATE, 0, 'NONE', 'not compressed'))
                 wav.writeframes(synth(seconds, bpm, roots, style).tobytes())
             subprocess.run([ffmpeg, '-v', 'error', '-y', '-i', str(source), '-c:a', 'libmp3lame', '-b:a', '64k',
-                            '-metadata', f'title={title}', '-metadata', f'artist={artist}', '-metadata', f'album={album}',
+                            '-id3v2_version', '4', '-metadata', f'title={title}', '-metadata', f'artist={artist}', '-metadata', f'album={album}',
                             str(dest / f'{slug}.mp3')], check=True)
 
 

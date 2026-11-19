@@ -87,7 +87,7 @@ export function CoverEditor({ target, currentUrl, update, close }: CoverEditorPr
           </div>
           <div className="cover-editor-details">
             <h3 title={target.title}>{target.title}</h3>
-            <p>{playlist ? 'Обложка видна в Luma. Сам виджет VK не изменится.' : 'Новая обложка появится в медиатеке, очереди и плеере. Аудиофайл не изменится.'}</p>
+            <p>{playlist ? 'Обложка видна в Luma. Сам виджет VK не изменится.' : 'Новая обложка появится в Luma и системном плеере. Аудиофайл не изменится.'}</p>
             <button type="button" className={`cover-picker${over ? ' cover-picker-active' : ''}`} onClick={() => input.current?.click()} disabled={saving}>
               <Upload size={19} /><span><strong>{processing ? 'Подготавливаем…' : 'Выбрать изображение'}</strong><small>или перетащите его сюда</small></span>
             </button>

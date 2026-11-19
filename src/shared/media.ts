@@ -1,4 +1,5 @@
 import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
+import { cleanTrackText, readTrackTag } from './russian.js';
 import type { VkCoverImage, VkPlaylist } from './vk.js';
 
 export const AUDIO_MIMES = {
@@ -71,9 +72,9 @@ export function trackInfo(
   duration?: number,
 ): Pick<Track, 'title' | 'artist' | 'album' | 'duration'> {
   return {
-    title: tags?.title?.trim() || filename.replace(/\.[^.]+$/, '') || filename,
-    artist: tags?.artist?.trim() || tags?.albumartist?.trim() || 'Неизвестный исполнитель',
-    album: tags?.album?.trim() || 'Без альбома',
+    title: readTrackTag(tags?.title) || cleanTrackText(filename.replace(/\.[^.]+$/, '')) || cleanTrackText(filename) || 'Без названия',
+    artist: readTrackTag(tags?.artist) || readTrackTag(tags?.albumartist) || 'Неизвестный исполнитель',
+    album: readTrackTag(tags?.album) || 'Без альбома',
     duration: duration !== undefined && Number.isFinite(duration) && duration > 0 ? duration : 0,
   };
 }

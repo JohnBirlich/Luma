@@ -9,6 +9,7 @@ interface StoredTrack extends Info {
   addedAt: number;
   audio: Blob;
   artwork?: Blob;
+  textVersion?: 1;
 }
 interface SessionEntry {
   record: StoredTrack;
@@ -54,10 +55,11 @@ async function writeRecord(write: (store: IDBObjectStore) => IDBRequest) {
 }
 
 function makeEntry(record: StoredTrack, persisted: boolean): SessionEntry {
-  const { id, title, artist, album, duration, audio, artwork } = record;
+  const { id, audio, artwork, title, artist, album, duration, textVersion } = record;
+  const info = textVersion === 1 ? { title, artist, album, duration } : trackInfo(title, record, duration);
   return {
     persisted, record,
-    track: { id, title, artist, album, duration, audioUrl: URL.createObjectURL(audio), artworkUrl: artwork && URL.createObjectURL(artwork) },
+    track: { id, ...info, audioUrl: URL.createObjectURL(audio), artworkUrl: artwork && URL.createObjectURL(artwork) },
   };
 }
 
@@ -89,7 +91,7 @@ async function add(files: File[]): Promise<ImportResult> {
     const art = usableArtwork(metadata?.common.picture);
     const record: StoredTrack = {
       id: crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (v) => v.toString(16).padStart(2, '0')).join(''),
-      signature, addedAt: Date.now(),
+      signature, addedAt: Date.now(), textVersion: 1,
       ...trackInfo(file.name, metadata?.common, metadata?.format.duration),
       audio: file.slice(0, file.size, mime),
       artwork: art ? new Blob([Uint8Array.from(art.image.data)], { type: art.mime }) : undefined,

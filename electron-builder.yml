@@ -1,6 +1,9 @@
 appId: app.lumaplayer.desktop
 productName: Luma Player
 asar: true
+electronLanguages:
+  - ru
+  - en-US
 directories:
   output: release
   buildResources: Assets
@@ -17,6 +20,9 @@ win:
     - nsis
     - portable
 nsis:
+  installerLanguages:
+    - ru_RU
+  language: '1049'
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
