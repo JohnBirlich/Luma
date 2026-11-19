@@ -1,0 +1,28 @@
+appId: app.lumaplayer.desktop
+productName: Luma Player
+asar: true
+directories:
+  output: release
+  buildResources: Assets
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+  - LICENSE
+asarUnpack:
+  - dist/demo/*.mp3
+win:
+  icon: Assets/icon.ico
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  artifactName: 'Luma-Player-Setup-${version}-${arch}.${ext}'
+portable:
+  artifactName: 'Luma-Player-Portable-${version}-${arch}.${ext}'
