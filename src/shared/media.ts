@@ -1,3 +1,6 @@
+import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
+import type { VkCoverImage, VkPlaylist } from './vk.js';
+
 export const AUDIO_MIMES = {
   mp3: 'audio/mpeg',
   wav: 'audio/wav',
@@ -41,6 +44,7 @@ export interface DesktopBridge {
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
   openVkLink(url: string): Promise<void>;
+  getVkCover(playlist: VkPlaylist): Promise<VkCoverImage | null>;
   window: {
     minimize(): void;
     toggleMaximize(): void;
@@ -74,16 +78,18 @@ export function trackInfo(
   };
 }
 
-const IMAGE_EXTENSIONS: Record<string, string> = {
-  'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png',
-  'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif',
-};
+const IMAGE_EXTENSIONS = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif',
+} as const;
 
+/** A tag's declared MIME is unreliable. Use a supported image by signature, preferably the front cover. */
 export function usableArtwork<T extends { format: string; data: Uint8Array; type?: string }>(pictures?: T[]) {
-  const valid = pictures?.filter(({ format, data }) =>
-    Object.hasOwn(IMAGE_EXTENSIONS, format.toLowerCase()) && data.length > 0 && data.length <= 5 * 1024 * 1024);
-  const image = valid?.find(({ type }) => type?.toLowerCase() === 'cover (front)') ?? valid?.[0];
-  return image ? { image, extension: IMAGE_EXTENSIONS[image.format.toLowerCase()] } : undefined;
+  const candidates = pictures?.flatMap((image) => {
+    if (image.data.length > MAX_COVER_FILE) return [];
+    const mime = embeddedArtworkMime(image.data);
+    return mime ? [{ image, mime, extension: IMAGE_EXTENSIONS[mime] }] : [];
+  });
+  return candidates?.find(({ image }) => image.type?.toLowerCase() === 'cover (front)') ?? candidates?.[0];
 }
 
 export function formatTime(seconds: number): string {

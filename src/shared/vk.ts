@@ -1,3 +1,5 @@
+import type { CoverMime } from './artwork.js';
+
 const VK_ORIGIN = 'https://vk.ru';
 export const VK_MUSIC_URL = `${VK_ORIGIN}/music`;
 export const VK_WIDGET_DOCS_URL = 'https://dev.vk.ru/ru/widgets/playlist';
@@ -11,6 +13,11 @@ export interface VkPlaylist {
   ownerId: number;
   playlistId: number;
   hash: string;
+}
+
+export interface VkCoverImage {
+  mime: CoverMime;
+  bytes: Uint8Array;
 }
 
 export interface NamedVkPlaylist extends VkPlaylist {
@@ -32,6 +39,7 @@ export function isVkPlaylist(value: unknown): value is VkPlaylist {
 
 export const vkPlaylistKey = ({ ownerId, playlistId }: VkPlaylist) => `${ownerId}_${playlistId}`;
 export const vkPlaylistUrl = (playlist: VkPlaylist) => `${VK_ORIGIN}${playlistPath}${vkPlaylistKey(playlist)}`;
+export const vkPlaylistShareUrl = (playlist: VkPlaylist) => `${vkPlaylistUrl(playlist)}_${playlist.hash}`;
 
 export function vkWidgetUrl(playlist: VkPlaylist): string {
   const query = new URLSearchParams({ oid: String(playlist.ownerId), pid: String(playlist.playlistId), hash: playlist.hash });

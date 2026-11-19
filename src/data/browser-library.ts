@@ -92,7 +92,7 @@ async function add(files: File[]): Promise<ImportResult> {
       signature, addedAt: Date.now(),
       ...trackInfo(file.name, metadata?.common, metadata?.format.duration),
       audio: file.slice(0, file.size, mime),
-      artwork: art ? new Blob([Uint8Array.from(art.image.data)], { type: art.image.format }) : undefined,
+      artwork: art ? new Blob([Uint8Array.from(art.image.data)], { type: art.mime }) : undefined,
     };
     const persisted = await writeRecord((store) => store.put(record)).then(() => true, () => false);
     entries.push(makeEntry(record, persisted));

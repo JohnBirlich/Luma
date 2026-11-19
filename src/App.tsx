@@ -6,6 +6,7 @@ import type { Page } from './components/Chrome';
 import { LibraryPage, PlayerPage } from './components/Collection';
 import { CoverEditor } from './components/CoverEditor';
 import { Equalizer } from './components/Equalizer';
+import { MenuPage } from './components/Menu';
 import { PlayerBar } from './components/PlayerBar';
 import { QueuePanel } from './components/QueuePanel';
 import { SettingsPage } from './components/Settings';
@@ -20,6 +21,7 @@ import { usePalette } from './player/usePalette';
 import { trackCoverKey, withCover } from './shared/artwork';
 import type { CoverTarget } from './shared/artwork';
 import { defaultAppearance, defaultPlayback, shouldAdvanceAfterEnd, themeVariables } from './shared/customization';
+import type { LibraryLayout } from './shared/customization';
 import { clamp } from './shared/equalizer';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
 import type { ImportResult, Track } from './shared/media';
@@ -273,6 +275,7 @@ export default function App() {
     setPage(target);
   }
   const openEqualizer = () => setShowEqualizer(true);
+  const changeLibraryLayout = (libraryLayout: LibraryLayout) => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, libraryLayout } }));
   const closeQueue = () => setQueueOpen(false);
 
   return (
@@ -296,18 +299,20 @@ export default function App() {
         setDropActive(false);
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
-      <TitleBar openSettings={() => navigate('settings')} settingsActive={page === 'settings'} />
-      <Sidebar page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled} addMusic={choose} busy={working || !ready} count={tracks.length} />
+      <TitleBar openSettings={() => navigate('settings')} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready} />
+      <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready} count={tracks.length} />
       <main className="main-pane" ref={scrollArea}>
         {isVkPage ? <VkMusicPage covers={covers} editCover={setCoverTarget} discardCover={(key) => { void updateCover(key); }} /> :
           page === 'settings' ? <SettingsPage appearance={appearance} playback={playback} showDemos={preferences.showDemos} libraryReady={ready && !working}
             previewTrack={current} tint={tint} changeAppearance={(appearance) => setPreferences((data) => ({ ...data, appearance }))}
-            changePlayback={(playback) => setPreferences((data) => ({ ...data, playback }))} toggleDemos={toggleDemos} reset={resetCustomization} /> :
+            changePlayback={(playback) => setPreferences((data) => ({ ...data, playback }))} toggleDemos={toggleDemos} reset={resetCustomization} goToMenu={() => navigate('menu')} /> :
+          page === 'menu' ? <MenuPage localCount={localTracks.length} ready={ready && !working} eqEnabled={preferences.equalizer.enabled}
+            openSettings={() => navigate('settings')} openEqualizer={openEqualizer} openLibrary={goToLibrary} openVk={() => navigate('vk')} addMusic={choose} /> :
           page === 'player' ? <PlayerPage track={current} tracks={tracks} tint={tint} heroStyle={appearance.hero} playing={player.playing} position={queue.order.indexOf(current?.id ?? '') + 1}
             count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle} play={(id) => playTrack(id, true)} goToLibrary={goToLibrary}
             openEqualizer={openEqualizer} editCover={editTrackCover} addMusic={choose} /> :
-          <LibraryPage tracks={tracks} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
-            addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} remove={(id) => void removeLocal(id)} />}
+          <LibraryPage key={page} tracks={tracks} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
+            searchPage={page === 'search'} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} remove={(id) => void removeLocal(id)} />}
       </main>
       {!isVkPage && queueOpen && <>
         <button type="button" className="queue-scrim" onClick={closeQueue} aria-label="Закрыть панель очереди" />

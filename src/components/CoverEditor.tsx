@@ -82,8 +82,8 @@ export function CoverEditor({ target, currentUrl, update, close }: CoverEditorPr
         </header>
         <div className="cover-editor-body">
           <div className="cover-preview">
-            <Artwork imageUrl={src} seed={target.key} />
-            <span>{draft ? 'Предпросмотр' : currentUrl ? 'Своя обложка' : 'По умолчанию'}</span>
+            <Artwork imageUrl={src} />
+            <span>{draft ? 'Предпросмотр' : currentUrl ? 'Своя обложка' : target.originalUrl ? 'Автоматическая обложка' : 'Обложка Luma'}</span>
           </div>
           <div className="cover-editor-details">
             <h3 title={target.title}>{target.title}</h3>

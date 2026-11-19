@@ -1,25 +1,21 @@
 import { useState } from 'react';
-import { AudioLines } from 'lucide-react';
-import type { CSSProperties } from 'react';
-import { trackCoverKey } from '../shared/artwork';
-import { artworkTone } from '../shared/customization';
+import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import type { Track } from '../shared/media';
 
 interface ArtworkProps {
   track?: Track | null;
   imageUrl?: string;
-  seed?: string;
   className?: string;
 }
 
-export function Artwork({ track, imageUrl, seed, className = '' }: ArtworkProps) {
+export function Artwork({ track, imageUrl, className = '' }: ArtworkProps) {
   const [failed, setFailed] = useState<string>();
-  const src = imageUrl ?? track?.artworkUrl;
-  const hasImage = src && src !== failed;
-  const tone = track?.color ?? artworkTone(seed ?? (track ? trackCoverKey(track.id) : 'luma'));
+  const original = imageUrl ?? track?.artworkUrl;
+  const fallback = !original || original === failed;
+  const src = fallback ? DEFAULT_ARTWORK_URL : original;
   return (
-    <div className={`artwork${hasImage ? '' : ' artwork-fallback'} ${className}`} style={{ '--art-tone': tone } as CSSProperties} aria-hidden="true">
-      {hasImage ? <img src={src} alt="" draggable={false} onError={() => setFailed(src)} /> : <AudioLines strokeWidth={1.35} />}
+    <div className={`artwork${fallback ? ' artwork-fallback' : ''} ${className}`} aria-hidden="true">
+      <img key={src} src={src} alt="" draggable={false} onError={() => { if (!fallback) setFailed(original); }} />
     </div>
   );
 }

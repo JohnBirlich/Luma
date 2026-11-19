@@ -21,10 +21,19 @@ test('local metadata defaults and supported media types are explicit', () => {
   assert.equal(trackCount(12), '12 треков');
 });
 
-test('front artwork is preferred and unsupported image formats are rejected', () => {
-  const data = new Uint8Array([1]);
-  assert.equal(usableArtwork([{ format: 'image/svg+xml', data }]), undefined);
-  assert.equal(usableArtwork([{ format: 'image/png', data }, { format: 'image/jpeg', type: 'Cover (front)', data }])?.extension, 'jpg');
+test('embedded artwork prefers the front and recognizes raster data despite mislabeled tags', () => {
+  const unsupported = Buffer.from('<svg></svg>');
+  const png = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+  const jpeg = Uint8Array.of(0xff, 0xd8, 0xff, 0xe0);
+  assert.equal(usableArtwork([{ format: 'image/png', data: unsupported }]), undefined);
+  assert.equal(usableArtwork([
+    { format: 'image/png', data: png }, { format: 'application/octet-stream', type: 'Cover (front)', data: jpeg },
+  ])?.mime, 'image/jpeg');
+  assert.equal(usableArtwork([
+    { format: 'image/png', type: 'Cover (front)', data: unsupported }, { format: '', data: png },
+  ])?.extension, 'png');
+  assert.equal(usableArtwork([{ format: '', data: Buffer.from('GIF89a') }])?.extension, 'gif');
+  assert.equal(usableArtwork([{ format: '', data: Buffer.from('....ftypavif') }])?.extension, 'avif');
 });
 
 test('byte ranges support resume, seeking and suffix requests', () => {

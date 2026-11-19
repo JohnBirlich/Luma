@@ -13,7 +13,7 @@ test('customization reads old profiles without altering queue, volume or equaliz
 });
 
 test('customization persists valid choices and validates each stored field', () => {
-  const appearance = { theme: 'pine', accent: '#16b2a6', hero: 'vinyl', coverColors: false, motion: false };
+  const appearance = { theme: 'pine', accent: '#16b2a6', hero: 'vinyl', coverColors: false, motion: false, libraryLayout: 'grid' };
   const playback = { startPage: 'vk', seekStep: 15, autoNext: false };
   assert.deepEqual(decodePreferences(JSON.stringify({ appearance, playback })).appearance, appearance);
   assert.deepEqual(decodePreferences(JSON.stringify({ appearance, playback })).playback, playback);

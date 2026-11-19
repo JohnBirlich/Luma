@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import type { Track } from '../shared/media';
 
 export function useMediaSession(
@@ -13,7 +14,7 @@ export function useMediaSession(
     if (!session || typeof MediaMetadata === 'undefined') return;
     session.metadata = track ? new MediaMetadata({
       title: track.title, artist: track.artist, album: track.album,
-      artwork: track.artworkUrl ? [{ src: new URL(track.artworkUrl, document.baseURI).href }] : [],
+      artwork: [{ src: new URL(track.artworkUrl || DEFAULT_ARTWORK_URL, document.baseURI).href }],
     }) : null;
     return () => { session.metadata = null; };
   }, [session, track]);

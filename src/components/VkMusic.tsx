@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { ArrowUpRight, AudioLines, Disc3, ImagePlus, ListMusic, Plus, Radio, RotateCw, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, Disc3, ImagePlus, Plus, Radio, RotateCw, Trash2, X } from 'lucide-react';
+import { useVkArtwork } from '../data/vk-artwork';
 import { MAX_VK_PLAYLISTS, readVkShelf, saveVkShelf } from '../data/vk-playlists';
-import { editorialPlaylist, parseVkPlaylist, vkPlaylistKey, vkPlaylistUrl, vkWidgetUrl, VK_MUSIC_URL, VK_WIDGET_DOCS_URL } from '../shared/vk';
+import { editorialPlaylist, parseVkPlaylist, vkPlaylistKey, vkPlaylistShareUrl, vkPlaylistUrl, vkWidgetUrl, VK_MUSIC_URL, VK_WIDGET_DOCS_URL } from '../shared/vk';
 import type { NamedVkPlaylist } from '../shared/vk';
 import { playlistCoverKey } from '../shared/artwork';
 import type { CoverTarget } from '../shared/artwork';
@@ -60,7 +61,9 @@ export function VkMusicPage({ covers, editCover, discardCover }: VkMusicPageProp
   const selected = playlists.find((playlist) => vkPlaylistKey(playlist) === shelf.selected) ?? editorialPlaylist;
   const selectedIsEditorial = vkPlaylistKey(selected) === editorialKey;
   const currentCoverKey = playlistCoverKey(vkPlaylistKey(selected));
-  const selectedArt = covers.get(currentCoverKey);
+  const automatic = useVkArtwork(selected, attempt);
+  const original = automatic.get(vkPlaylistShareUrl(selected));
+  const selectedArt = covers.get(currentCoverKey) ?? original;
   useEffect(() => { saveVkShelf(shelf); }, [shelf]);
 
   function addPlaylist(event: FormEvent<HTMLFormElement>) {
@@ -83,7 +86,6 @@ export function VkMusicPage({ covers, editCover, discardCover }: VkMusicPageProp
         ? shelf.playlists.map((playlist) => vkPlaylistKey(playlist) === key ? item : playlist)
         : [...shelf.playlists, item],
     });
-    setAttempt((value) => value + 1);
     setShowForm(false);
     setCode('');
     setName('');
@@ -108,14 +110,14 @@ export function VkMusicPage({ covers, editCover, discardCover }: VkMusicPageProp
       <div className="vk-layout">
         <section className="vk-panel" aria-labelledby="vk-playlist-title">
           <header className="vk-panel-header">
-            {selectedArt ? <Artwork imageUrl={selectedArt} seed={currentCoverKey} className="vk-playlist-cover" /> : <div className="vk-emblem" aria-hidden="true">VK</div>}
+            <Artwork imageUrl={selectedArt} className="vk-playlist-cover" />
             <div className="vk-panel-title">
               <p className="overline">{selectedIsEditorial ? 'Подборка редакции VK' : 'Ваш плейлист'}</p>
               <h2 id="vk-playlist-title" title={selected.name}>{selected.name}</h2>
             </div>
             <div className="vk-panel-actions">
               <button type="button" className="icon-button vk-cover-button" title="Обложка плейлиста" aria-label="Редактировать обложку плейлиста" aria-haspopup="dialog"
-                onClick={() => editCover({ key: currentCoverKey, title: selected.name, kind: 'playlist' })}><ImagePlus size={16} /></button>
+                onClick={() => editCover({ key: currentCoverKey, title: selected.name, kind: 'playlist', originalUrl: original })}><ImagePlus size={16} /></button>
               <VkLink href={vkPlaylistUrl(selected)} className="text-button vk-original">Плейлист в VK <ArrowUpRight size={16} /></VkLink>
             </div>
           </header>
@@ -145,12 +147,11 @@ export function VkMusicPage({ covers, editCover, discardCover }: VkMusicPageProp
           <ul className="vk-playlists">
             {playlists.map((playlist) => {
               const key = vkPlaylistKey(playlist);
-              const art = covers.get(playlistCoverKey(key));
+              const art = covers.get(playlistCoverKey(key)) ?? automatic.get(vkPlaylistShareUrl(playlist));
               return <li className="vk-playlist-row" key={key}>
                 <button className="vk-playlist-item" type="button" aria-pressed={key === shelf.selected}
                   onClick={() => setShelf((previous) => ({ ...previous, selected: key }))}>
-                  {art ? <Artwork imageUrl={art} seed={key} className="vk-shelf-cover" /> :
-                    <span className="vk-playlist-mark">{key === editorialKey ? <AudioLines size={18} /> : <ListMusic size={18} />}</span>}
+                  <Artwork imageUrl={art} className="vk-shelf-cover" />
                   <span><strong>{playlist.name}</strong><small>{key === editorialKey ? 'Подборка VK' : 'Сохранён у вас'}</small></span>
                 </button>
                 {key !== editorialKey && <button className="icon-button vk-remove" type="button" onClick={() => removePlaylist(key)}
@@ -158,7 +159,7 @@ export function VkMusicPage({ covers, editCover, discardCover }: VkMusicPageProp
               </li>;
             })}
           </ul>
-          {!showForm && <p className="vk-shelf-tip">Добавляйте доступные плейлисты по коду виджета. Пароли и токены в Luma вводить не нужно.</p>}
+          {!showForm && <p className="vk-shelf-tip">Плейлисты добавляются по коду виджета. В настольном Luma обложка открытого плейлиста загружается, если VK отдаёт её публично.</p>}
         </aside>
       </div>
     </div>

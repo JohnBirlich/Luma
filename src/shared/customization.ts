@@ -18,6 +18,7 @@ export type ThemeName = keyof typeof THEMES;
 export type HeroStyle = typeof HERO_STYLES[number];
 export type StartPage = typeof START_PAGES[number];
 export type SeekStep = typeof SEEK_STEPS[number];
+export type LibraryLayout = 'list' | 'grid';
 
 export interface Appearance {
   theme: ThemeName;
@@ -25,6 +26,7 @@ export interface Appearance {
   hero: HeroStyle;
   coverColors: boolean;
   motion: boolean;
+  libraryLayout: LibraryLayout;
 }
 
 export interface PlaybackPreferences {
@@ -33,7 +35,7 @@ export interface PlaybackPreferences {
   autoNext: boolean;
 }
 
-export const defaultAppearance: Appearance = { theme: 'amber', accent: null, hero: 'cover', coverColors: true, motion: true };
+export const defaultAppearance: Appearance = { theme: 'amber', accent: null, hero: 'cover', coverColors: true, motion: true, libraryLayout: 'list' };
 export const defaultPlayback: PlaybackPreferences = { startPage: 'player', seekStep: 5, autoNext: true };
 export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 
@@ -45,6 +47,7 @@ export function readAppearance(value: unknown): Appearance {
     hero: data?.hero && HERO_STYLES.includes(data.hero) ? data.hero : defaultAppearance.hero,
     coverColors: data?.coverColors !== false,
     motion: data?.motion !== false,
+    libraryLayout: data?.libraryLayout === 'grid' ? 'grid' : 'list',
   };
 }
 

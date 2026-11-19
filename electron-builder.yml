@@ -3,7 +3,7 @@ productName: Luma Player
 asar: true
 directories:
   output: release
-  buildResources: assets
+  buildResources: Assets
 files:
   - dist/**/*
   - dist-electron/**/*
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - dist/demo/*.mp3
 win:
-  icon: assets/icon.ico
+  icon: Assets/icon.ico
   target:
     - nsis
     - portable

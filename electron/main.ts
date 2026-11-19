@@ -6,6 +6,7 @@ import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { createProtocolHandler } from './protocol.js';
+import { fetchVkCover } from './vk-artwork.js';
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'luma',
@@ -48,6 +49,7 @@ function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
 }
 
 function bindIpc(library: DesktopLibrary) {
+  let pendingCovers = 0;
   ipcMain.handle('library:list', (event) => { appWindow(event); return library.list(); });
   ipcMain.handle('library:choose', async (event) => {
     const owner = appWindow(event);
@@ -72,6 +74,13 @@ function bindIpc(library: DesktopLibrary) {
     appWindow(event);
     if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
     return shell.openExternal(url);
+  });
+  ipcMain.handle('vk:cover', async (event, playlist: unknown) => {
+    appWindow(event);
+    if (pendingCovers >= 4) return null;
+    pendingCovers++;
+    try { return await fetchVkCover(playlist); }
+    finally { pendingCovers--; }
   });
   ipcMain.handle('window:minimize', (event) => appWindow(event).minimize());
   ipcMain.handle('window:toggle-maximize', (event) => {
