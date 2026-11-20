@@ -176,7 +176,8 @@ async function smoke() {
     const art = document.querySelector('.karaoke-track .artwork').getBoundingClientRect();
     const text = document.querySelector('.karaoke-lyrics').getBoundingClientRect();
     return innerWidth <= 690 || (art.width >= 150 && art.right < text.left);
-  })()`), true, 'karaoke keeps a large cover to the left of lyrics');
+  })()`), true, 'karaoke keeps only a bounded cover next to lyrics');
+  assert.equal(await run(`!document.querySelector('.karaoke-stage > :is(.scene-background,.immersive-backdrop,.immersive-scrim)')`), true);
   assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-track h1')).userSelect`), 'none');
   assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-lyrics .lyrics-scroll')).userSelect`), 'text');
   await run(`[...document.querySelectorAll('.karaoke-lyrics .lyrics-sources button')].find((item) => item.textContent === 'Убрать текст из файла').click()`);
@@ -202,7 +203,7 @@ async function smoke() {
   assert.notEqual(fallback.picture.src, first.picture.src, 'broken cover does not keep the previous track’s artwork');
   assert.equal(window.getTitle(), "Ty Zdes' — Luma Player");
   assert.equal((await run('window.luma.getAppInfo()')).version, version);
-  const go = (name) => run(`[...document.querySelectorAll('nav .nav-item')].find((item) => item.getAttribute('aria-label') === ${JSON.stringify(name)}).click()`);
+  const go = (name) => run(`[...document.querySelectorAll('nav .nav-item, .glass-navigation button')].find((item) => item.getAttribute('aria-label') === ${JSON.stringify(name)}).click()`);
   await go('Главная');
   assert.ok(!(await run(`document.querySelector('.lyrics-card')?.textContent.includes('Локальная строка')`)), 'previous lyrics do not carry over');
   await waitFor('appearance button', () => run(`!!document.querySelector('.scene-open')`));
@@ -288,6 +289,38 @@ async function smoke() {
   await run(`[...document.querySelectorAll('.scene-layouts button')].find((item) => item.textContent === 'Обложка').click()`);
   await waitFor('cover style replaces the previous effect', async () => (await preferences()).appearance.effect === 'cover' && await run(`!!document.querySelector('.scene-dialog-preview .scene-cover') && !document.querySelector('.scene-dialog-preview canvas, .scene-dialog-preview video')`));
   await click('.scene-dialog .primary-button');
+  await expand();
+  await waitFor('normal fullscreen still shows the selected cover backdrop', () => run(`!!document.querySelector('.immersive-stage > .scene-cover')`));
+  await click('.immersive-karaoke-toggle');
+  await waitFor('karaoke never mounts the cover backdrop or effect, regardless of the selected scene', () => run(`!!document.querySelector('.karaoke-track .artwork') && !document.querySelector('.karaoke-stage > :is(.scene-background,.immersive-backdrop,.immersive-scrim)')`));
+  await click('.immersive-collapse');
+  await waitFor('fullscreen exits after switching modes', async () => !window.isFullScreen() && await run(`!document.querySelector('.immersive-player')`));
+
+  await click('.page-equalizer');
+  await waitFor('parametric EQ and response graph', () => run(`document.querySelectorAll('.equalizer-dialog[open] .eq-band input').length === 10 && !!document.querySelector('.eq-response-path')`));
+  const volumeBeforeEq = (await preferences()).volume;
+  await select('.preset-label select', 'bass');
+  await waitFor('EQ preset activates filters', async () => (await preferences()).equalizer.preset === 'bass');
+  assert.equal((await preferences()).volume, volumeBeforeEq);
+  const beforeEq = await run(`document.querySelector('.eq-response-path').getAttribute('points')`);
+  await click('.eq-band:nth-child(4) .eq-band-choice');
+  await select('.eq-type select', 'notch');
+  const frequency = '.eq-inspector input[type="number"]';
+  await run(`document.querySelector(${JSON.stringify(frequency)}).focus()`);
+  await fill(frequency, '950');
+  await run(`document.querySelector(${JSON.stringify(frequency)}).blur()`);
+  await waitFor('EQ frequency edit changes the actual response curve', async () => {
+    const eq = (await preferences()).equalizer;
+    return eq.preset === 'custom' && eq.enabled && eq.bands[3].type === 'notch' && eq.bands[3].hz === 950
+      && (await run(`document.querySelector('.eq-response-path').getAttribute('points')`)) !== beforeEq;
+  });
+  await click('.eq-tools button:last-child');
+  const editedEq = await waitFor('EQ bypass keeps the edit', async () => {
+    const eq = (await preferences()).equalizer;
+    return !eq.enabled && eq.bands[3].hz === 950 && eq;
+  });
+  await click('.equalizer-content .dialog-footer .primary-button');
+  assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused`), true);
   await run(`document.querySelector('.title-settings').click()`);
   await waitFor('settings page', () => run(`!!document.querySelector('.settings-page [aria-label="Обновления приложения"]')`));
   await run(`document.querySelector('.settings-page [aria-label="Обновления приложения"]').click()`);
@@ -318,15 +351,34 @@ async function smoke() {
   await waitFor('widget restores the old window', async () => !window.isAlwaysOnTop() && !await run(`!!document.querySelector('.widget-mode > .desktop-widget')`));
   assert.deepEqual(window.getBounds(), widgetBounds);
   assert.equal(await run('document.querySelector("audio").currentTime'), widgetTime);
-  window.focus();
-  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'M', modifiers: ['control', 'shift'] });
-  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'M', modifiers: ['control', 'shift'] });
-  await waitFor('Ctrl+Shift+M opens the widget', async () => window.isAlwaysOnTop() && await run(`!!document.querySelector('.widget-mode')`));
-  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
-  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
-  await waitFor('Esc restores the widget window', async () => !window.isAlwaysOnTop() && !await run(`!!document.querySelector('.widget-mode')`));
-  assert.deepEqual(window.getBounds(), widgetBounds);
-  assert.equal(await run('document.querySelector("audio").currentTime'), widgetTime);
+  assert.equal(await run(`document.querySelector('[aria-label="Виджеты рабочего стола"] button').getAttribute('aria-keyshortcuts')`), 'Control+Shift+R');
+  const sendWidgetChord = async () => {
+    window.focus();
+    await waitFor('native window focused for the widget shortcut', () => window.isFocused());
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'R', modifiers: ['control', 'shift'] });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'R', modifiers: ['control', 'shift'] });
+  };
+  const widgetOpen = async () => window.isAlwaysOnTop() && await run(`!!document.querySelector('.widget-mode') && window.testAudio === document.querySelector('audio')`);
+  const widgetClosed = async () => !window.isAlwaysOnTop() && await run(`!document.querySelector('.widget-mode') && window.testAudio === document.querySelector('audio')`);
+  let navigations = 0;
+  const watchReload = ({ isMainFrame, isSameDocument }) => { if (isMainFrame && !isSameDocument) navigations++; };
+  window.webContents.on('did-start-navigation', watchReload);
+  try {
+    await sendWidgetChord();
+    await waitFor('Ctrl+Shift+R opens the widget', widgetOpen);
+    await sendWidgetChord();
+    await waitFor('Ctrl+Shift+R toggles it back', widgetClosed);
+    assert.deepEqual(window.getBounds(), widgetBounds);
+    await sendWidgetChord();
+    await waitFor('widget reopens without reloading playback', widgetOpen);
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    await waitFor('Esc restores the widget window', widgetClosed);
+    assert.deepEqual(window.getBounds(), widgetBounds);
+    assert.equal(await run('document.querySelector("audio").currentTime'), widgetTime);
+    assert.equal(navigations, 0, 'Ctrl+Shift+R must not reload the renderer');
+    console.log('::notice title=Widget shortcut::Focused Ctrl+Shift+R opens and restores Luma without reload; Esc restores it too.');
+  } finally { window.webContents.off('did-start-navigation', watchReload); }
   assert.equal(await run(`!!document.querySelector('.settings-return')`), false);
 
   // Use the real Last.fm UI, IPC and isolated main-process client, never a real account.
@@ -531,12 +583,13 @@ async function smoke() {
       const sessionCookie = { url: 'https://vk.ru/audio', name: 'lumaFixture', value: '1', secure: true };
       await legacyVk.cookies.set(sessionCookie);
       await session.defaultSession.cookies.set(sessionCookie);
-      await go('Музыка');
-      await waitFor('native Music screen', () => run(`!!document.querySelector('.hub-hero')`));
+      await go('Главная');
+      await waitFor('merged Home keeps discovery and now-playing together', () => run(`!!document.querySelector('.home-page .hub-hero') && !!document.querySelector('.home-page .home-now')`));
+      assert.equal(await run(`!!document.querySelector('nav [aria-label="Музыка"]')`), false);
       assert.equal(await run(`!!document.querySelector('iframe') || 'vk' in window.luma`), false);
       assert.ok(window.contentView.children.every((view) => view.webContents?.session !== legacyVk));
       assert.equal(BrowserWindow.getAllWindows().length, 1);
-      assert.equal(await run(`document.querySelector('${onlineAudio}').paused`), false, 'entering Music leaves playback alone');
+      assert.equal(await run(`document.querySelector('${onlineAudio}').paused`), false, 'entering Home leaves online playback alone');
       assert.equal(opened.length, 0);
       await fill('.hub-search input', 'Ты здесь');
       await waitFor('native search finds a local track', () => run(`document.querySelector('.hub-track strong')?.textContent === 'Ты здесь'`));
@@ -557,8 +610,8 @@ async function smoke() {
       await waitFor('old session cleanup acknowledged', () => run(`document.querySelector('[aria-label="Закладки VK"] [role="status"]')?.textContent.includes('удалены')`));
       assert.equal((await legacyVk.cookies.get({ name: 'lumaFixture' })).length, 0);
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
-      await closeSettings();
-      await waitFor('session cleanup keeps both links', () => run(`JSON.parse(localStorage.getItem('luma-player:vk-playlists:v1')).playlists.length === 2 && !!document.querySelector('.hub-bookmarks')`));
+      await click('[aria-label="Закладки VK"] .settings-actions button:first-child');
+      await waitFor('settings points to Home bookmarks; session cleanup keeps both links', () => run(`JSON.parse(localStorage.getItem('luma-player:vk-playlists:v1')).playlists.length === 2 && !!document.querySelector('.hub-bookmarks')`));
       await click('.hub-tabs button:nth-child(4)');
       await select('.hub-radio-settings select', 'all');
       const previous = (await preferences()).queue;
@@ -626,8 +679,21 @@ async function smoke() {
     await click('.player-bar .play-button');
 
     await settings('Внешний вид');
-    await run(`[...document.querySelectorAll('.theme-option')].find((item) => item.textContent === 'MacOS').click()`);
-    await waitFor('MacOS applies the light glass theme', () => run(`document.querySelector('.app-shell').dataset.theme === 'macos' && getComputedStyle(document.querySelector('.app-shell')).colorScheme === 'light'`));
+    await click('[aria-label="Автоматическая смена темы"]');
+    await waitFor('automatic theme controls visible', () => run(`!!document.querySelector('[aria-label="Темы"] .select-row')`));
+    await select('[aria-label="Темы"] label.select-row:first-of-type select', 'violet');
+    await select('[aria-label="Темы"] label.select-row:last-of-type select', 'violet');
+    await waitFor('automatic mode applies the scheduled choice', () => run(`document.querySelector('.app-shell').dataset.theme === 'violet'`));
+    const palettes = new Set();
+    for (const theme of ['ocean', 'amber', 'pine', 'violet', 'macos']) {
+      await click(`[data-theme-choice="${theme}"]`);
+      await waitFor(`${theme} is active, not overridden by schedule`, async () => !(await preferences()).appearance.autoTheme
+        && await run(`document.querySelector('.app-shell').dataset.theme === ${JSON.stringify(theme)}`));
+      palettes.add(await run(`getComputedStyle(document.querySelector('.setting-card')).background`));
+    }
+    assert.equal(palettes.size, 5);
+    assert.equal(await run(`document.querySelector('.app-shell').dataset.layout === 'glass' && !document.querySelector('.sidebar')
+      && !!document.querySelector('.glass-navigation') && getComputedStyle(document.querySelector('.app-shell')).colorScheme === 'light'`), true);
     await select('label:has(select option[value="en"]) select', 'en');
     await waitFor('English switches Luma controls, not track metadata', () => run(`document.documentElement.lang === 'en'
       && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.settings-page h1')?.textContent === 'Appearance'`));
@@ -640,6 +706,7 @@ async function smoke() {
     window.webContents.reload();
     await reloaded;
     await waitFor('English and MacOS survive a renderer restart', () => run(`document.documentElement.lang === 'en' && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.app-shell').dataset.theme === 'macos'`));
+    assert.deepEqual((await preferences()).equalizer, editedEq, 'parametric filters restore after a renderer restart');
     await click('.title-settings');
     await waitFor('English settings index', () => run(`!!document.querySelector('.settings-page [aria-label="Appearance"]')`));
     await click('.settings-page [aria-label="Appearance"]');

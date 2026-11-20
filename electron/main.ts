@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APP_NAME, APP_USER_MODEL_ID, RELEASES_URL } from '../src/shared/app-info.js';
+import { WIDGET_SHORTCUT } from '../src/shared/customization.js';
 import type { AppInfo } from '../src/shared/app-info.js';
 import { readUiLanguage } from '../src/shared/ui-language.js';
 import { textFor } from '../src/i18n/text.js';
@@ -247,6 +248,14 @@ async function createWindow() {
   owner.once('closed', () => { void floatOutput.stop(); });
   window = owner;
   changeWidget = widgetController(owner);
+  // Reserve the chord inside Luma only, before Chromium can handle Ctrl+Shift+R as reload.
+  owner.webContents.on('before-input-event', (event, input) => {
+    const shortcutKey = input.code === WIDGET_SHORTCUT.code || input.key.toLowerCase() === WIDGET_SHORTCUT.key;
+    if (!shortcutKey || !input.control || !input.shift || input.alt || input.meta) return;
+    if (!isAppPage(owner.webContents.getURL())) return;
+    event.preventDefault();
+    if (input.type === 'keyDown' && !input.isAutoRepeat) owner.webContents.send('window:widgetShortcut');
+  });
   if (process.platform === 'win32' && app.isPackaged) {
     // Windows taskbar and native media clients can resolve the AppUserModelID to this name.
     // Keep the app origin unchanged so existing IndexedDB and localStorage survive updates.

@@ -5,7 +5,7 @@ export const THEMES = {
   ocean: { name: 'Океан', accent: '#8ecffc', chrome: '#101620', side: '#121a27', panel: '#162233', raised: '#1c2c41', glow: '#22354d', stage: '#121c2a' },
   violet: { name: 'Сирень', accent: '#ceb1fb', chrome: '#17111f', side: '#1a1424', panel: '#221a30', raised: '#2f233f', glow: '#362744', stage: '#1e172a' },
   pine: { name: 'Хвоя', accent: '#a4dfb4', chrome: '#111a17', side: '#131f1b', panel: '#182823', raised: '#20352e', glow: '#274237', stage: '#16241f' },
-  macos: { name: 'MacOS', accent: '#b52252', chrome: '#eff4fa', side: '#e9edf7', panel: '#fafbff', raised: '#f6f8fc', glow: '#dde4fc', stage: '#eef2f9' },
+  macos: { name: 'MacOS', accent: '#2058c4', chrome: '#ecf5ff', side: '#dfeaff', panel: '#f4f9ff', raised: '#e9f1ff', glow: '#c9dbff', stage: '#e0edff' },
 } as const;
 
 export const ACCENTS = [
@@ -17,7 +17,7 @@ export const ACCENTS = [
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
 export const BACKGROUND_EFFECTS = ['off', 'cover', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors'] as const;
 export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
-export const START_PAGES = ['player', 'library', 'local', 'search', 'music'] as const;
+export const START_PAGES = ['player', 'library', 'local', 'search'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
 export const CROSSFADE_TIMES = [0, 2, 4, 6, 8] as const;
 export const DATA_LANGUAGES = { system: 'Системный', 'ru-RU': 'Русский', 'en-US': 'English', 'de-DE': 'Deutsch' } as const;
@@ -25,7 +25,7 @@ export const WIDGET_BACKGROUNDS = {
   blur: 'Размытый', album: 'Обложка альбома', cover: 'Цвет обложки', glass: 'Матовое стекло',
   aurora: 'Северное сияние', paper: 'Тёплый свет', white: 'Белый', dark: 'Тёмный', black: 'Чёрный',
 } as const;
-export const WIDGET_SHORTCUT = { label: 'Ctrl + Shift + M', code: 'KeyM' } as const;
+export const WIDGET_SHORTCUT = { label: 'Ctrl + Shift + R', code: 'KeyR', key: 'r', aria: 'Control+Shift+R' } as const;
 export type CrossfadeTime = typeof CROSSFADE_TIMES[number];
 export type DataLanguage = keyof typeof DATA_LANGUAGES;
 export type WidgetBackground = keyof typeof WIDGET_BACKGROUNDS;
@@ -116,10 +116,10 @@ export function readAppearance(value: unknown): Appearance {
 
 export function readPlayback(value: unknown): PlaybackPreferences {
   const data = value as Partial<PlaybackPreferences> | null | undefined;
-  // Preserve the old VK start-page choice as the native Music page.
   const startPage: unknown = data?.startPage;
   return {
-    startPage: startPage === 'vk' ? 'music' : START_PAGES.includes(startPage as StartPage) ? startPage as StartPage : defaultPlayback.startPage,
+    // Removed Music/VK launch destinations now open the merged Home page.
+    startPage: START_PAGES.includes(startPage as StartPage) ? startPage as StartPage : defaultPlayback.startPage,
     seekStep: data?.seekStep && SEEK_STEPS.includes(data.seekStep) ? data.seekStep : defaultPlayback.seekStep,
     autoNext: data?.autoNext !== false,
     autoPlay: data?.autoPlay === true,

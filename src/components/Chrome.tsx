@@ -1,20 +1,21 @@
 import { useText } from '../i18n/context';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { AudioLines, Bug, Copy, Heart, House, ListMusic, Menu, Minus, Music2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Search, Settings2, SlidersHorizontal, Square, X } from 'lucide-react';
+import { AudioLines, Bug, Copy, Heart, House, ListMusic, Menu, Minus, Music2, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2, SlidersHorizontal, Square, X } from 'lucide-react';
 
 import { formatCount } from '../shared/customization';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 
-export type Page = 'player' | 'search' | 'music' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent' | 'mixes';
+export type Page = 'player' | 'search' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent' | 'mixes';
 
 interface TitleBarProps {
   openSettings(): void;
   settingsActive: boolean;
+  glass: boolean;
   addMusic(): void;
   busy: boolean;
 }
 
-export function TitleBar({ openSettings, settingsActive, addMusic, busy }: TitleBarProps) {
+export function TitleBar({ openSettings, settingsActive, glass, addMusic, busy }: TitleBarProps) {
   const t = useText();
   const api = window.luma?.window;
   const [maximized, setMaximized] = useState(false);
@@ -23,9 +24,16 @@ export function TitleBar({ openSettings, settingsActive, addMusic, busy }: Title
     void api.isMaximized().then(setMaximized).catch(() => undefined);
     return api.onMaximized(setMaximized);
   }, [api]);
+  const windowButtons = api && <div className="window-buttons">
+    <button type="button" onClick={api.minimize} title={t("Свернуть")} aria-label={t("Свернуть")}><Minus size={15} /></button>
+    <button type="button" onClick={api.toggleMaximize} title={maximized ? t("Восстановить окно") : t("Развернуть")} aria-label={maximized ? t("Восстановить окно") : t("Развернуть")}>
+      {maximized ? <Copy size={13} /> : <Square size={12} />}
+    </button>
+    <button type="button" className="window-close" onClick={api.close} title={t("Закрыть окно")} aria-label={t("Закрыть окно")}><X size={16} /></button>
+  </div>;
   return (
     <header className={`title-bar${api ? ' native-title-bar' : ''}`}>
-      {!api && <span className="mac-lights" aria-hidden="true"><i /><i /><i /></span>}
+      {glass && (windowButtons ?? <span className="mac-lights" aria-hidden="true"><i /><i /><i /></span>)}
       <div className="wordmark" aria-label="Luma Player">
         <div className="brand-mark" aria-hidden="true"><AudioLines size={20} strokeWidth={2.05} /></div>
         <strong>Luma<span> Player</span></strong>
@@ -35,25 +43,20 @@ export function TitleBar({ openSettings, settingsActive, addMusic, busy }: Title
           aria-label={busy ? t("Добавляем музыку") : t("Добавить музыку")} title={t("Добавить музыку (Ctrl+O)")}><Plus size={19} /></button>
         <button type="button" className="icon-button title-settings" onClick={openSettings} aria-current={settingsActive ? 'page' : undefined}
           aria-label={t("Настройки")} title={t("Настройки (Ctrl+,)")}><Settings2 size={18} /></button>
-        {api ? <div className="window-buttons">
-          <button type="button" onClick={api.minimize} title={t("Свернуть")} aria-label={t("Свернуть")}><Minus size={15} /></button>
-          <button type="button" onClick={api.toggleMaximize} title={maximized ? t("Восстановить окно") : t("Развернуть")} aria-label={maximized ? t("Восстановить окно") : t("Развернуть")}>
-            {maximized ? <Copy size={13} /> : <Square size={12} />}
-          </button>
-          <button type="button" className="window-close" onClick={api.close} title={t("Закрыть окно")} aria-label={t("Закрыть окно")}><X size={16} /></button>
-        </div> : <div className="web-status"><span />{t("Веб-превью")}</div>}
+        {api ? !glass && windowButtons : <div className="web-status"><span />{t("Веб-превью")}</div>}
       </div>
     </header>
   );
 }
 
-const NAVIGATION = [
+const PRIMARY_PAGES = [
   { id: 'player', label: 'Главная', icon: House },
   { id: 'search', label: 'Поиск', icon: Search },
-  { id: 'music', label: 'Музыка', icon: Radio },
   { id: 'library', label: 'Медиатека', icon: Music2 },
-  { id: 'menu', label: 'Меню', icon: Menu },
 ] as const;
+const MENU_PAGE = { id: 'menu', label: 'Меню', icon: Menu } as const;
+const NAVIGATION = [...PRIMARY_PAGES, MENU_PAGE];
+const GLASS_NAVIGATION = [...PRIMARY_PAGES, { id: 'favorites', icon: Heart, label: 'Избранное' } as const, MENU_PAGE];
 
 interface SidebarProps {
   page: Page;
@@ -120,4 +123,18 @@ export function Sidebar(props: SidebarProps) {
       </div>
     </aside>
   );
+}
+
+export function GlassNavigation({ page, navigate, openEqualizer, eqEnabled }: Pick<SidebarProps, 'page' | 'navigate' | 'openEqualizer' | 'eqEnabled'>) {
+  const t = useText();
+  const active = page === 'settings' || page === 'diagnostics' || page === 'recent' ? 'menu' : page === 'mixes' ? 'library' : page;
+  return <div className="glass-dock">
+    <nav className="glass-navigation" aria-label={t('Разделы плеера')}>
+      {GLASS_NAVIGATION.map(({ id, icon: Icon, label }) => <button key={id} type="button" aria-current={active === id ? 'page' : undefined}
+        onClick={() => navigate(id)} aria-label={t(label)} title={t(label)}><Icon size={19} strokeWidth={2} /><span>{t(label)}</span></button>)}
+    </nav>
+    <button type="button" className="glass-sound" aria-label={t('Эквалайзер')} title={t('Эквалайзер')} aria-haspopup="dialog" onClick={openEqualizer}>
+      <SlidersHorizontal size={21} />{eqEnabled && <i className="enabled-dot" />}
+    </button>
+  </div>;
 }

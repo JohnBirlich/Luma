@@ -59,7 +59,7 @@ function ThemeSelect({ value, change }: { value: ThemeName; change(theme: ThemeN
   return (
     <div className="theme-grid" role="group" aria-label={t("Темы плеера")}>
       {(Object.entries(THEMES) as [ThemeName, typeof THEMES[ThemeName]][]).map(([id, theme]) => (
-        <button key={id} className="theme-option" type="button" aria-pressed={id === value} onClick={() => change(id)}>
+        <button key={id} className="theme-option" data-theme-choice={id} type="button" aria-pressed={id === value} onClick={() => change(id)}>
           <span className="theme-option-preview" style={{ '--swatch-side': theme.side, '--swatch-panel': theme.panel, '--swatch-glow': theme.glow, '--swatch-accent': theme.accent } as CSSProperties} aria-hidden="true">
             <span /><span><i /><i /><i /></span><b />
           </span>
@@ -134,7 +134,7 @@ interface SettingsProps {
   sectionId: SettingsSectionId | undefined;
   selectSection(id?: SettingsSectionId): void;
   returnToTab(): void;
-  openMusic(): void;
+  openVkBookmarks(): void;
 }
 
 const SECTIONS = [
@@ -200,19 +200,26 @@ export function SettingsPage(props: SettingsProps) {
             <MenuGroup label={t("Приложение")}>{APP_SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={t(item.label)} detail={t(item.detail)} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
           </>}
           {section?.id === 'look' && <>
-            <SettingCard title={t("Тема")} detail={t("Меняет фон, панели и цвет элементов управления.")}>
-              <ToggleRow title={t("Автоматическая смена темы")} detail={t("Дневная тема с 08:00 до 20:00 по времени устройства. В остальное время — основная тема.")} enabled={appearance.autoTheme} change={() => changeAppearance({ ...appearance, autoTheme: !appearance.autoTheme })} />
-              {appearance.autoTheme && <label className="setting-row select-row"><span><strong>{t("Дневная тема")}</strong><small>{t("Сейчас:")}{" "}{t(THEMES[props.effectiveAppearance.theme].name)}.</small></span>
-                <select value={appearance.dayTheme} onChange={(event) => changeAppearance({ ...appearance, dayTheme: event.currentTarget.value as ThemeName })}>
-                  {Object.entries(THEMES).map(([id, theme]) => <option key={id} value={id}>{t(theme.name)}</option>)}
-                </select></label>}
-              {appearance.autoTheme && <p className="setting-hint">{t("Основная (вечерняя) тема")}</p>}
-              <ThemeSelect value={appearance.theme} change={(theme) => changeAppearance({ ...appearance, theme })} />
+            <SettingCard title={t("Темы")} detail={t("Тема применяется ко всему окну. MacOS меняет компоновку: стеклянная навигация и плавающий плеер.")}>
+              <ThemeSelect value={props.effectiveAppearance.theme} change={(theme) => changeAppearance({ ...appearance, theme, autoTheme: false })} />
+              <ToggleRow title={t("Автоматическая смена темы")} detail={t("С 08:00 до 20:00 действует дневная тема, в остальное время — вечерняя. Ручной выбор выключает расписание.")} enabled={appearance.autoTheme} change={() => changeAppearance({ ...appearance, autoTheme: !appearance.autoTheme })} />
+              {appearance.autoTheme && <>
+                <label className="setting-row select-row"><span><strong>{t("Дневная тема")}</strong><small>{t("Сейчас:")}{" "}{t(THEMES[props.effectiveAppearance.theme].name)}.</small></span>
+                  <select value={appearance.dayTheme} onChange={(event) => changeAppearance({ ...appearance, dayTheme: event.currentTarget.value as ThemeName })}>
+                    {Object.entries(THEMES).map(([id, theme]) => <option key={id} value={id}>{t(theme.name)}</option>)}
+                  </select>
+                </label>
+                <label className="setting-row select-row"><span><strong>{t("Вечерняя тема")}</strong></span>
+                  <select value={appearance.theme} onChange={(event) => changeAppearance({ ...appearance, theme: event.currentTarget.value as ThemeName })}>
+                    {Object.entries(THEMES).map(([id, theme]) => <option key={id} value={id}>{t(theme.name)}</option>)}
+                  </select>
+                </label>
+              </>}
             </SettingCard>
             <SettingCard title={t("При запуске")}>
               <label className="setting-row select-row"><span><strong>{t("Раздел при запуске")}</strong><small>{t("Откроется при следующем запуске Luma.")}</small></span>
                 <select value={playback.startPage} onChange={(event) => changePlayback({ ...playback, startPage: event.currentTarget.value as StartPage })}>
-                  <option value="player">{t("Главная")}</option><option value="library">{t("Медиатека")}</option><option value="local">{t("Локальная библиотека")}</option><option value="search">{t("Поиск")}</option><option value="music">{t("Музыка")}</option>
+                  <option value="player">{t("Главная")}</option><option value="library">{t("Медиатека")}</option><option value="local">{t("Локальная библиотека")}</option><option value="search">{t("Поиск")}</option>
                 </select>
               </label>
               <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openLocalLibrary}>{t("Открыть локальную библиотеку")}</button></div>
@@ -226,14 +233,14 @@ export function SettingsPage(props: SettingsProps) {
                 <label className="custom-accent"><input type="color" value={color} aria-label={t("Свой цвет акцента")} onChange={(event) => changeAppearance({ ...appearance, accent: event.currentTarget.value })} /><span>{color.toUpperCase()}</span></label>
                 {appearance.accent && <button className="text-button" type="button" onClick={() => changeAppearance({ ...appearance, accent: null })}>{t("Цвет темы")}</button>}
               </div>
-              {accent !== color && <p className="setting-hint">{t("Акцент слегка осветлён, чтобы текст был читаемым.")}</p>}
-              <ToggleRow title={t("Компактная боковая панель")} detail={t("Оставить только иконки на широком экране.")} enabled={appearance.compactSidebar} change={() => changeAppearance({ ...appearance, compactSidebar: !appearance.compactSidebar })} />
+              {accent !== color && <p className="setting-hint">{t("Акцент скорректирован для читаемости.")}</p>}
+              <ToggleRow title={t("Компактная боковая панель")} detail={t(props.effectiveAppearance.theme === "macos" ? "MacOS использует плавающую навигацию." : "Оставить только иконки на широком экране.")} disabled={props.effectiveAppearance.theme === "macos"} enabled={appearance.compactSidebar} change={() => changeAppearance({ ...appearance, compactSidebar: !appearance.compactSidebar })} />
               <ToggleRow title={t("Анимации")} detail={t("Плавные переходы, живые фоны и индикатор звука.")} enabled={appearance.motion} change={() => changeAppearance({ ...appearance, motion: !appearance.motion })} />
             </SettingCard>
             <SettingCard title={t("Прочее")}>
               <ToggleRow title={t("Отключить анимацию при смене вкладки")} detail={t("Не влияет на живые фоны и эффекты в плеере.")} enabled={!appearance.tabMotion} change={() => changeAppearance({ ...appearance, tabMotion: !appearance.tabMotion })} />
               <ToggleRow title={t("Показывать полные числа")} detail={t("Например, 1234 вместо 1.2к в счётчиках медиатеки и очереди.")} enabled={appearance.fullNumbers} change={() => changeAppearance({ ...appearance, fullNumbers: !appearance.fullNumbers })} />
-              <ToggleRow title={t("Классический стиль докбара")} detail={t("Строгая панель управления и классические вкладки на узком экране.")} enabled={appearance.classicDock} change={() => changeAppearance({ ...appearance, classicDock: !appearance.classicDock })} />
+              <ToggleRow title={t("Классический стиль докбара")} detail={t(props.effectiveAppearance.theme === "macos" ? "MacOS использует плавающий плеер." : "Строгая панель управления и классические вкладки на узком экране.")} disabled={props.effectiveAppearance.theme === "macos"} enabled={appearance.classicDock} change={() => changeAppearance({ ...appearance, classicDock: !appearance.classicDock })} />
               <label className="setting-row select-row"><span><strong>{t("Язык интерфейса")}</strong><small>{t("Меню, настройки и кнопки Luma. Теги, тексты песен и названия плейлистов не переводятся.")}</small></span>
                 <select value={props.uiLanguage} onChange={(event) => props.changeLanguage(event.currentTarget.value as UiLanguage)}>
                   {Object.entries(UI_LANGUAGES).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
@@ -283,7 +290,7 @@ export function SettingsPage(props: SettingsProps) {
           </>}
           {section?.id === 'playback' && <>
             <SettingCard title={t("Воспроизведение в Luma")}>
-              <ToggleRow title={t("Аудиоэффекты")} detail={t("Применять эквалайзер и предусиление к локальным файлам.")} enabled={props.eqEnabled} change={props.toggleEffects} />
+              <ToggleRow title={t("Аудиоэффекты")} detail={t("Применять параметрический эквалайзер к файлам и демотрекам.")} enabled={props.eqEnabled} change={props.toggleEffects} />
               <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openEqualizer} aria-haspopup="dialog">{t("Настроить эквалайзер")}</button></div>
               <ToggleRow title={t("Автозапуск")} detail={t("Начать воспроизведение локального трека при запуске Luma. Онлайн-потоки автоматически не запускаются.")} enabled={playback.autoPlay} change={() => changePlayback({ ...playback, autoPlay: !playback.autoPlay })} />
               <ToggleRow title={t("Следующий трек автоматически")} detail={t("Если выключено, плеер остановится в конце. Повтор одного трека действует отдельно.")} enabled={playback.autoNext} change={() => changePlayback({ ...playback, autoNext: !playback.autoNext })} />
@@ -325,14 +332,14 @@ export function SettingsPage(props: SettingsProps) {
                 <div className="widget-track"><Artwork track={props.previewTrack} /><div><strong>{props.previewTrack?.title ?? t("Ваша музыка")}</strong><small>{t("Предпросмотр виджета Luma")}</small></div><Play size={16} /></div>
               </WidgetSurface>
               <div className="settings-actions">
-                {window.luma ? <button className="button outline-button" type="button" onClick={props.openWidget} title={WIDGET_SHORTCUT.label} aria-keyshortcuts="Control+Shift+M"><Monitor size={16} />{" "}{t("Открыть виджет Luma")}</button> : <span className="setting-status">{t("В приложении Windows")}</span>}
+                {window.luma ? <button className="button outline-button" type="button" onClick={props.openWidget} title={WIDGET_SHORTCUT.label} aria-keyshortcuts={WIDGET_SHORTCUT.aria}><Monitor size={16} />{" "}{t("Открыть виджет Luma")}</button> : <span className="setting-status">{t("В приложении Windows")}</span>}
               </div>
             </SettingCard>
             <SettingCard title={t("Системная медиапанель")}>
               <ToggleRow title={t("Передавать данные трека системе")} detail={t("Название, исполнитель и обложка для медиапанели. Медиаклавиши работают отдельно.")} enabled={playback.publishTrack} change={() => changePlayback({ ...playback, publishTrack: !playback.publishTrack })} />
             </SettingCard>
             <SettingCard title={t("Сервисы")}>
-              <VkBookmarkSettings openMusic={props.openMusic} />
+              <VkBookmarkSettings openVkBookmarks={props.openVkBookmarks} />
               <LastFmSettings connected={props.connected} />
               <Service title={t("Тексты песен")} status="LRCLIB">
                 <p>{t("Теги и локальные .lrc / .lyrics.txt, LRCLIB и несколько оригинальных изданий из Викитеки. Для полного каталога Musixmatch нужен отдельный договор.")}</p>
@@ -520,14 +527,14 @@ function StreamCacheSettings() {
   </SettingCard>;
 }
 
-function VkBookmarkSettings({ openMusic }: { openMusic(): void }) {
+function VkBookmarkSettings({ openVkBookmarks }: { openVkBookmarks(): void }) {
   const t = useText();
   const [resetting, setResetting] = useState(false);
   const [notice, setNotice] = useState('');
   return <Service title={t('Закладки VK')} status={t('Внешние ссылки')}>
-    <p>{t('Luma больше не загружает страницы VK внутри окна. Личные рекомендации и воспроизведение VK доступны только на стороне сервиса.')}</p>
+    <p>{t('У Luma нет доступа к личной медиатеке и потокам VK Музыки. Здесь сохраняются только ссылки на плейлисты.')}</p>
     <div className="settings-actions">
-      <button className="button outline-button" type="button" onClick={openMusic}>{t('Открыть раздел «Музыка»')}</button>
+      <button className="button outline-button" type="button" onClick={openVkBookmarks}>{t('Открыть закладки VK на главной')}</button>
       {window.luma && <button className="button outline-button" type="button" disabled={resetting} onClick={() => {
         setResetting(true); setNotice('');
         void window.luma?.clearLegacyVkSession().then(() => setNotice('Данные старого сеанса VK удалены.'), () => setNotice('Не удалось очистить данные входа VK.')).finally(() => setResetting(false));

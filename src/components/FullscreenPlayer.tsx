@@ -45,7 +45,6 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   const t = useText();
   const { track, tint, appearance, playing, favorite, close, karaoke } = props;
   const { hero, effect, effectStrength, motion } = appearance;
-  const backdropEffect = karaoke ? 'cover' : effect;
   const artworkBackdrop = track.backdropUrl ?? track.artworkUrl;
   const ref = useRef<HTMLDialogElement>(null);
   const [karaokeQueue, setKaraokeQueue] = useState(false);
@@ -62,12 +61,14 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   }, []);
 
   return <dialog ref={ref} className="immersive-player" aria-labelledby="immersive-title" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <div ref={props.stage} data-effect={backdropEffect} className={`immersive-stage ${karaoke ? 'karaoke-stage' : `immersive-${hero}`}`} style={{ '--immersive-tone': tint } as CSSProperties}>
-      {!karaoke && effect !== 'cover' && artworkBackdrop && (hero === 'cover' || (appearance.coverColors && effect === 'off')) &&
-        <Artwork track={track} className="immersive-backdrop" imageUrl={artworkBackdrop} />}
-      <SceneBackground effect={backdropEffect} track={track} strength={karaoke ? .28 : effectStrength} tempo={appearance.effectTempo}
-        animate={!karaoke && motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
-      <div aria-hidden="true" className="immersive-scrim" />
+    <div ref={props.stage} data-effect={karaoke ? 'off' : effect} className={`immersive-stage ${karaoke ? 'karaoke-stage' : `immersive-${hero}`}`} style={{ '--immersive-tone': tint } as CSSProperties}>
+      {!karaoke && <>
+        {effect !== 'cover' && artworkBackdrop && (hero === 'cover' || (appearance.coverColors && effect === 'off')) &&
+          <Artwork track={track} className="immersive-backdrop" imageUrl={artworkBackdrop} />}
+        <SceneBackground effect={effect} track={track} strength={effectStrength} tempo={appearance.effectTempo}
+          animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
+        <div aria-hidden="true" className="immersive-scrim" />
+      </>}
       <header className="immersive-header">
         <button type="button" className="icon-button immersive-collapse" onClick={close} title={t("Свернуть (Esc)")} aria-label={t("Свернуть полноэкранный плеер")}><ChevronDown size={24} /></button>
         <div><p className="overline">{t(karaoke ? "Караоке" : "Сейчас играет")}</p><strong>{track.online ? t("Онлайн-трек") : track.demo ? t("Демотреки Luma") : t("Локальная медиатека")}</strong></div>

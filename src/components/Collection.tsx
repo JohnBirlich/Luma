@@ -4,9 +4,7 @@ import { Cloud, CloudOff, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headpho
 import type { CSSProperties } from 'react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { formatCount } from '../shared/customization';
-import type { TrackLyrics } from '../player/useTrackLyrics';
-import { LyricsPanel } from './LyricsPanel';
-import { homeRecommendations, musicGroups, tracksInGroup } from '../shared/mix';
+import { musicGroups, tracksInGroup } from '../shared/mix';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
 import type { OnlineFilter, OnlineTrack } from '../shared/online';
@@ -67,17 +65,10 @@ function TrackCard({ track, active, playing, row, play, add, editCover, editDeta
   );
 }
 
-interface PlayerPageProps {
+interface NowPlayingProps {
   track: Track | null;
-  tracks: Track[];
-  recent: Track[];
-  favoriteIds: ReadonlySet<string>;
   disliked: ReadonlySet<string>;
   toggleDislike(id: string): void;
-  connected: boolean;
-  elapsed: number;
-  lyrics?: TrackLyrics;
-  openMixes(): void;
   tint: string;
   appearance: Appearance;
   favorite: boolean;
@@ -93,17 +84,15 @@ interface PlayerPageProps {
   count: number;
   eqEnabled: boolean;
   toggle(): void;
-  play(id: string): void;
-  goToLibrary(): void;
   openEqualizer(): void;
   editCover(id: string): void;
   editDetails(id: string): void;
   addMusic(): void;
 }
 
-export function PlayerPage(props: PlayerPageProps) {
+export function NowPlayingCard(props: NowPlayingProps) {
   const t = useText();
-  const { track, tracks, tint, playing, appearance } = props;
+  const { track, tint, playing, appearance } = props;
   const { hero, effect, effectStrength, motion } = appearance;
   const [failedPicture, setFailedPicture] = useState<string>();
   const source = track?.backdropUrl ?? track?.artworkUrl;
@@ -111,25 +100,18 @@ export function PlayerPage(props: PlayerPageProps) {
   const artwork = fallback ? DEFAULT_ARTWORK_URL : source;
   const showPicture = !!track && effect !== 'cover' && (hero === 'cover' || hero === 'blur');
   const centered = hero === 'center';
-  const picks = useMemo(() => homeRecommendations(tracks, props.recent, props.favoriteIds, !props.connected, props.disliked), [tracks, props.recent, props.favoriteIds, props.connected, props.disliked]);
-  const homeSections = [
-    { label: t("Похожее на прослушанное"), items: picks.related, icon: Headphones },
-    { label: t("Открытия в медиатеке"), items: picks.discoveries, icon: Sparkles },
-    { label: t("Недавно слушали"), items: picks.recent, icon: History },
-  ];
-  const featured = useMemo(() => tracks.filter(({ id }) => (tracks.length === 1 || id !== track?.id) && !props.disliked.has(id)).slice(0, 4), [tracks, track?.id, props.disliked]);
   return (
-    <div className="page player-page">
-      <header className="page-header">
-        <div><p className="overline page-kicker"><span />{t("Плеер Luma")}</p><h1>{t("Сейчас играет")}</h1></div>
+    <section className="home-now" aria-labelledby="home-now-title">
+      <header className="home-now-header">
+        <h2 id="home-now-title">{t("Сейчас играет")}</h2>
         <div className="page-actions">
-          <button type="button" className="button outline-button scene-open" onClick={props.openAppearance} aria-label={t("Оформление экрана «Сейчас играет»")} title={t("Оформление")} aria-haspopup="dialog"><Palette size={17} /><span>{t("Оформление")}</span></button>
+          <button type="button" className="button outline-button scene-open" onClick={props.openAppearance} aria-label={t("Оформление экрана «Сейчас играет»")} title={t("Оформление")} aria-haspopup="dialog"><Palette size={17} /></button>
           {track && !track.demo && !track.online && <button type="button" className="button outline-button track-details-button" onClick={() => props.editDetails(track.id)}
             aria-label={t("Редактировать данные трека")} title={t("Редактировать данные трека")} aria-haspopup="dialog"><Pencil size={16} /></button>}
           {track && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
-            aria-label={t("Редактировать обложку")} title={t("Редактировать обложку")} aria-haspopup="dialog"><ImagePlus size={17} /><span>{t("Обложка")}</span></button>}
+            aria-label={t("Редактировать обложку")} title={t("Редактировать обложку")} aria-haspopup="dialog"><ImagePlus size={17} /></button>}
           <button type="button" className="button outline-button page-equalizer" onClick={props.openEqualizer} aria-label={t("Эквалайзер")} title={t("Эквалайзер")} aria-haspopup="dialog">
-            <SlidersHorizontal size={17} /><span>{t("Эквалайзер")}</span>{props.eqEnabled && <i className="enabled-dot" />}
+            <SlidersHorizontal size={17} />{props.eqEnabled && <i className="enabled-dot" />}
           </button>
         </div>
       </header>
@@ -147,7 +129,7 @@ export function PlayerPage(props: PlayerPageProps) {
             {track ? <><span>{track.artist}</span><span className="hero-dot" />{track.online ? <OnlineCredit track={{ online: track.online }} /> : <span>{track.album}</span>}</> : <span>{t("Добавьте аудиофайлы, чтобы начать.")}</span>}
           </div>
           <div className="hero-actions-row">
-            <button type="button" className="button primary-button hero-action" onClick={track ? props.toggle : props.addMusic}>
+            <button type="button" className="button primary-button hero-action" aria-label={track ? props.loading ? t("Отменить загрузку") : playing ? t("Пауза") : t("Воспроизвести") : t("Добавить музыку")} onClick={track ? props.toggle : props.addMusic}>
               {track ? playing || props.loading ? <Pause size={16} fill="currentColor" /> : <Play className="play-icon" size={16} fill="currentColor" /> : <Plus size={18} />}
               <span>{track ? props.loading ? t("Отменить загрузку") : playing ? t("Пауза") : t("Воспроизвести") : t("Добавить музыку")}</span>
             </button>
@@ -161,29 +143,7 @@ export function PlayerPage(props: PlayerPageProps) {
         </div>
         {track && <span className="hero-index" title={t("Позиция в очереди")}><span>{formatCount(props.position, appearance.fullNumbers, t.language).padStart(2, '0')}</span><b>/</b>{formatCount(props.count, appearance.fullNumbers, t.language).padStart(2, '0')}</span>}
       </section>
-      {track && (!track.demo || props.lyrics?.attached) && props.lyrics && <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} demo={track.demo} />}
-      {homeSections.some(({ items }) => items.length) && <section className="home-personal" aria-labelledby="home-personal-title">
-        <header className="section-header"><div><p className="overline">{t("Только на этом устройстве")}</p><h2 id="home-personal-title">{t("Для вас в Luma")}</h2></div>
-          <button className="text-button" type="button" onClick={props.openMixes}>{t("Миксы Luma")}{" "}<ArrowRight size={16} /></button></header>
-        <div className="home-personal-grid">{homeSections.map(({ label, items, icon: Icon }, index) => items.length > 0 && <section key={label} className={`home-pick home-pick-${index}`} aria-label={label}>
-          <div className="home-pick-title"><Icon size={17} /><h3>{label}</h3></div>
-          <ul>{items.map((item) => <li key={item.id}>
-            <button type="button" className="home-pick-track" aria-label={t("Слушать: {0}", item.title)} onClick={() => props.play(item.id)}>
-              <Artwork track={item} /><span><strong>{item.title}</strong><small>{item.artist}</small></span><Play size={13} />
-            </button>
-          </li>)}</ul>
-        </section>)}</div>
-      </section>}
-      {featured.length > 0 && <section aria-labelledby="featured-title" className="featured">
-        <header className="section-header">
-          <div><p className="overline">{t("Коллекция")}</p><h2 id="featured-title">{t("В медиатеке")}</h2></div>
-          <button type="button" className="text-button" onClick={props.goToLibrary}>{t("Вся музыка")}{" "}<ArrowRight size={16} /></button>
-        </header>
-        <div className="track-grid featured-grid">
-          {featured.map((item) => <TrackCard key={item.id} track={item} active={item.id === track?.id} playing={playing} play={props.play} />)}
-        </div>
-      </section>}
-    </div>
+    </section>
   );
 }
 
@@ -203,7 +163,7 @@ interface LibraryPageProps {
   goToLibrary(): void;
   layout: LibraryLayout;
   changeLayout(layout: LibraryLayout): void;
-  openMusic(): void;
+  openHome(): void;
   openMixes(): void;
   openRecent(): void;
   openFavorites(): void;
@@ -288,7 +248,7 @@ export function LibraryPage(props: LibraryPageProps) {
           <Headphones size={16} /> <span>{t("Демотреки")}</span>
         </button>}
       </div>
-      {isSearch && <div className="search-scope"><span>{t("Сначала в медиатеке")}</span><button className="text-button" type="button" onClick={props.openMusic}><Radio size={14} />{" "}{t("Открыть раздел «Музыка»")}</button></div>}
+      {isSearch && <div className="search-scope"><span>{t("Сначала в медиатеке")}</span><button className="text-button" type="button" onClick={props.openHome}><Radio size={14} />{" "}{t("Вернуться на главную")}</button></div>}
       <div className="library-caption">
         <div><Disc3 size={16} />{trackCount(results.length, props.fullNumbers, t.language)}</div>
         <div className="library-actions">

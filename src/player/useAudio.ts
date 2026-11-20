@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { BANDS, clamp } from '../shared/equalizer';
+import { clamp, dbToLinear, effectivePreamp, EQ_BAND_COUNT, EQ_REFERENCE_RATE, filterHz } from '../shared/equalizer';
 import type { EqualizerSettings } from '../shared/equalizer';
 import { isMetered, streamUrl } from '../shared/audio-quality';
 import type { AudioQuality } from '../shared/audio-quality';
@@ -10,6 +10,7 @@ import { ListeningClock } from '../shared/lastfm';
 import type { Track } from '../shared/media';
 import { recordDiagnostic } from '../data/diagnostics';
 
+export const SPECTRUM_FFT_SIZE = 1024;
 export type ReadSpectrum = (buffer: Uint8Array<ArrayBuffer>) => boolean;
 
 interface Snapshot {
@@ -36,7 +37,6 @@ function markListening(deck: Deck) {
   }
 }
 const stopped: Snapshot = { playing: false, elapsed: 0, duration: 0, error: '' };
-const linear = (db: number) => 10 ** (db / 20);
 
 class AudioGraph {
   readonly context = new AudioContext();
@@ -44,16 +44,11 @@ class AudioGraph {
   private preamp = this.context.createGain();
   readonly master = this.context.createGain();
   private decks = new Map<HTMLAudioElement, GainNode>();
-  private filters = BANDS.map(({ hz, type }) => {
-    const filter = this.context.createBiquadFilter();
-    filter.type = type;
-    filter.frequency.value = hz;
-    filter.Q.value = 0.9;
-    return filter;
-  });
+  private filters = Array.from({ length: EQ_BAND_COUNT }, () => this.context.createBiquadFilter());
+  private equalizer?: EqualizerSettings;
 
   constructor(audio: HTMLAudioElement) {
-    this.analyser.fftSize = 1024;
+    this.analyser.fftSize = SPECTRUM_FFT_SIZE;
     this.analyser.smoothingTimeConstant = 0.61;
     const chain: AudioNode[] = [this.preamp, ...this.filters, this.analyser, this.master, this.context.destination];
     chain.slice(1).forEach((node, index) => chain[index].connect(node));
@@ -86,8 +81,20 @@ class AudioGraph {
       else parameter.setTargetAtTime(value, this.context.currentTime, 0.025);
     };
     set(this.master.gain, volume);
-    set(this.preamp.gain, settings.enabled ? linear(settings.preamp) : 1);
-    this.filters.forEach((filter, index) => set(filter.gain, settings.enabled ? settings.gains[index] : 0));
+    if (this.equalizer === settings) return;
+    this.equalizer = settings;
+    const rate = this.context.sampleRate;
+    set(this.preamp.gain, dbToLinear(effectivePreamp(settings, rate)));
+    this.filters.forEach((filter, index) => {
+      const band = settings.bands[index];
+      const active = settings.enabled && band.enabled;
+      // Zero-gain peaking is transparent, unlike zero-gain notch. It is the per-slot bypass.
+      const type = active ? band.type : 'peaking';
+      if (filter.type !== type) filter.type = type;
+      set(filter.frequency, filterHz(band.hz, rate));
+      set(filter.Q, band.q);
+      set(filter.gain, active ? band.gain : 0);
+    });
   }
 }
 
@@ -388,9 +395,9 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
   const position = useCallback(() => active.current?.audio.currentTime ?? 0, []);
   const readSpectrum = useCallback<ReadSpectrum>((buffer) => {
     const engine = graph.current;
-    if (active.current?.track.online || !engine || engine.context.state !== 'running') return false;
+    if (!active.current || active.current.track.online || active.current.audio.paused || !engine || engine.context.state !== 'running') return false;
     engine.analyser.getByteFrequencyData(buffer);
     return true;
   }, []);
-  return { ...snapshot, floatStatus, ref, blendRef, streamRef, load, play, pause, toggle, seek, isPlaying, position, readSpectrum, cancelTransitions };
+  return { ...snapshot, floatStatus, sampleRate: graph.current?.context.sampleRate ?? EQ_REFERENCE_RATE, ref, blendRef, streamRef, load, play, pause, toggle, seek, isPlaying, position, readSpectrum, cancelTransitions };
 }

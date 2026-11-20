@@ -4,17 +4,19 @@ import { UiText } from './i18n/context';
 import type { Text } from './i18n/text';
 import { textFor } from './i18n/text';
 import { CircleAlert, CircleCheck, FileAudio, X } from 'lucide-react';
-import { Sidebar, TitleBar } from './components/Chrome';
+import { GlassNavigation, Sidebar, TitleBar } from './components/Chrome';
 import type { Page } from './components/Chrome';
-import { LibraryPage, PlayerPage } from './components/Collection';
+import { LibraryPage, NowPlayingCard } from './components/Collection';
 import { CoverEditor } from './components/CoverEditor';
 import { DesktopWidget } from './components/DesktopWidget';
 import { DiagnosticsPage } from './components/Diagnostics';
 import { Equalizer } from './components/Equalizer';
 import { FullscreenPlayer } from './components/FullscreenPlayer';
 import type { PlaybackProps } from './components/PlaybackControls';
+import { LyricsPanel } from './components/LyricsPanel';
 import { MixesPage } from './components/Mixes';
 import { OnlineCredit } from './components/OnlineMusic';
+import type { HomeTab } from './components/HomePage';
 import type { OnlineAction } from './components/OnlineMusic';
 import { MenuPage } from './components/Menu';
 import { NowPlayingDialog } from './components/NowPlayingOptions';
@@ -37,7 +39,7 @@ import { useTrackLyrics } from './player/useTrackLyrics';
 import { usePalette } from './player/usePalette';
 import { trackCoverKey, withCover } from './shared/artwork';
 import type { CoverTarget } from './shared/artwork';
-import { defaultAppearance, defaultPlayback, scheduledTheme, shouldAdvanceAfterEnd, themeVariables, WIDGET_SHORTCUT } from './shared/customization';
+import { defaultAppearance, defaultPlayback, scheduledTheme, shouldAdvanceAfterEnd, themeVariables } from './shared/customization';
 import type { Appearance, LibraryLayout } from './shared/customization';
 import { clamp } from './shared/equalizer';
 import { defaultAudioQuality, isMetered } from './shared/audio-quality';
@@ -54,7 +56,7 @@ interface Notice { message: NoticeText; detail?: NoticeText; error?: boolean }
 const noticeText = (t: Text, message: NoticeText) => typeof message === 'function' ? message(t) : t(message);
 const demoIds = demoTracks.map((track) => track.id);
 const noop = () => undefined;
-const MusicHub = lazy(() => import('./components/MusicHub').then(({ MusicHub }) => ({ default: MusicHub })));
+const HomePage = lazy(() => import('./components/HomePage').then(({ HomePage }) => ({ default: HomePage })));
 const noTransition = { seconds: 0, next: (): Track | undefined => undefined, advance: (_id: string) => undefined as void };
 const connection = (navigator as Navigator & { connection?: EventTarget & { type?: string; saveData?: boolean } }).connection;
 function dataSaving() { return isMetered('auto', connection); }
@@ -81,6 +83,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [working, setWorking] = useState(false);
   const [page, setPage] = useState<Page>(boot.playback.startPage === 'local' ? 'library' : boot.playback.startPage);
+  const [homeTab, setHomeTab] = useState<HomeTab>('home');
+  const [homeQuery, setHomeQuery] = useState('');
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>();
   const settingsFrom = useRef<{ page: Exclude<Page, 'settings'>; top: number }>({ page: 'player', top: 0 });
   const returningTop = useRef(0);
@@ -126,6 +130,7 @@ export default function App() {
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
   }, [appearance.autoTheme]);
   const effectiveAppearance = useMemo(() => ({ ...appearance, theme: scheduledTheme(appearance, hour) }), [appearance, hour]);
+  const glass = effectiveAppearance.theme === 'macos';
   const metered = useSyncExternalStore(subscribeNetwork, dataSaving);
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
   const theme = useMemo(() => themeVariables(effectiveAppearance), [effectiveAppearance]);
@@ -156,7 +161,7 @@ export default function App() {
   }), []);
   const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
-  const lyrics = useTrackLyrics(current, { enabled: !widget && (presentationKind === 'karaoke' || (!presentationOpen && page === 'player')),
+  const lyrics = useTrackLyrics(current, { enabled: !widget && (presentationKind === 'karaoke' || (!presentationOpen && page === 'player' && homeTab === 'home' && !homeQuery.trim())),
     auto: preferences.autoLyrics, connected, playing: player.playing, duration: player.duration });
   const changeWidget = useCallback(async (enabled: boolean) => {
     if (!window.luma || switchingWidget.current || presentationOpen) return;
@@ -166,6 +171,9 @@ export default function App() {
     catch { setNotice({ message: "Не удалось переключить режим виджета.", error: true }); }
     finally { switchingWidget.current = false; setWidgetPending(false); }
   }, [presentationOpen]);
+  useEffect(() => window.luma?.window.onWidgetShortcut(() => {
+    if (!modalOpen) void changeWidget(!widget);
+  }), [changeWidget, modalOpen, widget]);
   const sampledTone = usePalette(current);
   const tint = appearance.coverColors ? sampledTone : theme['--accent'];
   const transportPlaying = player.playing || !!player.loading;
@@ -337,11 +345,6 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || modalOpen) return;
-      if (!presentationOpen && window.luma && (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.code === WIDGET_SHORTCUT.code) {
-        event.preventDefault();
-        if (!event.repeat) void changeWidget(!widget);
-        return;
-      }
       if (widget && event.key === 'Escape') { event.preventDefault(); if (!event.repeat) void changeWidget(false); return; }
       if (widget && !event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'KeyF') return;
       if (widget && (event.ctrlKey || event.metaKey)) return;
@@ -559,11 +562,16 @@ export default function App() {
   const navigate = useCallback((target: Page, scope: 'all' | 'offline' = 'all') => {
     if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
     if (target === 'library') setLibraryScope(scope);
+    if (target === 'player') { setHomeTab('home'); setHomeQuery(''); }
     setPage(target);
   }, []);
   const goToLibrary = useCallback(() => navigate('library'), [navigate]);
   const openMixes = useCallback(() => navigate('mixes'), [navigate]);
-  const openMusic = useCallback(() => navigate('music'), [navigate]);
+  const selectHomeTab = useCallback((tab: HomeTab) => {
+    setHomeTab(tab); setHomeQuery('');
+    scrollArea.current?.scrollTo({ top: 0 });
+  }, []);
+  const openVkBookmarks = useCallback(() => { navigate('player'); selectHomeTab('mine'); }, [navigate, selectHomeTab]);
   const discardCover = useCallback((key: string) => { void updateCover(key); }, [updateCover]);
   const openEqualizer = () => setShowEqualizer(true);
   const toggleQueue = () => setQueueOpen((open) => !open);
@@ -590,7 +598,7 @@ export default function App() {
   };
 
   return (
-    <UiText.Provider value={t}><div data-theme={effectiveAppearance.theme} data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${widget ? ' widget-mode' : queueOpen ? ' queue-visible' : ''}${appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
+    <UiText.Provider value={t}><div data-theme={effectiveAppearance.theme} data-layout={glass ? 'glass' : undefined} data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={!glass ? appearance.compactSidebar ? 'compact' : 'expanded' : undefined} className={`app-shell${widget ? ' widget-mode' : queueOpen ? ' queue-visible' : ''}${!glass && appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
       onDragEnter={(event) => {
         if (modalOpen || presentationOpen || widget || !filesDragged(event)) return;
         event.preventDefault();
@@ -610,31 +618,35 @@ export default function App() {
         setDropActive(false);
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
-      {!widget && <TitleBar openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready} />}
-      {!widget && <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
+      {!widget && <TitleBar glass={glass} openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready} />}
+      {!widget && (glass ? <GlassNavigation page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled} /> : <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
         fullNumbers={appearance.fullNumbers} queued={queued.length} queueOpen={queueOpen} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
-        compact={appearance.compactSidebar} toggleCompact={toggleCompact} />}
+        compact={appearance.compactSidebar} toggleCompact={toggleCompact} />)}
       <main className="main-pane" ref={scrollArea}>
         <div key={basePage} className="page-body" hidden={widget || page === 'settings'}>
-        {basePage === 'music' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
-          <MusicHub tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
-            currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={page === 'music' && !widget && !modalOpen && !presentationOpen}
+        {basePage === 'player' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
+          <HomePage tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
+            tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab}
+            currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={page === 'player' && !widget && !modalOpen && !presentationOpen}
             busy={working || !ready} play={playTrack} playMix={playAll} startRadio={startRadio} chooseOnline={chooseOnline}
-            covers={covers} editCover={setCoverTarget} discardCover={discardCover} openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose} />
+            covers={covers} editCover={setCoverTarget} discardCover={discardCover} openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose}
+            nowPlaying={<NowPlayingCard track={current} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
+              playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
+              count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle}
+              favorite={Boolean(current && favoriteIds.has(current.id))} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)}
+              openPresentation={showPresentation} openKaraoke={showKaraoke} sceneVisible={page === 'player' && !widget && !presentationOpen && !modalOpen}
+              readSpectrum={player.readSpectrum} openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} />}
+            lyrics={current && !presentationOpen && page === 'player' && (!current.demo || lyrics.attached)
+              ? <LyricsPanel key={current.id} state={lyrics} elapsed={player.elapsed} clock={player.playing ? position : undefined} demo={current.demo} /> : undefined} />
           </Suspense> :
           basePage === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :
           basePage === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers} ready={ready && !working}
-            openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={() => navigate('mixes')} openDiagnostics={() => navigate('diagnostics')} openMusic={openMusic} openEqualizer={openEqualizer} addMusic={choose} /> :
+            openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={openMixes} openDiagnostics={() => navigate('diagnostics')} openEqualizer={openEqualizer} addMusic={choose} /> :
           basePage === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} disliked={dislikedIds} recent={recent} fullNumbers={appearance.fullNumbers}
             playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :
-          basePage === 'player' ? <PlayerPage track={current} tracks={collection} tint={tint} appearance={effectiveAppearance}
-            recent={recent} favoriteIds={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} connected={connected} elapsed={player.elapsed} lyrics={!presentationOpen && page === 'player' ? lyrics : undefined} openMixes={() => navigate('mixes')} playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
-            count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle} play={(id) => playTrack(id, true)} goToLibrary={goToLibrary}
-            favorite={Boolean(current && favoriteIds.has(current.id))} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)} openPresentation={showPresentation} openKaraoke={showKaraoke} sceneVisible={page !== 'settings' && !presentationOpen && !modalOpen} readSpectrum={player.readSpectrum}
-            openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} /> :
           <LibraryPage key={`${basePage}:${libraryScope}`} initialScope={basePage === 'library' ? libraryScope : 'all'} fullNumbers={appearance.fullNumbers} tracks={basePage === 'favorites' ? favorites : basePage === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
             mode={basePage === 'favorites' || basePage === 'search' || basePage === 'recent' ? basePage : 'library'} favorites={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
-            chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openMusic={openMusic} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
+            chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openHome={() => navigate('player')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
         </div>
         {page === 'settings' && !widget && <div className="page-body" key="settings">
           <SettingsPage uiLanguage={preferences.uiLanguage} changeLanguage={(uiLanguage) => setPreferences((data) => ({ ...data, uiLanguage }))} appearance={appearance} effectiveAppearance={effectiveAppearance} locale={locale} playback={playback} audioQuality={audioQuality}
@@ -651,7 +663,7 @@ export default function App() {
             toggleEffects={() => setPreferences((data) => ({ ...data, equalizer: { ...data.equalizer, enabled: !data.equalizer.enabled } }))}
             openLocalLibrary={() => navigate('library', 'offline')} widgetTint={sampledTone} openWidget={() => { void changeWidget(true); }}
             openTrackInfo={current && !current.demo && !current.online ? () => editTrackDetails(current.id) : undefined}
-            openMusic={openMusic} reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
+            openVkBookmarks={openVkBookmarks} reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
         </div>}
       </main>
       {!widget && queueOpen && <>
@@ -660,8 +672,8 @@ export default function App() {
           close={closeQueue} play={(id) => playTrack(id, true)} remove={removeQueued} move={(from, to) => commit(moveUpcoming(queueRef.current, from, to))} goToLibrary={goToLibrary} />
       </>}
       {widget ? <DesktopWidget track={current} tint={sampledTone} background={appearance.widgetBackground} controls={localControls} pending={widgetPending} restore={() => { void changeWidget(false); }} />
-      : <PlayerBar {...localControls} track={current} classic={appearance.classicDock}
-        goToPlayer={() => setPage('player')} openPresentation={showPresentation} openKaraoke={showKaraoke} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
+      : <PlayerBar {...localControls} track={current} classic={!glass && appearance.classicDock}
+        goToPlayer={() => { navigate('player'); scrollArea.current?.scrollTo({ top: 0 }); }} openPresentation={showPresentation} openKaraoke={showKaraoke} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
       {presentationKind && current && !widget && <FullscreenPlayer {...localControls} karaoke={presentationKind === 'karaoke'} lyrics={lyrics} clock={player.playing ? position : undefined}
         toggleKaraoke={presentationKind === 'karaoke' ? showPresentation : showKaraoke} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={appearance}
         favorite={favoriteIds.has(current.id)} disliked={dislikedIds.has(current.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
@@ -685,7 +697,7 @@ export default function App() {
       {coverTarget && <CoverEditor key={coverTarget.key} target={coverTarget} currentUrl={covers.get(coverTarget.key)} update={saveCover} close={() => setCoverTarget(undefined)} />}
       {detailsTrack && <TrackDetailsEditor key={detailsTrack.id} locale={locale} track={detailsTrack} edited={details.has(detailsTrack.id)} save={saveDetails} close={() => setDetailsId(undefined)} />}
       {showAppearance && <NowPlayingDialog appearance={appearance} tint={tint} track={current} playing={player.playing} sample={player.playing && !current?.online ? player.readSpectrum : undefined} change={changeAppearance} close={() => setShowAppearance(false)} />}
-      {showEqualizer && <Equalizer settings={preferences.equalizer} change={(equalizer) => setPreferences((data) => ({ ...data, equalizer }))} close={() => setShowEqualizer(false)} />}
+      {showEqualizer && <Equalizer settings={preferences.equalizer} sampleRate={player.sampleRate} spectrum={player.readSpectrum} live={appearance.motion && player.playing && !current?.online} online={!!current?.online} change={(equalizer) => setPreferences((data) => ({ ...data, equalizer }))} close={() => setShowEqualizer(false)} />}
     </div></UiText.Provider>
   );
 }

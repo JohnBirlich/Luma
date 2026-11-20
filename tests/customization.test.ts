@@ -10,7 +10,17 @@ test('customization reads old profiles without altering queue, volume or equaliz
     equalizer: { enabled: true, preset: 'custom', preamp: -2, gains: [1, 2, 3, 4, 5] },
     queue: { order: ['local-1'], currentId: 'local-1', beforeShuffle: null, repeat: 'one' },
   };
-  assert.deepEqual(decodePreferences(JSON.stringify(previous)), { ...previous, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], onlineTracks: [], onlineRefs: [] });
+  const { equalizer, ...rest } = decodePreferences(JSON.stringify(previous));
+  const { equalizer: oldEqualizer, ...old } = previous;
+  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], onlineTracks: [], onlineRefs: [] });
+  assert.equal(equalizer.enabled, oldEqualizer.enabled);
+  assert.equal(equalizer.preset, oldEqualizer.preset);
+  assert.equal(equalizer.preamp, oldEqualizer.preamp);
+  assert.equal(equalizer.autoHeadroom, false, 'upgrading does not change the old base gain');
+  assert.equal(equalizer.bands.length, 10);
+  assert.deepEqual(equalizer.bands.filter(({ enabled }) => enabled).map(({ hz, type, q, gain }) => [hz, type, q, gain]), [
+    [60, 'lowshelf', .9, 1], [230, 'peaking', .9, 2], [910, 'peaking', .9, 3], [3600, 'peaking', .9, 4], [14000, 'highshelf', .9, 5],
+  ]);
 });
 
 test('customization persists valid choices and validates each stored field', () => {

@@ -18,10 +18,10 @@ import { ReleaseLink, useInstalledBuild } from './About';
 import { VkBookmarks } from './VkBookmarks';
 import type { BookmarkProps } from './VkBookmarks';
 import { useVisualMotion } from '../player/useVisualMotion';
-import './music-hub.css';
+import './home.css';
 
-const TABS = { home: 'Главная', mine: 'Моя музыка', browse: 'Обзор', radio: 'Радио', updates: 'Обновления' } as const;
-type Tab = keyof typeof TABS;
+const TABS = { home: 'Для вас', mine: 'Моя музыка', browse: 'Обзор', radio: 'Радио', updates: 'Обновления' } as const;
+export type HomeTab = keyof typeof TABS;
 const MOODS = [
   { name: 'Спокойно', tags: ['ambient', 'эмбиент', 'jazz', 'джаз', 'chillout', 'downtempo', 'даунтемпо'], color: 'orchid', icon: '✦' },
   { name: 'В движении', tags: ['rock', 'рок', 'metal', 'метал', 'dance', 'электроника', 'electronic'], color: 'mango', icon: '↗' },
@@ -40,7 +40,13 @@ const DEMO_COLLECTIONS = [
 ] as const;
 const COLORS = ['blue', 'orchid', 'aqua', 'rose', 'mango', 'lime'];
 
-interface HubProps extends BookmarkProps {
+interface HomeProps extends BookmarkProps {
+  tab: HomeTab;
+  query: string;
+  selectTab(tab: HomeTab): void;
+  setQuery(value: string): void;
+  nowPlaying: ReactNode;
+  lyrics: ReactNode;
   tracks: Track[];
   recent: Track[];
   favorites: ReadonlySet<string>;
@@ -91,7 +97,7 @@ const TrackRows = memo(function TrackRows({ tracks, play, currentId, playing, st
     </button></li>;
   })}</ul>;
 });
-function Updates({ tracks, play, currentId, playing }: Pick<HubProps, 'tracks' | 'play' | 'currentId' | 'playing'>) {
+function Updates({ tracks, play, currentId, playing }: Pick<HomeProps, 'tracks' | 'play' | 'currentId' | 'playing'>) {
   const t = useText();
   const info = useInstalledBuild();
   const latest = useMemo(() => tracks.filter(({ demo, online }) => !demo && !online).slice(-9).reverse(), [tracks]);
@@ -104,12 +110,11 @@ function Updates({ tracks, play, currentId, playing }: Pick<HubProps, 'tracks' |
   </>;
 }
 
-export const MusicHub = memo(function MusicHub(props: HubProps) {
+export const HomePage = memo(function HomePage(props: HomeProps) {
   const liquid = useVisualMotion(props.visible && props.motion);
   const t = useText();
   const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary } = props;
-  const [tab, setTab] = useState<Tab>('home');
-  const [query, setQuery] = useState('');
+  const { tab, query, setQuery, selectTab } = props;
   const [filter, setFilter] = useState<OnlineFilter>('all');
   const [radioFilter, setRadioFilter] = useState<OnlineFilter>('jamendo');
   const [station, setStation] = useState<{ name: string; loading: boolean; error?: string; tracks?: OnlineTrack[] }>();
@@ -155,7 +160,6 @@ export const MusicHub = memo(function MusicHub(props: HubProps) {
   const mixReady = mixType === 'favorites' ? favoriteOptions : mixType === 'recent' ? !!data.history.length : !!sources.length;
   const rows = { play, currentId, playing };
 
-  function select(next: Tab) { setTab(next); setQuery(''); }
   function mix(type: MixType, group?: { kind: 'artist' | 'genre'; id: string }) {
     playMix(makeMix(sources, { type, group, favorites, recent: data.history, offline: !connected || justFiles, disliked,
       seed: Math.floor(Math.random() * (2 ** 32)) }));
@@ -175,21 +179,24 @@ export const MusicHub = memo(function MusicHub(props: HubProps) {
     finally { if (request.current === active) request.current = null; }
   }
 
-  return <div className="page music-hub">
+  return <div className="page home-page">
     <header className="hub-masthead">
-      <div className="hub-topline"><nav aria-label={t('Разделы музыки')} className="hub-tabs">
-        {(Object.keys(TABS) as Tab[]).map((id) => <button type="button" key={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => select(id)}>{t(TABS[id])}</button>)}
-      </nav><div className="hub-top-actions">
-        <button type="button" className="icon-button" disabled={props.busy} onClick={addMusic} title={t('Добавить музыку')} aria-label={t('Добавить музыку')}><Plus size={19} /></button>
-        <button type="button" className="icon-button" onClick={props.openMixes} title={t('Миксы Luma')} aria-label={t('Миксы Luma')}><ListMusic size={18} /></button>
-      </div></div>
-      <div className="hub-search"><Search size={16} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
+      <div className="hub-heading"><div>
+        <p className="overline page-kicker"><span />{t('Ваша коллекция')}</p>
+        <h1>{t('Главная')}</h1>
+      </div><div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
         onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.nativeEvent.isComposing && term && !found.length) {
             const form = document.getElementById('online-search-form');
             if (form instanceof HTMLFormElement) { event.preventDefault(); form.requestSubmit(); }
           }
-        }} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div>
+        }} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div></div>
+      <div className="hub-topline"><nav aria-label={t('Разделы на главной')} className="hub-tabs">
+        {(Object.keys(TABS) as HomeTab[]).map((id) => <button type="button" key={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => selectTab(id)}>{t(TABS[id])}</button>)}
+      </nav><div className="hub-top-actions">
+        <button type="button" className="icon-button" disabled={props.busy} onClick={addMusic} title={t('Добавить музыку')} aria-label={t('Добавить музыку')}><Plus size={19} /></button>
+        <button type="button" className="icon-button" onClick={props.openMixes} title={t('Миксы Luma')} aria-label={t('Миксы Luma')}><ListMusic size={18} /></button>
+      </div></div>
     </header>
     {term ? <>
       <Shelf title={t('В вашей медиатеке')}>
@@ -198,13 +205,14 @@ export const MusicHub = memo(function MusicHub(props: HubProps) {
       <OnlineSearch key={term} query={query} hasLocal={!!found.length} filter={filter} setFilter={setFilter} saved={saved} disabled={props.busy} choose={props.chooseOnline} />
     </> : <>
       {tab === 'home' && <>
-        <section className="hub-hero" aria-labelledby="hub-mix-title">
+        <div className="hub-lead"><section className="hub-hero" aria-labelledby="hub-mix-title">
           <div className={`hub-liquid${liquid ? ' hub-liquid-moving' : ''}`} aria-hidden="true" />
           <div className="hub-hero-inner"><p className="overline hub-hero-kicker"><AudioLines size={14} /> {t('Музыка Luma')} <span /> {demoMix ? t('Демоколлекция') : t('На этом устройстве')}</p>
-            <button type="button" className="hub-hero-play" onClick={() => mix(mixType)} disabled={!mixReady || props.busy} aria-label={t('Слушать микс Luma')}><Play size={24} fill="currentColor" /></button>
-            <h1 id="hub-mix-title">{t('Слушать микс Luma')}</h1>
+            <h2 id="hub-mix-title">{t('Слушать микс Luma')}</h2>
             <p>{demoMix ? t('Попробуйте плеер на встроенной коллекции.') : t('Подборка из вашей музыки, избранного и истории.')}</p>
-            <div className="hub-hero-controls"><button type="button" className="button outline-button" aria-expanded={tune} aria-controls="hub-mix-tune" onClick={() => setTune(!tune)}><Settings2 size={16} />{t('Настроить')}</button>
+            <div className="hub-hero-controls">
+              <button type="button" className="hub-hero-play" onClick={() => mix(mixType)} disabled={!mixReady || props.busy} aria-label={t('Слушать микс Luma')}><Play size={22} fill="currentColor" /></button>
+              <button type="button" className="button outline-button" aria-expanded={tune} aria-controls="hub-mix-tune" onClick={() => setTune(!tune)}><Settings2 size={16} />{t('Настроить')}</button>
               {!sources.length && <button type="button" className="button primary-button" disabled={props.busy} onClick={addMusic}>{t('Добавить музыку')}</button>}
             </div>
             {tune && <div className="hub-tune" id="hub-mix-tune">
@@ -214,8 +222,9 @@ export const MusicHub = memo(function MusicHub(props: HubProps) {
               <label><input type="checkbox" checked={justFiles} onChange={(event) => setJustFiles(event.currentTarget.checked)} /> {t('Только файлы')}</label>
             </div>}
           </div>
-        </section>
-        <Shelf title={t('Мои треки')} detail={!mine.length && data.demos.length ? t('Пока здесь встроенные демотреки.') : undefined} action={<button type="button" className="text-button" onClick={() => select('mine')}>{t('Показать все')}<ChevronRight size={15} /></button>}>
+        </section>{props.nowPlaying}</div>
+        {props.lyrics}
+        <Shelf title={t('Мои треки')} detail={!mine.length && data.demos.length ? t('Пока здесь встроенные демотреки.') : undefined} action={<button type="button" className="text-button" onClick={() => selectTab('mine')}>{t('Показать все')}<ChevronRight size={15} /></button>}>
           {(mine.length || data.demos.length) ? <TrackRows {...rows} tracks={(mine.length ? mine : data.demos).slice(0, 9)} strip />
             : <p className="hub-note">{t('Добавьте аудиофайлы, чтобы начать.')}</p>}
         </Shelf>
@@ -248,7 +257,6 @@ export const MusicHub = memo(function MusicHub(props: HubProps) {
         </Shelf>}
         {tab === 'browse' && <Shelf title={t('Открытые каталоги')} detail={t('Ищите записи в Jamendo, Wikimedia Commons и других доступных источниках.')}
           action={<button type="button" className="text-button" onClick={() => formInput.current?.focus()}>{t('Поиск музыки')}<ChevronRight size={15} /></button>} />}
-
       </>}
       {tab === 'mine' && <>
         <Shelf title={t('Мои треки')} action={<button type="button" className="text-button" onClick={openLibrary}>{t('Медиатека')}<ChevronRight size={15} /></button>}>

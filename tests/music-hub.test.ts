@@ -39,7 +39,11 @@ test('station refs survive reload but do not make a library save or keep an aban
   assert.deepEqual(radioQueueRefs({ ...prefs, onlineTracks: [jamendo] }, queue, [jamendo]), []);
 });
 
-test('0.12 profiles keep the default destination without going to VK', () => {
-  const prefs = decodePreferences(JSON.stringify({ playback: { startPage: 'vk' } }));
-  assert.equal(prefs.playback.startPage, 'music');
+test('legacy Music and VK launch settings open the merged Home without disturbing current destinations', () => {
+  for (const startPage of ['vk', 'music', 'player']) {
+    assert.equal(decodePreferences(JSON.stringify({ playback: { startPage } })).playback.startPage, 'player');
+  }
+  for (const startPage of ['library', 'local', 'search']) {
+    assert.equal(decodePreferences(JSON.stringify({ playback: { startPage } })).playback.startPage, startPage);
+  }
 });

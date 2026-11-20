@@ -15,7 +15,7 @@ try {
   assert.equal(JSON.parse(await readFile(join(archive, 'package.json'), 'utf8')).version, version, 'packaged manifest version');
   const assetDir = join(archive, 'dist', 'assets');
   const assets = await readdir(assetDir);
-  for (const expected of [/^fingerprint\.worker-.*\.js$/, /^rusty_chromaprint_wasm_bg-.*\.wasm$/, /^ocean-.*\.webm$/, /^float\.worklet-.*\.js$/]) {
+  for (const expected of [/^fingerprint\.worker-.*\.js$/, /^rusty_chromaprint_wasm_bg-.*\.wasm$/, /^ocean-.*\.webm$/, /^liquid-wallpaper-.*\.webp$/, /^HomePage-.*\.js$/, /^float\.worklet-.*\.js$/]) {
     const name = assets.find((file) => expected.test(file));
     assert.ok(name && (await stat(join(assetDir, name))).size > 0, `packaged asset ${expected}`);
   }

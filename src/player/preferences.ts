@@ -2,7 +2,7 @@ import { readUiLanguage } from '../shared/ui-language';
 import type { UiLanguage } from '../shared/ui-language';
 import { readOnlineShelf } from '../shared/online';
 import type { OnlineTrack } from '../shared/online';
-import { clamp, defaultEqualizer, PRESETS } from '../shared/equalizer';
+import { clamp, defaultEqualizer, readEqualizer } from '../shared/equalizer';
 import type { EqualizerSettings } from '../shared/equalizer';
 import type { QueueState, Repeat } from '../shared/queue';
 import { defaultAppearance, defaultPlayback, readAppearance, readPlayback } from '../shared/customization';
@@ -55,7 +55,6 @@ export function decodePreferences(value: string | null): Preferences {
   try {
     const data = JSON.parse(value ?? 'null') as Partial<Preferences> | null;
     if (!data || typeof data !== 'object') return defaults;
-    const eq = data.equalizer;
     const disliked = readFavorites(data.disliked);
     const excluded = new Set(disliked);
     const queue = data.queue;
@@ -63,7 +62,6 @@ export function decodePreferences(value: string | null): Preferences {
     const resumeRepeat = playback.rememberRepeat ? readRepeat(data.resumeRepeat ?? queue?.repeat) : 'off';
     const beforeShuffle = validIds(queue?.beforeShuffle) ? queue.beforeShuffle : null;
     const resumeShuffle = playback.rememberShuffle && (data.resumeShuffle ?? Boolean(beforeShuffle)) === true;
-    const preset = eq?.preset ?? 'flat';
     return {
       volume: numeric(data.volume, defaults.volume, 0, 1),
       lastVolume: numeric(data.lastVolume, defaults.lastVolume, 0.01, 1),
@@ -80,12 +78,7 @@ export function decodePreferences(value: string | null): Preferences {
       autoLyrics: data.autoLyrics === true,
       exportLyrics: data.exportLyrics === true,
       resumeRepeat, resumeShuffle,
-      equalizer: {
-        enabled: eq?.enabled === true,
-        preset: preset === 'custom' || Object.hasOwn(PRESETS, preset) ? preset : 'flat',
-        preamp: numeric(eq?.preamp, 0, -12, 12),
-        gains: Array.from({ length: 5 }, (_, index) => numeric(eq?.gains?.[index], 0, -12, 12)),
-      },
+      equalizer: readEqualizer(data.equalizer),
       queue: playback.rememberQueue && queue && validIds(queue.order) ? {
         order: !resumeShuffle && beforeShuffle ? beforeShuffle : queue.order,
         currentId: typeof queue.currentId === 'string' ? queue.currentId : null,
