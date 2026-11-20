@@ -82,7 +82,13 @@ async function smoke() {
     const data = navigator.mediaSession?.metadata;
     return data && { title: data.title, artist: data.artist, album: data.album, picture: data.artwork[0] };
   })()`);
-  const click = (selector) => run(`document.querySelector(${JSON.stringify(selector)}).click(); void 0;`);
+  const click = async (selector) => {
+    assert.ok(await run(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!element) return false;
+      element.click(); return true;
+    })()`), `Missing control: ${selector}`);
+  };
   const fill = (selector, value) => run(`(() => {
     const field = document.querySelector(${JSON.stringify(selector)});
     Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), 'value').set.call(field, ${JSON.stringify(value)});
@@ -737,13 +743,13 @@ async function smoke() {
     assert.ok((await preferences()).onlineTracks.some(({ id }) => id === `ov-${synced.id}`), 'cache cleanup keeps bookmarks');
     offlineFixture = false;
     await run(`delete navigator.onLine; window.dispatchEvent(new Event('online'));`);
-    console.log('::notice title=Cache and localization::Switched RU/EN and reloaded; verified offline MP3 playback, byte ranges, seeking and cache cleanup.');
+    console.log('::notice title=Cache and localization::Applied all five themes; MacOS, EN and parametric EQ survived reload. Verified offline MP3, byte ranges, seek and cache cleanup.');
 
   } finally {
     session.defaultSession.protocol.unhandle('https');
     await legacyVk.clearStorageData();
   }
-  console.log('Desktop smoke: monitor fullscreen; compact widget restores bounds; Apple/WASM; metered MP3; lyrics export; native Music, catalogs, external VK bookmarks and isolated legacy reset.');
+  console.log('Desktop smoke: monitor fullscreen; compact widget restores bounds; Apple/WASM; metered MP3; lyrics export; merged Home, catalogs, external VK bookmarks and isolated legacy reset.');
   if (liveServices) {
     const suggestions = await run(`window.luma.recognition.search('Madam Broshkina', 'ru-RU')`);
     assert.ok(suggestions.some(({ title }) => title === 'Мадам Брошкина'), 'live Apple Music transliteration lookup');
@@ -778,7 +784,9 @@ async function smoke() {
     return raw.includes('"code":4') ? raw : undefined;
   });
   assert.doesNotMatch(persisted, /private-test|desktop\.failed/u);
-  await run(`document.querySelector('.sidebar-diagnostic').click()`);
+  // The glass shell has no sidebar; diagnostics is available from Menu in either layout.
+  await go('Меню');
+  await click('.menu-page [aria-label="Диагностика"]');
   await waitFor('diagnostics page', () => run(`document.querySelector('h1')?.textContent === 'Диагностика' && !!document.querySelector('.journal-entry.level-error')`));
   const reportFile = join(profile, 'Отчёт Luma.log');
   const saveDialog = dialog.showSaveDialog;
