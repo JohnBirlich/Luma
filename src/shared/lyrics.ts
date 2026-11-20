@@ -83,3 +83,17 @@ export function readLyrics(input: unknown, query: LyricsQuery): Lyrics | null {
   if (row?.instrumental === true) return { instrumental: true };
   return readLocalLyrics(row?.plainLyrics, sameLength ? row?.syncedLyrics : undefined);
 }
+
+export type LyricSource = 'auto' | 'attached' | 'local' | 'lrclib' | 'edition';
+
+/** An edition is prose, not a recording match. Explicit sources never silently substitute another text. */
+export function selectLyrics(choice: LyricSource, inputs: {
+  attached?: Lyrics; local?: Lyrics | null; lrclib?: Lyrics | null; edition?: { plain: string };
+}): { source?: Exclude<LyricSource, 'auto'>; lyrics?: Lyrics } {
+  const { attached, local, lrclib, edition } = inputs;
+  if (choice === 'edition') return { source: 'edition', lyrics: edition && { plain: edition.plain, instrumental: false } };
+  if (choice === 'attached' || (choice === 'auto' && attached)) return { source: 'attached', lyrics: attached };
+  if (choice === 'local' || (choice === 'auto' && local)) return { source: 'local', lyrics: local ?? undefined };
+  if (choice === 'lrclib' || lrclib) return { source: 'lrclib', lyrics: lrclib ?? undefined };
+  return {};
+}

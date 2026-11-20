@@ -1,7 +1,7 @@
 import { useText } from '../i18n/context';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, History, Info, Music2, Radio, Settings2, Sparkles } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, History, Info, Music2, Radio, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
 import { About } from './About';
@@ -40,7 +40,8 @@ interface MenuPageProps {
   openRecent(): void;
   openMixes(): void;
   openDiagnostics(): void;
-  openVk(): void;
+  openMusic(): void;
+  openEqualizer(): void;
   addMusic(): void;
 }
 
@@ -66,11 +67,12 @@ export function MenuPage(props: MenuPageProps) {
             <MenuItem icon={Sparkles} title={t("Миксы")} detail={t("Подборки из медиатеки, избранного и истории")} select={props.openMixes} />
             <MenuItem icon={History} title={t("Недавно слушали")} detail={t("История воспроизведения на этом устройстве")} select={props.openRecent} />
             <MenuItem icon={FolderOpen} title={t("Импортировать треки")} detail={t("Добавьте аудиофайлы или перетащите их в окно")} select={props.addMusic} disabled={!props.ready} />
-            <MenuItem icon={Radio} title={t("VK Музыка")} detail={t("Официальный сайт в Luma, закладки и публичный виджет")} select={props.openVk} />
+            <MenuItem icon={Radio} title={t("Музыка")} detail={t("Миксы, жанры и открытые музыкальные каталоги")} select={props.openMusic} />
           </MenuGroup>
           <MenuGroup label={t("Плеер")}>
             <MenuItem icon={Settings2} title={t("Настройки")} detail={t("Внешний вид, медиатека и воспроизведение")} select={props.openSettings} />
             <MenuItem icon={Bug} title={t("Диагностика")} detail={t("Журнал событий, подключение и сведения о системе")} select={props.openDiagnostics} />
+            <MenuItem icon={SlidersHorizontal} title={t('Эквалайзер')} detail={t('Настройте частоты и предусиление')} select={props.openEqualizer} dialog />
             <MenuItem icon={Info} title={t("О приложении")} detail={t("Версия Luma, возможности и релизы")} select={() => setAbout(true)} />
           </MenuGroup>
         </>}

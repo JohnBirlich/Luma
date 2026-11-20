@@ -5,7 +5,7 @@ import { AudioLines, Bug, Copy, Heart, House, ListMusic, Menu, Minus, Music2, Pa
 import { formatCount } from '../shared/customization';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 
-export type Page = 'player' | 'search' | 'vk' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent' | 'mixes';
+export type Page = 'player' | 'search' | 'music' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent' | 'mixes';
 
 interface TitleBarProps {
   openSettings(): void;
@@ -29,7 +29,6 @@ export function TitleBar({ openSettings, settingsActive, addMusic, busy }: Title
         <div className="brand-mark" aria-hidden="true"><AudioLines size={20} strokeWidth={2.05} /></div>
         <strong>Luma<span> Player</span></strong>
       </div>
-      <div className="title-caption">{t("Музыкальный плеер")}</div>
       <div className="title-actions">
         <button type="button" className="icon-button title-import" onClick={addMusic} disabled={busy}
           aria-label={busy ? t("Добавляем музыку") : t("Добавить музыку")} title={t("Добавить музыку (Ctrl+O)")}><Plus size={19} /></button>
@@ -50,7 +49,7 @@ export function TitleBar({ openSettings, settingsActive, addMusic, busy }: Title
 const NAVIGATION = [
   { id: 'player', label: 'Главная', icon: House },
   { id: 'search', label: 'Поиск', icon: Search },
-  { id: 'vk', label: 'VK Музыка', icon: Radio },
+  { id: 'music', label: 'Музыка', icon: Radio },
   { id: 'library', label: 'Медиатека', icon: Music2 },
   { id: 'menu', label: 'Меню', icon: Menu },
 ] as const;
@@ -62,11 +61,9 @@ interface SidebarProps {
   busy: boolean;
   count: number;
   fullNumbers: boolean;
-  vkWebsiteOpen: boolean;
   favoriteCount: number;
   queued: number;
   queueOpen: boolean;
-  vkWidgetOpen: boolean;
   toggleQueue(): void;
   openEqualizer(): void;
   eqEnabled: boolean;
@@ -90,7 +87,7 @@ export function Sidebar(props: SidebarProps) {
             </button>
           </div>
           <div className="nav-group">
-            {NAVIGATION.map(({ id, icon: Icon, label }) => <button key={id} type="button" className={`nav-item${id === 'vk' ? ' nav-vk' : ''}`}
+            {NAVIGATION.map(({ id, icon: Icon, label }) => <button key={id} type="button" className="nav-item"
               title={t(label)} aria-label={t(label)} aria-current={active === id ? 'page' : undefined} onClick={() => navigate(id)}>
               <span className="nav-glyph" aria-hidden="true"><Icon size={19} strokeWidth={1.8} /></span><span className="nav-copy">{t(label)}</span>
               {id === 'library' && <small className="nav-count" aria-hidden="true">{formatCount(count, props.fullNumbers, t.language)}</small>}
@@ -102,11 +99,11 @@ export function Sidebar(props: SidebarProps) {
           <button type="button" className="nav-item" title={t("Избранное")} aria-label={t("Избранное")} aria-current={page === 'favorites' ? 'page' : undefined} onClick={() => navigate('favorites')}>
             <Heart className="nav-glyph" size={17} /><span className="nav-copy">{t("Избранное")}</span>{favoriteCount > 0 && <small className="nav-count" aria-hidden="true">{formatCount(favoriteCount, props.fullNumbers, t.language)}</small>}
           </button>
-          <button type="button" className="nav-item" title={props.vkWidgetOpen ? t("Очередь Luma недоступна во время работы VK") : t("Очередь")} aria-label={t("Очередь из боковой панели")}
-            aria-pressed={queueOpen && !props.vkWidgetOpen} aria-controls={queueOpen && !props.vkWidgetOpen ? 'play-queue' : undefined} disabled={props.vkWidgetOpen} onClick={toggleQueue}>
+          <button type="button" className="nav-item" title={t("Очередь")} aria-label={t("Очередь из боковой панели")}
+            aria-pressed={queueOpen} aria-controls={queueOpen ? 'play-queue' : undefined} onClick={toggleQueue}>
             <ListMusic className="nav-glyph" size={18} /><span className="nav-copy">{t("Очередь")}</span>{queued > 0 && <small className="nav-count" aria-hidden="true">{formatCount(queued, props.fullNumbers, t.language)}</small>}
           </button>
-          <button type="button" className="nav-item" title={t("Эквалайзер")} aria-label={t("Эквалайзер из боковой панели")} aria-haspopup="dialog" disabled={props.vkWebsiteOpen} onClick={openEqualizer}>
+          <button type="button" className="nav-item" title={t("Эквалайзер")} aria-label={t("Эквалайзер из боковой панели")} aria-haspopup="dialog" onClick={openEqualizer}>
             <SlidersHorizontal className="nav-glyph" size={17} /><span className="nav-copy">{t("Эквалайзер")}</span>{props.eqEnabled && <i className="enabled-dot" />}
           </button>
         </section>

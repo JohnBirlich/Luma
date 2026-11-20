@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
 import { UiText } from './i18n/context';
 import type { Text } from './i18n/text';
@@ -23,8 +23,6 @@ import { QueuePanel } from './components/QueuePanel';
 import { SettingsPage } from './components/Settings';
 import type { SettingsSectionId } from './components/Settings';
 import { TrackDetailsEditor } from './components/TrackDetailsEditor';
-import { VkModeBar, VkMusicPage } from './components/VkMusic';
-import { VkWebsitePanel } from './components/VkWebsitePanel';
 import { useCoverArt } from './data/cover-art';
 import { demoTracks } from './data/demos';
 import { connectionState, recordDiagnostic, subscribeConnection } from './data/diagnostics';
@@ -32,9 +30,10 @@ import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
 import type { TrackDetails } from './data/track-details';
 import { useMediaSession } from './player/mediaSession';
-import { activeOnlineRefs, readPreferences, rememberTrack, savePreferences } from './player/preferences';
+import { activeOnlineRefs, radioQueueRefs, readPreferences, rememberTrack, savePreferences } from './player/preferences';
 import { useAudio } from './player/useAudio';
 import { usePresentation } from './player/usePresentation';
+import { useTrackLyrics } from './player/useTrackLyrics';
 import { usePalette } from './player/usePalette';
 import { trackCoverKey, withCover } from './shared/artwork';
 import type { CoverTarget } from './shared/artwork';
@@ -42,7 +41,6 @@ import { defaultAppearance, defaultPlayback, scheduledTheme, shouldAdvanceAfterE
 import type { Appearance, LibraryLayout } from './shared/customization';
 import { clamp } from './shared/equalizer';
 import { defaultAudioQuality, isMetered } from './shared/audio-quality';
-import { VK_MUSIC_URL } from './shared/vk';
 import { dataLocale } from './shared/app-info';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
 import { MAX_ONLINE_TRACKS } from './shared/online';
@@ -56,7 +54,7 @@ interface Notice { message: NoticeText; detail?: NoticeText; error?: boolean }
 const noticeText = (t: Text, message: NoticeText) => typeof message === 'function' ? message(t) : t(message);
 const demoIds = demoTracks.map((track) => track.id);
 const noop = () => undefined;
-const noMediaActions = {};
+const MusicHub = lazy(() => import('./components/MusicHub').then(({ MusicHub }) => ({ default: MusicHub })));
 const noTransition = { seconds: 0, next: (): Track | undefined => undefined, advance: (_id: string) => undefined as void };
 const connection = (navigator as Navigator & { connection?: EventTarget & { type?: string; saveData?: boolean } }).connection;
 function dataSaving() { return isMetered('auto', connection); }
@@ -88,11 +86,6 @@ export default function App() {
   const returningTop = useRef(0);
   const basePage = page === 'settings' ? settingsFrom.current.page : page;
   const [libraryScope, setLibraryScope] = useState<'all' | 'offline'>(boot.playback.startPage === 'local' ? 'offline' : 'all');
-  const [vkWidgetOpen, setVkWidgetOpen] = useState(false);
-  const isVkPage = page === 'vk' && vkWidgetOpen;
-  const [vkVisit, setVkVisit] = useState<string>();
-  const vkOriginFocus = useRef<HTMLElement | null>(null);
-  const vkPlayback = isVkPage || Boolean(vkVisit);
   const [widget, setWidget] = useState(false);
   const [widgetPending, setWidgetPending] = useState(false);
   const [showEqualizer, setShowEqualizer] = useState(false);
@@ -151,7 +144,10 @@ export default function App() {
   const current = byId.get(queue.currentId ?? '') ?? null;
   const detailsTrack = detailsId ? byId.get(detailsId) : undefined;
   const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance);
-  const { open: presentationOpen, show: showPresentation, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
+  const { kind: presentationKind, show: showStage, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
+  const presentationOpen = presentationKind !== null;
+  const showPresentation = useCallback(() => showStage('player'), [showStage]);
+  const showKaraoke = useCallback(() => showStage('karaoke'), [showStage]);
   const trackStarted = useCallback((id: string) => setPreferences((data) => {
     if (!data.playback.rememberRecent) return data;
     const recent = rememberTrack(data.recent, id);
@@ -159,28 +155,19 @@ export default function App() {
   }), []);
   const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
-  function openVkWebsite(url: string) {
-    if (!window.luma || widget || !connected) return;
-    vkOriginFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    pause();
-    setVkWidgetOpen(false);
-    setVkVisit(url);
-  }
-  const closeVkWebsite = useCallback(() => {
-    setVkVisit(undefined);
-    requestAnimationFrame(() => vkOriginFocus.current?.focus());
-  }, []);
+  const lyrics = useTrackLyrics(current, { enabled: !widget && (presentationKind === 'karaoke' || (!presentationOpen && page === 'player')),
+    auto: preferences.autoLyrics, connected, playing: player.playing, duration: player.duration });
   const changeWidget = useCallback(async (enabled: boolean) => {
-    if (!window.luma || widgetPending || vkPlayback || presentationOpen) return;
+    if (!window.luma || widgetPending || presentationOpen) return;
     setWidgetPending(true);
     try { setWidget(await window.luma.window.setWidget(enabled)); }
     catch { setNotice({ message: "Не удалось переключить режим виджета.", error: true }); }
     finally { setWidgetPending(false); }
-  }, [presentationOpen, vkPlayback, widgetPending]);
+  }, [presentationOpen, widgetPending]);
   const sampledTone = usePalette(appearance.coverColors ? current : null);
   const tint = appearance.coverColors ? sampledTone : theme['--accent'];
   const transportPlaying = player.playing || !!player.loading;
-  const playbackError = vkPlayback ? '' : player.error;
+  const playbackError = player.error;
   const queued = useMemo(() => queue.order.flatMap((id) => byId.get(id) ?? []), [queue.order, byId]);
   const upcoming = useMemo(() => upcomingIds(queue).flatMap((id) => byId.get(id) ?? []), [queue, byId]);
   const visibleNotice = notice && (notice.error || playback.successNotices) ? notice : undefined;
@@ -215,14 +202,13 @@ export default function App() {
   useEffect(() => {
     if (!ready || bootPlayback.current) return;
     bootPlayback.current = true;
-    if (boot.playback.autoPlay && page !== 'vk' && !vkPlayback && current && !current.online && !isPlaying()) play();
-  }, [ready, boot, page, vkPlayback, current, isPlaying, play]);
-  useEffect(() => { if (presentationOpen && (!current || isVkPage)) closePresentation(); }, [presentationOpen, current, isVkPage, closePresentation]);
+    if (boot.playback.autoPlay && current && !current.online && !isPlaying()) play();
+  }, [ready, boot, current, isPlaying, play]);
+  useEffect(() => { if (presentationOpen && !current) closePresentation(); }, [presentationOpen, current, closePresentation]);
   useLayoutEffect(() => {
     scrollArea.current?.scrollTo({ top: returningTop.current });
     returningTop.current = 0;
   }, [page, libraryScope]);
-  useEffect(() => { if (page !== 'vk') setVkWidgetOpen(false); }, [page]);
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(undefined), notice.error ? 8500 : 4800);
@@ -252,12 +238,12 @@ export default function App() {
   }, [playTrack, position, seek]);
   useEffect(() => {
     ended.current = () => {
-      if (!vkPlayback && shouldAdvanceAfterEnd(playback, queueRef.current.repeat)) next(true);
+      if (shouldAdvanceAfterEnd(playback, queueRef.current.repeat)) next(true);
     };
-  }, [vkPlayback, next, playback]);
+  }, [next, playback]);
   const cancelTransitions = player.cancelTransitions;
   useEffect(() => {
-    if (vkPlayback || !playback.autoNext || !playback.crossfade) {
+    if (!playback.autoNext || !playback.crossfade) {
       transition.current = noTransition;
       cancelTransitions();
       return;
@@ -271,7 +257,7 @@ export default function App() {
       },
       advance(id) { commit({ ...queueRef.current, currentId: id }); },
     };
-  }, [byId, cancelTransitions, commit, playback.autoNext, playback.crossfade, vkPlayback]);
+  }, [byId, cancelTransitions, commit, playback.autoNext, playback.crossfade]);
   const mediaActions = useMemo(() => ({
     play, pause, nexttrack: () => next(), previoustrack: previous,
     stop: () => { pause(); seek(0); },
@@ -279,7 +265,7 @@ export default function App() {
     seekforward: ({ seekOffset }: MediaSessionActionDetails) => seek(seekOffset ?? playback.seekStep, true),
     seekbackward: ({ seekOffset }: MediaSessionActionDetails) => seek(-(seekOffset ?? playback.seekStep), true),
   }), [next, previous, play, pause, seek, playback.seekStep]);
-  useMediaSession(vkPlayback ? null : current, player.playing, player.elapsed, player.duration, vkPlayback ? noMediaActions : mediaActions, playback.publishTrack);
+  useMediaSession(current, player.playing, player.elapsed, player.duration, mediaActions, playback.publishTrack);
 
   const setVolume = useCallback((value: number) => {
     const volume = clamp(value, 0, 1);
@@ -336,14 +322,12 @@ export default function App() {
   function filesDragged(event: DragEvent): boolean { return event.dataTransfer.types.includes('Files'); }
 
   const exitSettings = useCallback(() => {
-    setVkVisit(undefined);
     returningTop.current = settingsFrom.current.top;
     setPage(settingsFrom.current.page);
   }, []);
   const openSettings = useCallback(() => {
     if (page === 'settings') { exitSettings(); return; }
     settingsFrom.current = { page, top: scrollArea.current?.scrollTop ?? 0 };
-    setVkVisit(undefined);
     if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
     setPage('settings');
   }, [page, exitSettings]);
@@ -356,7 +340,7 @@ export default function App() {
       if (widget && (event.ctrlKey || event.metaKey)) return;
       if (!presentationOpen && (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.code === 'KeyL') {
         event.preventDefault();
-        if (!event.repeat) { setVkVisit(undefined); setPage('diagnostics'); if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false); }
+        if (!event.repeat) { setPage('diagnostics'); if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false); }
         return;
       }
       if (!presentationOpen && (event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'Comma') {
@@ -366,10 +350,9 @@ export default function App() {
       }
       if (!presentationOpen && (event.ctrlKey || event.metaKey) && !event.altKey && event.code === 'KeyO') {
         event.preventDefault();
-        if (!event.repeat && !vkVisit) choose();
+        if (!event.repeat) choose();
         return;
       }
-      if (vkPlayback) return;
       if (!event.altKey && !event.metaKey && !event.ctrlKey && event.code === 'KeyF' && current
         && !(event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]'))) {
         event.preventDefault();
@@ -378,14 +361,17 @@ export default function App() {
       }
       if (!presentationOpen && event.key === 'Escape' && queueOpen && window.matchMedia('(max-width: 1079px)').matches) { setQueueOpen(false); return; }
       if (event.altKey || event.metaKey || event.ctrlKey || (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], button, a'))) return;
-      if (event.code === 'Space' || event.code === 'KeyK') { event.preventDefault(); if (!event.repeat) toggle(); }
+      if (event.code === 'KeyL' && current && !widget) {
+        event.preventDefault();
+        if (!event.repeat) (presentationKind === 'karaoke' ? closePresentation : showKaraoke)();
+      } else if (event.code === 'Space' || event.code === 'KeyK') { event.preventDefault(); if (!event.repeat) toggle(); }
       else if (event.code === 'ArrowRight' || event.code === 'ArrowLeft') { event.preventDefault(); seek(event.code === 'ArrowRight' ? playback.seekStep : -playback.seekStep, true); }
       else if (event.code === 'KeyM' && !event.repeat) mute();
       else if (!presentationOpen && event.code === 'KeyQ' && !event.repeat) setQueueOpen((open) => !open);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [choose, mute, seek, toggle, modalOpen, presentationOpen, showPresentation, closePresentation, current, queueOpen, vkPlayback, vkVisit, widget, changeWidget, openSettings, playback.seekStep]);
+  }, [choose, mute, seek, toggle, modalOpen, presentationOpen, presentationKind, showPresentation, showKaraoke, closePresentation, current, queueOpen, widget, changeWidget, openSettings, playback.seekStep]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -415,7 +401,7 @@ export default function App() {
       setNotice({ message: "Не удалось убрать трек из медиатеки.", error: true });
     } finally { busy.current = false; setWorking(false); }
   }
-  function chooseOnline(track: OnlineTrack, action: OnlineAction) {
+  const chooseOnline = useCallback((track: OnlineTrack, action: OnlineAction) => {
     if (!ready) return;
     const state = queueRef.current;
     if (action === 'cache') {
@@ -484,7 +470,7 @@ export default function App() {
       load(existing ?? track, true);
     } else if (state.order.includes(track.id)) setNotice({ message: "Трек уже в очереди" });
     else { commit(appendToQueue(state, [track.id])); setNotice({ message: "Онлайн-трек добавлен в очередь" }); }
-  }
+  }, [ready, preferences, onlineTracks.length, savedOnline, byId, commit, load]);
   function removeTrack(id: string) {
     if (!byId.get(id)?.online) { void removeLocal(id); return; }
     removeQueued(id);
@@ -532,27 +518,46 @@ export default function App() {
       error: true,
     });
   }
-  function playAll(items: Track[], start?: string) {
+  const playAll = useCallback((items: Track[], start?: string) => {
     const first = items.find(({ id }) => id === start) ?? items[0];
     if (!first) return;
     const { repeat, beforeShuffle } = queueRef.current;
     const initial = startQueue(items.map(({ id }) => id), first.id, repeat);
     commit(beforeShuffle ? toggleShuffle(initial) : initial);
     load(first, true);
-  }
+  }, [commit, load]);
+  const startRadio = useCallback((items: OnlineTrack[]) => {
+    if (!ready || !connected || busy.current) return false;
+    const first = items[0];
+    if (!first) return false;
+    const { repeat, beforeShuffle } = queueRef.current;
+    const initial = startQueue(items.map(({ id }) => id), first.id, repeat);
+    const next = beforeShuffle ? toggleShuffle(initial) : initial;
+    const onlineRefs = radioQueueRefs(preferences, next, items);
+    if (onlineRefs.length > MAX_ONLINE_TRACKS) {
+      setNotice({ message: 'Слишком много онлайн-треков в очереди и истории', detail: 'Удалите часть ссылок или очистите историю.', error: true });
+      return false;
+    }
+    setPreferences((data) => ({ ...data, onlineRefs }));
+    commit(next);
+    load(byId.get(first.id) ?? first, true);
+    return true;
+  }, [ready, connected, preferences, byId, commit, load]);
   function queueMix(items: Track[]) {
     const state = queueRef.current;
     const updated = appendToQueue(state, items.map(({ id }) => id));
     commit(updated);
     setNotice({ message: updated === state ? "Все треки микса уже в очереди" : (t) => t("Добавлено: {0}", trackCount(updated.order.length - state.order.length, appearance.fullNumbers, t.language)) });
   }
-  function goToLibrary() { navigate('library'); }
-  function navigate(target: Page, scope: 'all' | 'offline' = 'all') {
-    setVkVisit(undefined);
+  const navigate = useCallback((target: Page, scope: 'all' | 'offline' = 'all') => {
     if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
     if (target === 'library') setLibraryScope(scope);
     setPage(target);
-  }
+  }, []);
+  const goToLibrary = useCallback(() => navigate('library'), [navigate]);
+  const openMixes = useCallback(() => navigate('mixes'), [navigate]);
+  const openMusic = useCallback(() => navigate('music'), [navigate]);
+  const discardCover = useCallback((key: string) => { void updateCover(key); }, [updateCover]);
   const openEqualizer = () => setShowEqualizer(true);
   const toggleQueue = () => setQueueOpen((open) => !open);
   const changeAppearance = (appearance: Appearance) => setPreferences((data) => ({ ...data, appearance }));
@@ -578,48 +583,53 @@ export default function App() {
   };
 
   return (
-    <UiText.Provider value={t}><div data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${widget ? ' widget-mode' : vkPlayback ? ' vk-mode' : queueOpen ? ' queue-visible' : ''}${appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
+    <UiText.Provider value={t}><div data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${widget ? ' widget-mode' : queueOpen ? ' queue-visible' : ''}${appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
       onDragEnter={(event) => {
-        if (modalOpen || presentationOpen || widget || vkVisit || !filesDragged(event)) return;
+        if (modalOpen || presentationOpen || widget || !filesDragged(event)) return;
         event.preventDefault();
         dropDepth.current++;
         setDropActive(true);
       }}
-      onDragOver={(event) => { if (!modalOpen && !presentationOpen && !widget && !vkVisit && filesDragged(event)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } }}
+      onDragOver={(event) => { if (!modalOpen && !presentationOpen && !widget && filesDragged(event)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } }}
       onDragLeave={(event) => {
-        if (modalOpen || presentationOpen || widget || vkVisit || !filesDragged(event)) return;
+        if (modalOpen || presentationOpen || widget || !filesDragged(event)) return;
         dropDepth.current = Math.max(0, dropDepth.current - 1);
         if (!dropDepth.current) setDropActive(false);
       }}
       onDrop={(event) => {
-        if (modalOpen || presentationOpen || widget || vkVisit || !filesDragged(event)) return;
+        if (modalOpen || presentationOpen || widget || !filesDragged(event)) return;
         event.preventDefault();
         dropDepth.current = 0;
         setDropActive(false);
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
-      {!widget && <TitleBar openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready || Boolean(vkVisit)} />}
-      {!widget && <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready || Boolean(vkVisit)} count={collection.length} favoriteCount={favorites.length}
-        fullNumbers={appearance.fullNumbers} vkWebsiteOpen={Boolean(vkVisit)} queued={queued.length} queueOpen={queueOpen} vkWidgetOpen={vkPlayback} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
+      {!widget && <TitleBar openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready} />}
+      {!widget && <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
+        fullNumbers={appearance.fullNumbers} queued={queued.length} queueOpen={queueOpen} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
         compact={appearance.compactSidebar} toggleCompact={toggleCompact} />}
-      <main className={`main-pane${vkVisit ? ' vk-site-active' : ''}`} ref={scrollArea}>
-        <div key={basePage} className="page-body" hidden={Boolean(vkVisit) || widget || page === 'settings'}>
-        {basePage === 'vk' ? <VkMusicPage openWebsite={openVkWebsite} widgetOpen={isVkPage} connected={connected} toggleWidget={(open) => { if (open) pause(); setVkWidgetOpen(open); }} covers={covers} editCover={setCoverTarget} discardCover={(key) => { void updateCover(key); }} /> :
+      <main className="main-pane" ref={scrollArea}>
+        <div key={basePage} className="page-body" hidden={widget || page === 'settings'}>
+        {basePage === 'music' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
+          <MusicHub tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
+            currentId={queue.currentId} playing={transportPlaying} connected={connected} visible={page === 'music' && !widget && !modalOpen && !presentationOpen}
+            busy={working || !ready} play={playTrack} playMix={playAll} startRadio={startRadio} chooseOnline={chooseOnline}
+            covers={covers} editCover={setCoverTarget} discardCover={discardCover} openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose} />
+          </Suspense> :
           basePage === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :
           basePage === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers} ready={ready && !working}
-            openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={() => navigate('mixes')} openDiagnostics={() => navigate('diagnostics')} openVk={() => navigate('vk')} addMusic={choose} /> :
+            openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={() => navigate('mixes')} openDiagnostics={() => navigate('diagnostics')} openMusic={openMusic} openEqualizer={openEqualizer} addMusic={choose} /> :
           basePage === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} disliked={dislikedIds} recent={recent} fullNumbers={appearance.fullNumbers}
             playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :
           basePage === 'player' ? <PlayerPage track={current} tracks={collection} tint={tint} appearance={effectiveAppearance}
-            recent={recent} favoriteIds={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} connected={connected} elapsed={player.elapsed} autoLyrics={preferences.autoLyrics} openMixes={() => navigate('mixes')} playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
+            recent={recent} favoriteIds={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} connected={connected} elapsed={player.elapsed} lyrics={!presentationOpen && page === 'player' ? lyrics : undefined} openMixes={() => navigate('mixes')} playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
             count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle} play={(id) => playTrack(id, true)} goToLibrary={goToLibrary}
-            favorite={Boolean(current && favoriteIds.has(current.id))} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)} openPresentation={showPresentation} sceneVisible={page !== 'settings' && !presentationOpen && !modalOpen} readSpectrum={player.readSpectrum}
+            favorite={Boolean(current && favoriteIds.has(current.id))} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)} openPresentation={showPresentation} openKaraoke={showKaraoke} sceneVisible={page !== 'settings' && !presentationOpen && !modalOpen} readSpectrum={player.readSpectrum}
             openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} /> :
           <LibraryPage key={`${basePage}:${libraryScope}`} initialScope={basePage === 'library' ? libraryScope : 'all'} fullNumbers={appearance.fullNumbers} tracks={basePage === 'favorites' ? favorites : basePage === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
             mode={basePage === 'favorites' || basePage === 'search' || basePage === 'recent' ? basePage : 'library'} favorites={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
-            chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openVk={() => navigate('vk')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
+            chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openMusic={openMusic} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
         </div>
-        {page === 'settings' && !vkVisit && !widget && <div className="page-body" key="settings">
+        {page === 'settings' && !widget && <div className="page-body" key="settings">
           <SettingsPage uiLanguage={preferences.uiLanguage} changeLanguage={(uiLanguage) => setPreferences((data) => ({ ...data, uiLanguage }))} appearance={appearance} effectiveAppearance={effectiveAppearance} locale={locale} playback={playback} audioQuality={audioQuality}
             playingStream={player.stream?.id === current?.id ? player.stream : undefined} connected={connected}
             nativeFloat={preferences.nativeFloat} floatStatus={player.floatStatus} changeFloat={(nativeFloat) => setPreferences((data) => ({ ...data, nativeFloat }))}
@@ -634,19 +644,19 @@ export default function App() {
             toggleEffects={() => setPreferences((data) => ({ ...data, equalizer: { ...data.equalizer, enabled: !data.equalizer.enabled } }))}
             openLocalLibrary={() => navigate('library', 'offline')} openWidget={() => { void changeWidget(true); }}
             openTrackInfo={current && !current.demo && !current.online ? () => editTrackDetails(current.id) : undefined}
-            openVk={() => openVkWebsite(VK_MUSIC_URL)} reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
+            openMusic={openMusic} reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
         </div>}
-        {vkVisit && <VkWebsitePanel url={vkVisit} close={closeVkWebsite} />}
       </main>
-      {!vkPlayback && !widget && queueOpen && <>
+      {!widget && queueOpen && <>
         <button type="button" className="queue-scrim" onClick={closeQueue} aria-label={t("Закрыть панель очереди")} />
         <QueuePanel active={current} upcoming={upcoming} count={queued.length} fullNumbers={appearance.fullNumbers} duration={queued.reduce((sum, track) => sum + track.duration, 0)} playing={player.playing}
           close={closeQueue} play={(id) => playTrack(id, true)} remove={removeQueued} move={(from, to) => commit(moveUpcoming(queueRef.current, from, to))} goToLibrary={goToLibrary} />
       </>}
       {widget ? <DesktopWidget track={current} tint={sampledTone} background={appearance.widgetBackground} controls={localControls} pending={widgetPending} restore={() => { void changeWidget(false); }} />
-      : vkPlayback ? <VkModeBar website={Boolean(vkVisit)} closeWidget={vkVisit ? closeVkWebsite : () => setVkWidgetOpen(false)} /> : <PlayerBar {...localControls} track={current} classic={appearance.classicDock}
-        goToPlayer={() => setPage('player')} openPresentation={showPresentation} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
-      {presentationOpen && current && !vkPlayback && !widget && <FullscreenPlayer {...localControls} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={appearance}
+      : <PlayerBar {...localControls} track={current} classic={appearance.classicDock}
+        goToPlayer={() => setPage('player')} openPresentation={showPresentation} openKaraoke={showKaraoke} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
+      {presentationKind && current && !widget && <FullscreenPlayer {...localControls} karaoke={presentationKind === 'karaoke'} lyrics={lyrics} clock={player.playing ? position : undefined}
+        toggleKaraoke={presentationKind === 'karaoke' ? showPresentation : showKaraoke} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={appearance}
         favorite={favoriteIds.has(current.id)} disliked={dislikedIds.has(current.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
         toggleQueue={() => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, fullscreenQueue: !data.appearance.fullscreenQueue } }))}
         openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} />}

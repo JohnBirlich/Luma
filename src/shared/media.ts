@@ -10,7 +10,6 @@ import type { CommunitySource, Mp3ExportResult, OnlineCreditData, OnlineTrack } 
 import type { StreamCacheInfo } from './stream-cache.js';
 import type { LastFmStatus, ListeningEvent } from './lastfm.js';
 import type { Lyrics, LyricsQuery } from './lyrics.js';
-import type { VkCoverImage, VkPlaylist, VkViewBounds, VkWebsiteState } from './vk.js';
 import type { Fingerprint, MetadataCandidate } from './recognition.js';
 
 export const AUDIO_MIMES = {
@@ -67,15 +66,7 @@ export interface DesktopBridge {
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
   openVkLink(url: string): Promise<void>;
-  vk: {
-    open(url: string, bounds: VkViewBounds): Promise<void>;
-    layout(bounds: VkViewBounds): Promise<void>;
-    command(action: 'back' | 'reload' | 'return'): Promise<void>;
-    close(): Promise<void>;
-    reset(): Promise<boolean>;
-    onState(callback: (state: VkWebsiteState) => void): () => void;
-  };
-  getVkCover(playlist: VkPlaylist): Promise<VkCoverImage | null>;
+  clearLegacyVkSession(): Promise<void>;
   lyrics: { lookup(query: LyricsQuery): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null>; openEdition(url: string): Promise<void> };
   exportMp3(track: OnlineTrack, saveLyrics: boolean): Promise<Mp3ExportResult>;
   recognition: {

@@ -122,3 +122,15 @@ export function savePreferences(preferences: Preferences, queue: QueueState) {
   try { localStorage.setItem(KEY, encodePreferences(preferences, queue)); }
   catch { /* Private/embedded contexts can block storage. */ }
 }
+
+/** Keep all recording references needed by the replacement queue and existing profile. */
+export function radioQueueRefs(preferences: Preferences, queue: QueueState, tracks: readonly OnlineTrack[]) {
+  const refs = activeOnlineRefs({ ...preferences, queue });
+  const known = new Set([...preferences.onlineTracks, ...refs].map(({ id }) => id));
+  for (const track of tracks) {
+    if (known.has(track.id)) continue;
+    refs.push(track);
+    known.add(track.id);
+  }
+  return refs;
+}

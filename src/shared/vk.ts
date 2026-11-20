@@ -1,9 +1,6 @@
-import type { CoverMime } from './artwork.js';
-
+export const LEGACY_VK_SESSION = 'persist:luma-vk-web';
 const VK_ORIGIN = 'https://vk.ru';
 export const VK_MUSIC_URL = `${VK_ORIGIN}/audio`;
-export const VK_WIDGET_DOCS_URL = 'https://dev.vk.ru/ru/widgets/playlist';
-export const VK_WIDGET_URL = `${VK_ORIGIN}/widget_playlist.php`;
 const playlistPath = '/music/playlist/';
 const idPattern = /^[1-9]\d{0,14}$/;
 const ownerPattern = /^-?[1-9]\d{0,14}$/;
@@ -13,14 +10,6 @@ export interface VkPlaylist {
   ownerId: number;
   playlistId: number;
   hash: string;
-}
-
-export interface VkViewBounds { x: number; y: number; width: number; height: number }
-export interface VkWebsiteState { host: string; loading: boolean; failed: boolean; canGoBack: boolean }
-
-export interface VkCoverImage {
-  mime: CoverMime;
-  bytes: Uint8Array;
 }
 
 export interface VkShelfItem extends Pick<VkPlaylist, 'ownerId' | 'playlistId'> {
@@ -46,13 +35,6 @@ export function isVkPlaylist(value: unknown): value is VkPlaylist {
 
 export const vkPlaylistKey = ({ ownerId, playlistId }: Pick<VkPlaylist, 'ownerId' | 'playlistId'>) => `${ownerId}_${playlistId}`;
 export const vkPlaylistUrl = (playlist: Pick<VkPlaylist, 'ownerId' | 'playlistId'>) => `${VK_ORIGIN}${playlistPath}${vkPlaylistKey(playlist)}`;
-export const vkPlaylistShareUrl = (playlist: VkPlaylist) => `${vkPlaylistUrl(playlist)}_${playlist.hash}`;
-
-export function vkWidgetUrl(playlist: VkPlaylist): string {
-  const query = new URLSearchParams({ oid: String(playlist.ownerId), pid: String(playlist.playlistId), hash: playlist.hash });
-  return `${VK_WIDGET_URL}?${query}`;
-}
-
 function readWidgetUrl(url: URL): VkPlaylist | null {
   if (url.protocol !== 'https:' || !['vk.ru', 'vk.com'].includes(url.hostname) || url.port
     || url.username || url.password || url.pathname !== '/widget_playlist.php') return null;
@@ -79,14 +61,6 @@ export function parseVkPlaylist(input: string): VkPlaylist | null {
   return null;
 }
 
-/** Only the canonical official widget URL may navigate an iframe in Electron. */
-export function isVkWidgetFrameUrl(value: string): boolean {
-  try {
-    const playlist = readWidgetUrl(new URL(value));
-    return !!playlist && value === vkWidgetUrl(playlist);
-  } catch { return false; }
-}
-
 const overlayPattern = /^audio_playlist(-?[1-9]\d{0,14})_([1-9]\d{0,14})(?:[\/_]([A-Za-z0-9_-]{1,128}))?\/?$/;
 const sharePattern = /^\/music\/playlist\/(-?[1-9]\d{0,14})_([1-9]\d{0,14})(?:_([A-Za-z0-9_-]{1,128}))?\/?$/;
 
@@ -106,24 +80,9 @@ export function vkShelfUrl(item: VkShelfItem) {
 }
 
 /** The desktop bridge opens only canonical VK destinations selected by the user. */
-export function isVkMusicDestination(value: unknown): value is string {
+export function isVkExternalUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 8192) return false;
   if (value === VK_MUSIC_URL) return true;
   const item = parseVkShareLink(value);
   return !!item && value === vkShelfUrl({ ...item, name: '' });
-}
-
-export function isVkExternalUrl(value: unknown): value is string {
-  return value === VK_WIDGET_DOCS_URL;
-}
-
-// The account surface is first-party VK web content, not a general browser or an OAuth client.
-const vkWebHosts = new Set(['vk.ru', 'vk.com', 'm.vk.ru', 'm.vk.com', 'music.vk.com', 'music.vk.ru',
-  'id.vk.ru', 'id.vk.com', 'login.vk.ru', 'login.vk.com', 'oauth.vk.ru', 'oauth.vk.com']);
-export function isVkWebsiteUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password && !url.port && vkWebHosts.has(url.hostname)
-      && !/^\/away(?:\.php|\/|$)/i.test(url.pathname);
-  } catch { return false; }
 }

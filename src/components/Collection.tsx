@@ -1,9 +1,10 @@
 import { useText } from '../i18n/context';
 import { useMemo, useState, useSyncExternalStore } from 'react';
-import { Cloud, CloudOff, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { Cloud, CloudOff, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, MicVocal, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { formatCount } from '../shared/customization';
+import type { TrackLyrics } from '../player/useTrackLyrics';
 import { LyricsPanel } from './LyricsPanel';
 import { homeRecommendations, musicGroups, tracksInGroup } from '../shared/mix';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
@@ -75,7 +76,7 @@ interface PlayerPageProps {
   toggleDislike(id: string): void;
   connected: boolean;
   elapsed: number;
-  autoLyrics: boolean;
+  lyrics?: TrackLyrics;
   openMixes(): void;
   tint: string;
   appearance: Appearance;
@@ -84,6 +85,7 @@ interface PlayerPageProps {
   readSpectrum: ReadSpectrum;
   openAppearance(): void;
   openPresentation(): void;
+  openKaraoke(): void;
   sceneVisible: boolean;
   playing: boolean;
   loading: boolean;
@@ -115,7 +117,7 @@ export function PlayerPage(props: PlayerPageProps) {
     { label: t("Открытия в медиатеке"), items: picks.discoveries, icon: Sparkles },
     { label: t("Недавно слушали"), items: picks.recent, icon: History },
   ];
-  const featured = tracks.filter(({ id }) => (tracks.length === 1 || id !== track?.id) && !props.disliked.has(id)).slice(0, 4);
+  const featured = useMemo(() => tracks.filter(({ id }) => (tracks.length === 1 || id !== track?.id) && !props.disliked.has(id)).slice(0, 4), [tracks, track?.id, props.disliked]);
   return (
     <div className="page player-page">
       <header className="page-header">
@@ -152,13 +154,14 @@ export function PlayerPage(props: PlayerPageProps) {
             {track && <>
               <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />
               <DislikeButton track={track} selected={props.disliked.has(track.id)} toggle={props.toggleDislike} />
+              <button type="button" className="icon-button hero-karaoke" onClick={props.openKaraoke} aria-label={t("Караоке")} title={t("Караоке (L)")} aria-haspopup="dialog"><MicVocal size={17} /></button>
               <button type="button" className="icon-button hero-fullscreen" onClick={props.openPresentation} aria-label={t("Развернуть текущий трек")} title={t("Во весь экран (F)")} aria-haspopup="dialog"><Maximize2 size={17} /></button>
             </>}
           </div>
         </div>
         {track && <span className="hero-index" title={t("Позиция в очереди")}><span>{formatCount(props.position, appearance.fullNumbers, t.language).padStart(2, '0')}</span><b>/</b>{formatCount(props.count, appearance.fullNumbers, t.language).padStart(2, '0')}</span>}
       </section>
-      {track && !track.demo && <LyricsPanel key={track.id} track={track} elapsed={props.elapsed} playing={playing} auto={props.autoLyrics} connected={props.connected} />}
+      {track && (!track.demo || props.lyrics?.attached) && props.lyrics && <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} demo={track.demo} />}
       {homeSections.some(({ items }) => items.length) && <section className="home-personal" aria-labelledby="home-personal-title">
         <header className="section-header"><div><p className="overline">{t("Только на этом устройстве")}</p><h2 id="home-personal-title">{t("Для вас в Luma")}</h2></div>
           <button className="text-button" type="button" onClick={props.openMixes}>{t("Миксы Luma")}{" "}<ArrowRight size={16} /></button></header>
@@ -200,7 +203,7 @@ interface LibraryPageProps {
   goToLibrary(): void;
   layout: LibraryLayout;
   changeLayout(layout: LibraryLayout): void;
-  openVk(): void;
+  openMusic(): void;
   openMixes(): void;
   openRecent(): void;
   openFavorites(): void;
@@ -285,7 +288,7 @@ export function LibraryPage(props: LibraryPageProps) {
           <Headphones size={16} /> <span>{t("Демотреки")}</span>
         </button>}
       </div>
-      {isSearch && <div className="search-scope"><span>{t("Сначала в медиатеке")}</span><button className="text-button" type="button" onClick={props.openVk}><Radio size={14} />{" "}{t("Перейти к VK")}</button></div>}
+      {isSearch && <div className="search-scope"><span>{t("Сначала в медиатеке")}</span><button className="text-button" type="button" onClick={props.openMusic}><Radio size={14} />{" "}{t("Открыть раздел «Музыка»")}</button></div>}
       <div className="library-caption">
         <div><Disc3 size={16} />{trackCount(results.length, props.fullNumbers, t.language)}</div>
         <div className="library-actions">

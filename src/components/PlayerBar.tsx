@@ -1,5 +1,5 @@
 import { useText } from '../i18n/context';
-import { ListMusic, Maximize2 } from 'lucide-react';
+import { ListMusic, Maximize2, MicVocal } from 'lucide-react';
 import type { Track } from '../shared/media';
 import { Artwork } from './Artwork';
 import { SeekTimeline, TransportControls, VolumeControl } from './PlaybackControls';
@@ -11,6 +11,7 @@ interface PlayerBarProps extends PlaybackProps {
   classic: boolean;
   goToPlayer(): void;
   openPresentation(): void;
+  openKaraoke(): void;
   toggleQueue(): void;
 }
 
@@ -27,6 +28,8 @@ export function PlayerBar(props: PlayerBarProps) {
       <div className="player-side-controls">
         <VolumeControl {...props} />
         <span className="utility-divider" />
+        <button type="button" className="icon-button karaoke-toggle" aria-haspopup="dialog" disabled={!track} onClick={props.openKaraoke}
+          title={t("Караоке (L)")} aria-label={t("Караоке")}><MicVocal size={18} /></button>
         <button type="button" className="icon-button presentation-toggle" aria-haspopup="dialog" disabled={!track} onClick={props.openPresentation}
           title={t("Во весь экран (F)")} aria-label={t("Развернуть трек во весь экран")}><Maximize2 size={18} /></button>
         <button type="button" className="icon-button queue-toggle" onClick={props.toggleQueue} aria-pressed={props.queueOpen} aria-controls="play-queue"

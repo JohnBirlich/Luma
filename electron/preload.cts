@@ -3,7 +3,6 @@ const { contextBridge, ipcRenderer, webUtils } = electron;
 import type { IpcRendererEvent } from 'electron';
 import type { DesktopBridge } from '../src/shared/media.js';
 import type { LastFmStatus } from '../src/shared/lastfm.js';
-import type { VkWebsiteState } from '../src/shared/vk.js';
 
 const bridge: DesktopBridge = {
   setUiLanguage: (language) => ipcRenderer.invoke('ui:language', language),
@@ -18,19 +17,7 @@ const bridge: DesktopBridge = {
   importDroppedFiles: (files) => ipcRenderer.invoke('library:drop', files.map((file) => webUtils.getPathForFile(file)).filter(Boolean)),
   removeTrack: (id) => ipcRenderer.invoke('library:remove', id),
   openVkLink: (url) => ipcRenderer.invoke('vk:open-link', url),
-  vk: {
-    open: (url, bounds) => ipcRenderer.invoke('vk:open-website', url, bounds),
-    layout: (bounds) => ipcRenderer.invoke('vk:layout', bounds),
-    command: (action) => ipcRenderer.invoke('vk:command', action),
-    close: () => ipcRenderer.invoke('vk:close'),
-    reset: () => ipcRenderer.invoke('vk:reset'),
-    onState: (callback) => {
-      const listener = (_event: IpcRendererEvent, state: VkWebsiteState) => callback(state);
-      ipcRenderer.on('vk:website-state', listener);
-      return () => ipcRenderer.removeListener('vk:website-state', listener);
-    },
-  },
-  getVkCover: (playlist) => ipcRenderer.invoke('vk:cover', playlist),
+  clearLegacyVkSession: () => ipcRenderer.invoke('vk:reset'),
   lyrics: { lookup: (query) => ipcRenderer.invoke('lyrics:lookup', query), local: (id) => ipcRenderer.invoke('lyrics:local', id), openEdition: (url) => ipcRenderer.invoke('lyrics:edition', url) },
   exportMp3: (track, withLyrics) => ipcRenderer.invoke('online:export-mp3', track, withLyrics),
   recognition: {

@@ -16,7 +16,7 @@ export const ACCENTS = [
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
 export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors'] as const;
 export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
-export const START_PAGES = ['player', 'library', 'local', 'search', 'vk'] as const;
+export const START_PAGES = ['player', 'library', 'local', 'search', 'music'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
 export const CROSSFADE_TIMES = [0, 2, 4, 6, 8] as const;
 export const DATA_LANGUAGES = { system: 'Системный', 'ru-RU': 'Русский', 'en-US': 'English', 'de-DE': 'Deutsch' } as const;
@@ -111,8 +111,10 @@ export function readAppearance(value: unknown): Appearance {
 
 export function readPlayback(value: unknown): PlaybackPreferences {
   const data = value as Partial<PlaybackPreferences> | null | undefined;
+  // Preserve the old VK start-page choice as the native Music page.
+  const startPage: unknown = data?.startPage;
   return {
-    startPage: data?.startPage && START_PAGES.includes(data.startPage) ? data.startPage : defaultPlayback.startPage,
+    startPage: startPage === 'vk' ? 'music' : START_PAGES.includes(startPage as StartPage) ? startPage as StartPage : defaultPlayback.startPage,
     seekStep: data?.seekStep && SEEK_STEPS.includes(data.seekStep) ? data.seekStep : defaultPlayback.seekStep,
     autoNext: data?.autoNext !== false,
     autoPlay: data?.autoPlay === true,

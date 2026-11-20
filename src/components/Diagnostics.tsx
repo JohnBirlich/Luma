@@ -76,7 +76,7 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
       <div><p className="overline page-kicker"><span />{t("Инструменты Luma")}</p><h1>{t("Диагностика")}</h1></div>
       <span className="diagnostic-badge"><Bug size={13} /> Debug</span>
     </header>
-    <p className="diagnostic-intro">{t("Журнал запуска, загрузки, подключения к VK и локального воспроизведения.")}</p>
+    <p className="diagnostic-intro">{t("Журнал запуска, подключения к сети, импорта и воспроизведения.")}</p>
     {system && snapshot && <section className="diagnostic-system" aria-label={t("Сведения о приложении")}>
       <div><div className="diagnostic-system-icon"><Terminal size={18} /></div><span><small>{t("Версия Luma")}</small><strong>{system.version}</strong><span>{t(runtimeMode[system.mode])}</span></span></div>
       <div><div className="diagnostic-system-icon"><Monitor size={18} /></div><span><small>{t("Система")}</small><strong>{diagnosticSystem(system.system, t)}</strong><span>{t(system.runtime)}</span></span></div>

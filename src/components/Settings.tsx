@@ -132,7 +132,7 @@ interface SettingsProps {
   sectionId: SettingsSectionId | undefined;
   selectSection(id?: SettingsSectionId): void;
   returnToTab(): void;
-  openVk(): void;
+  openMusic(): void;
 }
 
 const SECTIONS = [
@@ -154,7 +154,7 @@ const allSections = [...SECTIONS, ...APP_SECTIONS];
 export type SettingsSectionId = (typeof allSections)[number]['id'];
 const shortcuts = [
   ['Пробел / K', 'Воспроизведение и пауза'], ['← / →', 'Перемотка'], ['F / Esc', 'Развернуть трек / выйти из большого плеера'],
-  ['M', 'Выключить или вернуть звук'], ['Q', 'Очередь в обычном плеере'], ['Ctrl + O', 'Добавить музыку'],
+  ['L / Esc', 'Караоке / выйти из большого плеера'], ['M', 'Выключить или вернуть звук'], ['Q', 'Очередь в обычном плеере'], ['Ctrl + O', 'Добавить музыку'],
   ['Ctrl + ,', 'Настройки'], ['Ctrl + Shift + L', 'Диагностика'],
 ];
 
@@ -210,7 +210,7 @@ export function SettingsPage(props: SettingsProps) {
             <SettingCard title={t("При запуске")}>
               <label className="setting-row select-row"><span><strong>{t("Раздел при запуске")}</strong><small>{t("Откроется при следующем запуске Luma.")}</small></span>
                 <select value={playback.startPage} onChange={(event) => changePlayback({ ...playback, startPage: event.currentTarget.value as StartPage })}>
-                  <option value="player">{t("Главная")}</option><option value="library">{t("Медиатека")}</option><option value="local">{t("Локальная библиотека")}</option><option value="search">{t("Поиск")}</option><option value="vk">{t("Плейлисты VK")}</option>
+                  <option value="player">{t("Главная")}</option><option value="library">{t("Медиатека")}</option><option value="local">{t("Локальная библиотека")}</option><option value="search">{t("Поиск")}</option><option value="music">{t("Музыка")}</option>
                 </select>
               </label>
               <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openLocalLibrary}>{t("Открыть локальную библиотеку")}</button></div>
@@ -232,7 +232,7 @@ export function SettingsPage(props: SettingsProps) {
               <ToggleRow title={t("Отключить анимацию при смене вкладки")} detail={t("Не влияет на живые фоны и эффекты в плеере.")} enabled={!appearance.tabMotion} change={() => changeAppearance({ ...appearance, tabMotion: !appearance.tabMotion })} />
               <ToggleRow title={t("Показывать полные числа")} detail={t("Например, 1234 вместо 1.2к в счётчиках медиатеки и очереди.")} enabled={appearance.fullNumbers} change={() => changeAppearance({ ...appearance, fullNumbers: !appearance.fullNumbers })} />
               <ToggleRow title={t("Классический стиль докбара")} detail={t("Строгая панель управления и классические вкладки на узком экране.")} enabled={appearance.classicDock} change={() => changeAppearance({ ...appearance, classicDock: !appearance.classicDock })} />
-              <label className="setting-row select-row"><span><strong>{t("Язык интерфейса")}</strong><small>{t("Меню, настройки и кнопки Luma. Теги, тексты песен и сайт VK не переводятся.")}</small></span>
+              <label className="setting-row select-row"><span><strong>{t("Язык интерфейса")}</strong><small>{t("Меню, настройки и кнопки Luma. Теги, тексты песен и названия плейлистов не переводятся.")}</small></span>
                 <select value={props.uiLanguage} onChange={(event) => props.changeLanguage(event.currentTarget.value as UiLanguage)}>
                   {Object.entries(UI_LANGUAGES).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select></label>
@@ -283,7 +283,7 @@ export function SettingsPage(props: SettingsProps) {
             <SettingCard title={t("Воспроизведение в Luma")}>
               <ToggleRow title={t("Аудиоэффекты")} detail={t("Применять эквалайзер и предусиление к локальным файлам.")} enabled={props.eqEnabled} change={props.toggleEffects} />
               <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openEqualizer} aria-haspopup="dialog">{t("Настроить эквалайзер")}</button></div>
-              <ToggleRow title={t("Автозапуск")} detail={t("Начать воспроизведение локального трека при запуске Luma. Потоки и VK автоматически не запускаются.")} enabled={playback.autoPlay} change={() => changePlayback({ ...playback, autoPlay: !playback.autoPlay })} />
+              <ToggleRow title={t("Автозапуск")} detail={t("Начать воспроизведение локального трека при запуске Luma. Онлайн-потоки автоматически не запускаются.")} enabled={playback.autoPlay} change={() => changePlayback({ ...playback, autoPlay: !playback.autoPlay })} />
               <ToggleRow title={t("Следующий трек автоматически")} detail={t("Если выключено, плеер остановится в конце. Повтор одного трека действует отдельно.")} enabled={playback.autoNext} change={() => changePlayback({ ...playback, autoNext: !playback.autoNext })} />
               <label className="setting-row select-row"><span><strong>{t("Кроссфейд")}</strong><small>{t("Плавный переход при автосмене между двумя файлами. Для онлайн-потоков и повтора одного трека не применяется.")}</small></span>
                 <select value={playback.crossfade} disabled={!playback.autoNext} onChange={(event) => changePlayback({ ...playback, crossfade: Number(event.currentTarget.value) as CrossfadeTime })}>
@@ -300,7 +300,7 @@ export function SettingsPage(props: SettingsProps) {
               <ToggleRow title={t("Режим повтора")} detail={t("Сохранять повтор трека или всей очереди.")} enabled={playback.rememberRepeat} change={() => changePlayback({ ...playback, rememberRepeat: !playback.rememberRepeat })} />
               <ToggleRow title={t("Режим перемешивания")} detail={t("Помнить перемешивание даже при отключённом сохранении очереди.")} enabled={playback.rememberShuffle} change={() => changePlayback({ ...playback, rememberShuffle: !playback.rememberShuffle })} />
             </SettingCard>
-            <div className="settings-footer-note"><Settings2 size={16} /><span>{t("Эти параметры действуют в плеере Luma. Сайт и публичный виджет VK управляют звуком отдельно.")}</span></div>
+            <div className="settings-footer-note"><Settings2 size={16} /><span>{t("Эти параметры действуют в плеере Luma.")}</span></div>
           </>}
           {section?.id === 'library' && <SettingCard title={t("Коллекция Luma")}>
             <label className="setting-row select-row"><span><strong>{t("Вид медиатеки")}</strong><small>{t("Списком или плиткой с крупными обложками.")}</small></span>
@@ -331,19 +331,16 @@ export function SettingsPage(props: SettingsProps) {
               <ToggleRow title={t("Передавать данные трека системе")} detail={t("Название, исполнитель и обложка для медиапанели. Медиаклавиши работают отдельно.")} enabled={playback.publishTrack} change={() => changePlayback({ ...playback, publishTrack: !playback.publishTrack })} />
             </SettingCard>
             <SettingCard title={t("Сервисы")}>
-              <VkAccountSettings connected={props.connected} openVk={props.openVk} />
+              <VkBookmarkSettings openMusic={props.openMusic} />
               <LastFmSettings connected={props.connected} />
               <Service title={t("Тексты песен")} status="LRCLIB">
                 <p>{t("Теги и локальные .lrc / .lyrics.txt, LRCLIB и несколько оригинальных изданий из Викитеки. Для полного каталога Musixmatch нужен отдельный договор.")}</p>
-                <ToggleRow title={t("Автопоиск текстов")} detail={t("Искать для играющего трека на главной. LRCLIB получит название, исполнителя, альбом и длительность, если они известны.")} enabled={props.autoLyrics} change={() => props.toggleLyrics('autoLyrics')} />
+                <ToggleRow title={t("Автопоиск текстов")} detail={t("Искать для играющего трека на главной и в караоке. LRCLIB получит название, исполнителя, альбом и длительность, если они известны.")} enabled={props.autoLyrics} change={() => props.toggleLyrics('autoLyrics')} />
                 {window.luma && <ToggleRow title={t("Сохранять текст с новым MP3")} detail={t("Для личной копии MP3: синхронный текст в соседний .lrc, обычный — в тег MP3. Если найдены оба, сохраняются оба. Существующие файлы не меняются.")} enabled={props.exportLyrics} change={() => props.toggleLyrics('exportLyrics')} />}
               </Service>
               <Service title="iTunes" status={t("Только метаданные")}>
                 <p>{t("Название и теги можно найти в редакторе трека. Условия iTunes Search API не дают права использовать рекламные изображения как постоянные обложки Luma.")}</p>
                 {props.openTrackInfo && <div className="settings-actions"><button className="button outline-button" type="button" onClick={props.openTrackInfo}>{t("Данные текущего трека")}</button></div>}
-              </Service>
-              <Service title="VK Recommendations" status={t("Нужно разрешение VK")}>
-                <p>{t("Подборки VK доступны на официальной странице после входа. В очереди Luma они не появятся без разрешённого аудио API. Рекомендации Luma остаются локальными.")}</p>
               </Service>
             </SettingCard>
           </>}
@@ -409,7 +406,7 @@ function FloatSettings({ requested, status, change }: { requested: boolean; stat
     missing: 'Float-вывод недоступен в этом окружении.',
   };
   return <SettingCard title={t("Float-вывод")} detail={t("Для локальных файлов: выделенный WASAPI Exclusive в стерео IEEE Float32, только если драйвер принимает точный формат. Не меняет разрядность исходника и не гарантирует bit-perfect.")}>
-    <ToggleRow title={t("Попробовать Float-вывод")} detail={t("Устройство может быть временно занято Luma. При несовместимости звук остаётся на системном выходе. VK и онлайн-потоки не затрагиваются.")}
+    <ToggleRow title={t("Попробовать Float-вывод")} detail={t("Устройство может быть временно занято Luma. При несовместимости звук остаётся на системном выходе. Онлайн-потоки не затрагиваются.")}
       enabled={requested && available} disabled={!available} change={() => change(!requested)} />
     <p className="setting-body-copy" role="status">{t(labels[available ? status : 'missing'])}</p>
   </SettingCard>;
@@ -434,7 +431,7 @@ function LastFmSettings({ connected }: { connected: boolean }) {
   const issues = { authorize: t("Подтвердите доступ в браузере, затем завершите подключение."), offline: t("Last.fm не ответил. Проверьте сеть."),
     rejected: t("Last.fm не принял запрос. Проверьте настройки приложения и аккаунта."), expired: t("Сессия Last.fm отозвана. Подключите аккаунт снова.") };
   return <Service title="Last.fm" status={status?.user ?? (bridge ? t("Не подключён") : t("В приложении Windows"))}>
-    <p>{t("Скробблинг выключен до вашего согласия. При включении Last.fm получит название, исполнителя, альбом, длительность и время начала трека. Демо и звук со страницы VK не отправляются.")}</p>
+    <p>{t("Скробблинг выключен до вашего согласия. При включении Last.fm получит название, исполнителя, альбом, длительность и время начала трека. Демотреки не отправляются.")}</p>
     {status && !status.configured && <p>{t("Создайте API-аккаунт и запустите Luma с переменными LUMA_LASTFM_API_KEY и LUMA_LASTFM_SECRET. Пошаговая инструкция — в репозитории.")}</p>}
     {status?.user && <>
       {!status.persistent && <p>{t("Системное хранилище недоступно. Сессия останется только до закрытия Luma.")}</p>}
@@ -479,21 +476,19 @@ function StreamCacheSettings() {
   </SettingCard>;
 }
 
-function VkAccountSettings({ connected, openVk }: { connected: boolean; openVk(): void }) {
+function VkBookmarkSettings({ openMusic }: { openMusic(): void }) {
   const t = useText();
   const [resetting, setResetting] = useState(false);
   const [notice, setNotice] = useState('');
-  return <Service title="VK Music" status={t("Официальный сайт")}>
-    <p><strong>{t("Статус аккаунта:")}</strong>{" "}{t("проверьте на странице VK. Luma не читает данные входа и не может подтвердить ваш аккаунт.")}</p>
-    <p>{t("Звуком на сайте и в виджете управляет VK. У Luma нет доступа к аудио API VK, поэтому VK Микс, радио и личные подборки недоступны в очереди Luma.")}</p>
-    {window.luma && <div className="settings-actions">
-      <button className="button outline-button" type="button" disabled={resetting || !connected} onClick={openVk}>{t("Войти в VK в Luma")}</button>
-      <button className="button outline-button" type="button" disabled={resetting} onClick={() => {
+  return <Service title={t('Закладки VK')} status={t('Внешние ссылки')}>
+    <p>{t('Luma больше не загружает страницы VK внутри окна. Личные рекомендации и воспроизведение VK доступны только на стороне сервиса.')}</p>
+    <div className="settings-actions">
+      <button className="button outline-button" type="button" onClick={openMusic}>{t('Открыть раздел «Музыка»')}</button>
+      {window.luma && <button className="button outline-button" type="button" disabled={resetting} onClick={() => {
         setResetting(true); setNotice('');
-        void window.luma?.vk.reset().then((done) => { if (done) setNotice(t("Данные входа в Luma очищены.")); }, () => setNotice(t("Не удалось очистить данные входа VK."))).finally(() => setResetting(false));
-      }}>{resetting ? t("Сбрасываем…") : t("Сбросить данные аккаунта")}</button>
-    </div>}
-    {notice && <p className="setting-hint" role="status">{notice}</p>}
-    {!window.luma && <p className="setting-hint">{t("Вход доступен только на странице VK в настольном приложении.")}</p>}
+        void window.luma?.clearLegacyVkSession().then(() => setNotice('Данные старого сеанса VK удалены.'), () => setNotice('Не удалось очистить данные входа VK.')).finally(() => setResetting(false));
+      }}>{resetting ? t('Сбрасываем…') : t('Удалить старые данные входа VK')}</button>}
+    </div>
+    {notice && <p className="setting-hint" role="status">{t(notice)}</p>}
   </Service>;
 }

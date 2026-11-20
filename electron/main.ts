@@ -21,13 +21,11 @@ import { createMetadataService, validAcoustidClient } from '../src/shared/metada
 import { isMetadataPage } from '../src/shared/recognition.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
-import { isVkExternalUrl, isVkWidgetFrameUrl } from '../src/shared/vk.js';
+import { isVkExternalUrl, LEGACY_VK_SESSION } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { DesktopFloatOutput } from './float-output.js';
 import { StreamCache } from './stream-cache.js';
 import { createProtocolHandler } from './protocol.js';
-import { fetchVkCover } from './vk-artwork.js';
-import { VkWebsite } from './vk-window.js';
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'luma',
@@ -103,16 +101,13 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     try { appWindow(event); } catch { return; }
     void lastfm.record(data);
   });
-  const vk = new VkWebsite(logs);
-  ipcMain.handle('vk:open-website', async (event, url: unknown, bounds: unknown) => {
+  ipcMain.handle('vk:reset', async (event) => {
     appWindow(event);
-    await floatOutput.stop();
-    return vk.open(appWindow(event), url, bounds);
+    // A 0.12 profile can still hold a VK login. Do not create a view or read any account data.
+    const legacy = session.fromPartition(LEGACY_VK_SESSION);
+    await legacy.clearStorageData();
+    await legacy.clearCache();
   });
-  ipcMain.handle('vk:layout', (event, bounds: unknown) => vk.layout(appWindow(event), bounds));
-  ipcMain.handle('vk:command', (event, action: unknown) => vk.command(appWindow(event), action));
-  ipcMain.handle('vk:close', (event) => { appWindow(event); vk.close(); });
-  ipcMain.handle('vk:reset', (event) => vk.reset(appWindow(event)));
   const lookupLyrics = createLyricsService(net.fetch, true);
   const exportMp3 = createOnlineExporter(lookupLyrics, (...args) => t(...args));
   ipcMain.handle('lyrics:local', (event, id: unknown) => { appWindow(event); return library.lyrics(id); });
@@ -187,7 +182,6 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     await writeFile(result.filePath, diagnosticsReport(logs.snapshot(), t), 'utf8');
     return true;
   });
-  let pendingCovers = 0;
   ipcMain.handle('library:audio-format', (event, id: unknown) => { appWindow(event); return library.audioFormat(id); });
   ipcMain.handle('library:list', (event) => { appWindow(event); return library.list(); });
   ipcMain.handle('library:choose', async (event) => {
@@ -212,19 +206,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('vk:open-link', (event, url: unknown) => {
     appWindow(event);
     if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
-    return shell.openExternal(url);
-  });
-  ipcMain.handle('vk:cover', async (event, playlist: unknown) => {
-    appWindow(event);
-    if (pendingCovers >= 4) return null;
-    pendingCovers++;
-    const start = performance.now();
-    try {
-      const cover = await fetchVkCover(playlist);
-      logs.main(cover ? 'vk.cover' : 'vk.noCover', { ms: performance.now() - start });
-      return cover;
-    }
-    finally { pendingCovers--; }
+    return shell.openExternal(url).then(() => { logs.main('vk.browserOpened'); }, (error) => { logs.main('vk.browserFailed'); throw error; });
   });
   ipcMain.handle('window:minimize', (event) => appWindow(event).minimize());
   ipcMain.handle('window:toggle-maximize', (event) => {
@@ -271,18 +253,15 @@ async function createWindow() {
   }
   owner.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   owner.webContents.on('will-frame-navigate', (event) => {
-    const allowed = event.isMainFrame ? isAppPage(event.url) : isVkWidgetFrameUrl(event.url);
-    if (!allowed) event.preventDefault();
+    if (!event.isMainFrame || !isAppPage(event.url)) event.preventDefault();
   });
   owner.webContents.on('will-redirect', (event) => {
-    const allowed = event.isMainFrame ? isAppPage(event.url) : isVkWidgetFrameUrl(event.url);
-    if (!allowed) event.preventDefault();
+    if (!event.isMainFrame || !isAppPage(event.url)) event.preventDefault();
   });
   owner.webContents.on('will-attach-webview', (event) => event.preventDefault());
-  owner.webContents.on('did-fail-load', (_event, code, _description, url, mainFrame) => {
+  owner.webContents.on('did-fail-load', (_event, code, _description, _url, mainFrame) => {
     if (code === -3) return; // An intentional navigation, not a load failure.
     if (mainFrame) journal?.main('desktop.pageFailed', { code });
-    else if (isVkWidgetFrameUrl(url)) journal?.main('vk.failed', { code });
   });
   owner.webContents.on('render-process-gone', (_event, { reason, exitCode }) => {
     if (reason !== 'clean-exit') journal?.main('desktop.rendererExited', { code: exitCode });
@@ -335,7 +314,7 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     session.defaultSession.setUserAgent(session.defaultSession.getUserAgent(), `${RUSSIAN_LOCALE},ru`);
     // Chromium needs speaker selection to switch our audio graph to/from its silent sink.
-    // This does not grant capture and never applies to VK, subframes or other windows.
+    // This does not grant capture and never applies to subframes or other windows.
     const canRouteAudio = (contents: Electron.WebContents | null, permission: string, url: string | undefined, mainFrame: boolean) =>
       process.platform === 'win32' && permission === 'speaker-selection' && mainFrame && !!url
       && !!window && !window.isDestroyed() && contents === window.webContents && isAppPage(url);

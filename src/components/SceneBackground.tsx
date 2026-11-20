@@ -22,7 +22,7 @@ export const SceneBackground = memo(function SceneBackground({ effect, strength 
   const element = useRef<HTMLDivElement>(null);
   const halo = useRef<HTMLDivElement>(null);
   const ocean = useRef<HTMLVideoElement>(null);
-  const [inView, setInView] = useState(true);
+  const [inView, setInView] = useState(typeof IntersectionObserver === 'undefined');
   const allowed = useVisualMotion(animate && strength > 0 && effect !== 'off');
   const moving = allowed && inView;
   const factor = EFFECT_TEMPOS[tempo].factor;
@@ -30,13 +30,19 @@ export const SceneBackground = memo(function SceneBackground({ effect, strength 
   useEffect(() => {
     const target = element.current;
     if (!target || !allowed || typeof IntersectionObserver === 'undefined') return;
-    const visible = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting));
+    const visible = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting && entry.intersectionRatio > 0));
     visible.observe(target);
     return () => visible.disconnect();
   }, [allowed, effect]);
   useEffect(() => {
     const video = ocean.current;
-    if (video) { video.playbackRate = 1 / factor; void video.play().catch(() => {}); }
+    if (!video) return;
+    video.src = oceanUrl;
+    void video.play().catch(() => {});
+    return () => { video.pause(); video.removeAttribute('src'); video.load(); };
+  }, [moving, effect]);
+  useEffect(() => {
+    if (ocean.current) ocean.current.playbackRate = 1 / factor;
   }, [factor, moving, effect]);
   useEffect(() => {
     const light = halo.current;
@@ -57,7 +63,7 @@ export const SceneBackground = memo(function SceneBackground({ effect, strength 
   return <div className={`scene-background scene-${effect}${moving ? ' scene-moving' : ''}`} ref={element}
     style={{ '--strength': strength, '--scene-tempo': factor } as CSSProperties} aria-hidden="true">
     {effect === 'aurora' && <div className="aurora-curtain"><i /><i /></div>}
-    {effect === 'waves' && moving && <video ref={ocean} className="scene-ocean-film" src={oceanUrl} poster={oceanPoster} loop muted playsInline disablePictureInPicture preload="none" />}
+    {effect === 'waves' && moving && <video ref={ocean} className="scene-ocean-film" poster={oceanPoster} loop muted playsInline disablePictureInPicture preload="none" />}
     {effect === 'stars' && <><i className="star-field" /><svg className="scene-constellations" viewBox="0 0 840 430" preserveAspectRatio="xMidYMid slice" fill="none">
       <path d="M95 293 219 209 304 249 398 119 515 158 607 82 712 117 M304 249 433 309 571 255 687 278" />
       <circle cx="398" cy="119" r="4"/><circle cx="607" cy="82" r="3"/><circle cx="219" cy="209" r="2.5" />

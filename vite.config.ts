@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { VK_WIDGET_URL } from './src/shared/vk';
 
 export default defineConfig({
   base: './',
@@ -11,6 +10,6 @@ export default defineConfig({
   build: { assetsInlineLimit: 0 },
   server: {
     allowedHosts: ['.e2b.app'],
-    headers: { 'Content-Security-Policy': `frame-src ${VK_WIDGET_URL}` },
+    headers: { 'Content-Security-Policy': "frame-src 'none'" },
   },
 });

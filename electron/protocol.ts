@@ -5,7 +5,6 @@ import { Readable } from 'node:stream';
 import { ONLINE_ORIGINS } from '../src/shared/online.js';
 import type { StreamCache } from './stream-cache.js';
 import { audioMime } from '../src/shared/media.js';
-import { VK_WIDGET_URL } from '../src/shared/vk.js';
 import { APP_ORIGIN, type DesktopLibrary } from './library.js';
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -15,7 +14,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg', '.gif': 'image/gif', '.avif': 'image/avif', '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8', '.wasm': 'application/wasm',
 };
-const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: ${ONLINE_ORIGINS.images}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media}; worker-src 'self'; object-src 'none'; frame-src ${VK_WIDGET_URL}; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
+const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: ${ONLINE_ORIGINS.images}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media}; worker-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
 
 export function parseByteRange(header: string, size: number): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());

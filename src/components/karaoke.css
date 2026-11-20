@@ -1,0 +1,58 @@
+.lyrics-sources { padding: 7px 0 1px; }
+.lyrics-sources label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.lyrics-sources select { padding: 5px 8px; border: 1px solid #ffffff25; border-radius: 7px; color: var(--text); background: var(--raised-bg); }
+.lyrics-sources input[type='checkbox'] { accent-color: var(--accent); }
+.lyrics-empty { display: grid; align-content: center; justify-items: start; gap: 6px; padding-block: 10px 2px; color: var(--muted); font-size: 12px; }
+.lyrics-empty > svg { display: none; color: var(--accent-light); }
+.lyrics-empty > small { font-size: 11px; }
+.immersive-header .immersive-karaoke-toggle { flex: none; width: 43px; height: 43px; border: 1px solid #ffffff35; border-radius: 12px; background: #161220ac; }
+.immersive-header .immersive-karaoke-toggle[aria-pressed='true'] { color: var(--accent-light); border-color: var(--accent-border); }
+.karaoke-stage > .immersive-scrim { background: linear-gradient(180deg,#0d1018c4,#11101772 50%,#0d0e17d4); }
+.karaoke-grid { flex: none; margin: 0 auto; width: min(100%, 690px); padding-block: clamp(8px, 2.2dvh, 24px); min-width: 0; display: grid; gap: 16px; }
+.karaoke-card { min-width: 0; padding: clamp(12px, 2.1vw, 27px); border: 1px solid #ffffff27; border-radius: 19px;
+  background: linear-gradient(150deg, #1f1d2ae6, #12131beb 72%); box-shadow: 0 14px 54px #0004; }
+.karaoke-track { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #ffffff1b; }
+.karaoke-track .artwork { flex: none; width: clamp(48px, 7vw, 68px); height: clamp(48px, 7vw, 68px); border: 1px solid #ffffff24; border-radius: 10px; }
+.karaoke-meta { min-width: 0; }
+.karaoke-meta > h1 { color: var(--text); font: 800 clamp(20px, 3vw, 34px)/1.12 var(--display); letter-spacing: -.027em; }
+.karaoke-meta > p { color: #d5cbdc; margin-top: 2px; font-size: clamp(12px, 1.7vw, 16px); }
+.karaoke-meta > h1, .karaoke-meta > p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lyrics-card.karaoke-lyrics { border: 0; padding: 0; margin-top: 11px; border-radius: 0; background: transparent; }
+.karaoke-lyrics > header { padding-bottom: 4px; }
+.karaoke-lyrics .lyrics-scroll, .karaoke-lyrics .lyrics-empty { height: clamp(171px, 42dvh, 428px); max-height: none; margin-block: 6px 4px; padding: 5px 8px;
+  color: #bdb6c8; scrollbar-width: thin; overscroll-behavior: contain; background: #0b0d1480; }
+.karaoke-lyrics .lyrics-scroll { font: 750 clamp(24px, 3.3vw, 39px)/1.3 var(--display); letter-spacing: -.035em; }
+.karaoke-lyrics .lyrics-scroll.lyrics-plain { font-size: clamp(18px, 2.7vw, 28px); line-height: 1.52; letter-spacing: -.018em; }
+.karaoke-lyrics .lyrics-timed::after { content: ''; display: block; height: 67%; }
+.karaoke-lyrics .lyrics-timed > p { padding-block: 9px; }
+.karaoke-lyrics .lyrics-timed > p[data-past] { color: #9691a1; }
+.karaoke-lyrics .lyrics-timed > p[aria-current] { color: #fff9f1; }
+.karaoke-lyrics .lyrics-empty { padding: 12px; justify-items: center; align-content: center; text-align: center; border-radius: 8px; }
+.karaoke-lyrics .lyrics-empty > svg { display: block; margin-bottom: 4px; }
+.karaoke-lyrics .lyrics-empty > p { font-size: 15px; font-weight: 730; color: var(--text); }
+.immersive-content.karaoke-controls { margin-top: 12px; gap: 8px; }
+.karaoke-controls .transport-controls { justify-content: center; }
+.karaoke-controls .transport-controls .play-button { width: 54px; height: 54px; }
+.karaoke-tools { padding-top: 4px; }
+.karaoke-tools .icon-button { width: 36px; height: 36px; }
+.karaoke-grid .immersive-upcoming { grid-area: auto; }
+@media (min-width: 960px) {
+  .karaoke-with-queue { width: min(100%, 1130px); grid-template-columns: minmax(0, 690px) minmax(250px, 310px); gap: clamp(14px, 2vw, 26px); }
+}
+@media (max-width: 959px) {
+  .karaoke-grid .immersive-upcoming { height: auto; }
+  .karaoke-tools .immersive-queue-jump { display: grid; }
+}
+@media (max-width: 700px) {
+  .karaoke-card { border-radius: 13px; }
+  .immersive-stage.karaoke-stage { --stage-padding: clamp(10px, 3vw, 20px); }
+  .karaoke-lyrics .lyrics-scroll, .karaoke-lyrics .lyrics-empty { height: clamp(143px, calc(100dvh - 405px), 360px); }
+  .karaoke-lyrics .lyrics-timed > p { padding-block: 6px; }
+  .karaoke-stage .immersive-brand { display: none; }
+  .karaoke-controls .transport-controls .play-button { width: 50px; height: 50px; }
+  .player-side-controls .karaoke-toggle { width: 31px; }
+}
+@media (max-width: 430px) {
+  .player-side-controls .volume .range, .player-side-controls .utility-divider { display: none; }
+  .immersive-karaoke-toggle, .immersive-player .immersive-queue-toggle { width: 38px; height: 38px; }
+}
