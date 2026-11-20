@@ -683,8 +683,8 @@ async function smoke() {
       assert.equal(await run(`window.luma.streamCache.save(${JSON.stringify(stationTracks[0])}).catch(() => false)`), false);
       assert.equal(await run(`window.luma.exportMp3(${JSON.stringify(stationTracks[0])}, true).then(({ saved }) => saved, () => false)`), false);
       await click('.hub-tabs button:first-child');
-      await waitFor('Home omits lyrics and karaoke for a station', () => run(`document.querySelector('.hero h2')?.textContent === 'Record'
-        && !document.querySelector('.hero-karaoke, .home-now .lyrics-scroll')`));
+      await waitFor('Home omits lyrics and disables karaoke for a station', () => run(`document.querySelector('.hero h2')?.textContent === 'Record'
+        && document.querySelector('.hero-karaoke')?.disabled && !document.querySelector('.home-page .lyrics-card')`));
       await click('.player-bar .play-button');
       await waitFor('stopping radio unloads the network source', () => run(`document.querySelector('${onlineAudio}').paused && !document.querySelector('${onlineAudio}').hasAttribute('src')`));
       await click('.hub-tabs button:nth-child(4)');
