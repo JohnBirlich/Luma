@@ -35,6 +35,7 @@ export function VkBookmarks({ covers, editCover, discardCover }: BookmarkProps) 
   const [value, setValue] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [cleanup, setCleanup] = useState<{ busy: boolean; notice?: string }>({ busy: false });
   useEffect(() => { saveVkShelf(shelf); }, [shelf]);
 
   function add(event: FormEvent<HTMLFormElement>) {
@@ -82,6 +83,14 @@ export function VkBookmarks({ covers, editCover, discardCover }: BookmarkProps) 
         {key !== editorialKey && <button type="button" className="icon-button" aria-label={t('Убрать {0} из списка', playlist.name)} onClick={() => remove(key)}><Trash2 size={16} /></button>}
       </li>;
     })}</ul>
-    <VkExternalLink href={VK_MUSIC_URL}>{t('Официальный сайт VK')}</VkExternalLink>
+    <div className="hub-topline">
+      <VkExternalLink href={VK_MUSIC_URL}>{t('Официальный сайт VK')}</VkExternalLink>
+      {window.luma && <button className="text-button vk-cleanup" type="button" disabled={cleanup.busy} onClick={async () => {
+        setCleanup({ busy: true });
+        try { await window.luma?.clearLegacyVkSession(); setCleanup({ busy: false, notice: 'Данные старого сеанса VK удалены.' }); }
+        catch { setCleanup({ busy: false, notice: 'Не удалось очистить данные входа VK.' }); }
+      }}>{t('Удалить старые данные входа VK')}</button>}
+    </div>
+    {cleanup.notice && <p role="status">{t(cleanup.notice)}</p>}
   </section>;
 }

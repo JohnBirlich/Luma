@@ -3,15 +3,10 @@ import { initialBeat, sampleBeat } from '../shared/beat';
 import type { ReadSpectrum } from '../player/useAudio';
 import { compactScene, sceneBufferSize, sceneFps } from '../shared/scene-budget';
 
-const bands = [1, 2, 3, 4, 6, 8, 11, 15, 21, 29, 40, 55, 76, 105, 144, 202, 279, 393];
-const idle = [0.26, 0.36, 0.34, 0.5, 0.64, 0.6, 0.84, 0.9, 0.8, 0.68, 0.64, 0.71, 0.5, 0.43, 0.49, 0.28, 0.22];
+import { advanceSpectrum, drawAurora, drawNotes, drawOrbits, drawPrism, drawSpectrum, drawStars, seeded, spectrumFrames } from './scene-art';
+import { CANVAS_EFFECTS, coastSpeed } from '../shared/scene-motion';
+import type { CanvasEffect } from '../shared/scene-motion';
 
-function seeded(seed: number) {
-  return () => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 0x100000000;
-  };
-}
 const scatter = seeded(971);
 const FIREWORKS_CYCLE = 7.2;
 const bursts = Array.from({ length: 6 }, (_, i) => ({
@@ -58,7 +53,7 @@ function fireworks(ctx: CanvasRenderingContext2D, w: number, h: number, t: numbe
     const tip = Math.max(1.25, size / 366);
     for (let i = 0; i < sparks.length; i += 2) {
       const spark = sparks[i];
-      if (age <= spark.life) ctx.fillRect(cx + spark.x * distance * size, cy + (spark.y * distance + drift) * size, tip, tip);
+      if (age <= spark.life) { ctx.beginPath(); ctx.arc(cx + spark.x * distance * size, cy + (spark.y * distance + drift) * size, tip / 2, 0, 2 * Math.PI); ctx.fill(); }
     }
   }
   ctx.globalAlpha = 1;
@@ -97,68 +92,70 @@ function drawRain(ctx: CanvasRenderingContext2D, w: number, h: number, t: number
   ctx.globalAlpha = 1;
 }
 
-function drawMeteors(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+function drawMeteors(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, speed: number) {
   ctx.lineCap = 'round';
+  const scale = Math.min(w, h), dx = .77 * scale, dy = .45 * scale;
   for (const { x, y, phase, depth } of meteors) {
     const age = (t * (.78 + .29 * depth) + phase) % 4.4;
     if (age > 1.24) continue;
-    const xx = (x - .27 * age + .1) * w, yy = (y + .24 * age - .18) * h;
-    const tail = (.11 + depth * .18) * Math.min(w, h);
+    const xx = (x + .14) * w - dx * age, yy = (y - .1) * h + dy * age;
+    const tail = (.11 + depth * .35) * (.57 + .43 * speed);
     const fade = Math.min(1, age * 6) * (1 - age / 1.24);
-    ctx.strokeStyle = '#877cf6'; ctx.globalAlpha = fade * .46; ctx.lineWidth = 1 + depth * 1.9;
-    ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + tail * 1.9, yy - tail); ctx.stroke();
-    ctx.strokeStyle = '#e2f4ff'; ctx.globalAlpha = fade; ctx.lineWidth *= .64;
-    ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + tail * .55, yy - tail * .29); ctx.stroke();
+    const light = ctx.createLinearGradient(xx, yy, xx + dx * tail, yy - dy * tail);
+    light.addColorStop(0, '#f4faff'); light.addColorStop(.16, '#abccffbb'); light.addColorStop(.55, '#ad8dff57'); light.addColorStop(1, '#ad8dff00');
+    ctx.strokeStyle = light;
+    ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + dx * tail, yy - dy * tail);
+    ctx.globalAlpha = fade * .26; ctx.lineWidth = Math.max(1.9, scale * .015 * depth); ctx.stroke();
+    ctx.globalAlpha = fade; ctx.lineWidth = Math.max(.9, scale * .0038 * depth); ctx.stroke();
+    ctx.fillStyle = '#e7f5ff'; ctx.beginPath(); ctx.arc(xx, yy, Math.max(.65, scale * .0032 * depth), 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1;
 }
 
-const solarSparks = Array.from({ length: 56 }, () => ({
-  progress: scatter(), speed: .11 + scatter() * .12, glow: .4 + scatter() * .6,
+const solarSparks = Array.from({ length: 64 }, () => ({
+  progress: scatter(), speed: .14 + scatter() * .16, glow: .4 + scatter() * .6,
 }));
 
-function solarPoint(a: number, b: number, c: number, d: number, u: number) {
-  const v = 1 - u;
-  return v ** 3 * a + 3 * v * v * u * b + 3 * v * u * u * c + u ** 3 * d;
-}
-
-/** Directional plasma, from the corona at right to the cooling tail at left. */
-function drawSolar(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, glow: number, filament: CanvasGradient) {
-  const start = .92 * w;
-  const end = -.07 * w;
+/** A wind field: all strands skim the corona, then fan out downstream. */
+function drawSolar(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, glow: number) {
+  const cx = w * .86, cy = h * .31, r = Math.min(w, h) * .134;
+  const filament = ctx.createLinearGradient(-.06 * w, 0, cx, 0);
+  filament.addColorStop(0, '#793aac00'); filament.addColorStop(.28, '#bb66ee59');
+  filament.addColorStop(.67, '#ff8a7ac8'); filament.addColorStop(.9, '#ffbf88e8'); filament.addColorStop(1, '#ffddbc00');
+  const corona = ctx.createRadialGradient(cx, cy, r * .65, cx, cy, r * 2.6);
+  corona.addColorStop(0, '#fff1bf'); corona.addColorStop(.20, '#ffb467b9'); corona.addColorStop(.43, '#ff674c52'); corona.addColorStop(1, '#ff6d4900');
+  ctx.fillStyle = corona; ctx.fillRect(cx - 2.6 * r, cy - 2.6 * r, 5.2 * r, 5.2 * r);
   ctx.lineCap = 'round';
-  for (let band = 0; band < 14; band++) {
-    const i = (band - 6.5) / 6.5;
-    const wave = Math.sin(t * .65 + i * 2.6);
-    const head = h * (.34 + i * .098);
-    const curl = h * (.03 + i * .2 + .11 * wave);
-    const tail = h * (1.18 + i * .36 + .16 * Math.sin(t * .49 + i * 2.8));
-    const bend = h * (1.01 + .55 * i - .20 * wave);
-    ctx.beginPath();
-    ctx.moveTo(start, head);
-    ctx.bezierCurveTo(w * .70, curl, w * .33, bend, end, tail);
-    ctx.strokeStyle = filament;
-    ctx.globalAlpha = (.15 + .10 * (1 - Math.abs(i))) * (1 + glow * .30);
-    ctx.lineWidth = Math.max(2, h * .010) * (band % 3 ? 1 : 1.75);
-    ctx.stroke();
-    ctx.globalAlpha = (.37 + .16 * (1 - Math.abs(i))) * (1 + glow * .32);
-    ctx.lineWidth = Math.max(.65, h * .0026);
-    ctx.stroke();
-    ctx.fillStyle = band % 3 ? '#ffcb86' : '#fff0c9';
-    for (let index = band; index < solarSparks.length; index += 14) {
-      const spark = solarSparks[index];
-      const age = fraction(spark.progress + t * spark.speed);
-      const x = solarPoint(start, w * .70, w * .33, end, age);
-      const y = solarPoint(head, curl, bend, tail, age);
-      ctx.globalAlpha = spark.glow * Math.sin(Math.PI * age) * (1 - .62 * age);
-      const size = Math.max(1.1, h * (.003 + .004 * spark.glow));
-      ctx.fillRect(x, y, size * (1.9 + glow), size);
+  const count = 22;
+  for (let i = 0; i < count; i++) {
+    const band = (i / (count - 1) - .5) * 2, bend = Math.sin(t * .73 + i * .29);
+    const start = cx - r * (.5 + .22 * Math.cos(band * 2.6));
+    const x = (p: number) => start - (start + w * .15) * p;
+    const y = (p: number) => cy + r * band * .86 + h * (p * p * (.38 + band * .39) - .12 * Math.sin(p * Math.PI))
+      + h * .075 * p * Math.sin(p * 7.3 - t * 1.3 + band * 2.3) + bend * r * p * .15;
+    ctx.strokeStyle = filament; ctx.beginPath(); ctx.moveTo(start, y(0));
+    for (let j = 1; j <= 24; j++) { const p = j / 24; ctx.lineTo(x(p), y(p)); }
+    ctx.globalAlpha = (.12 + .06 * glow); ctx.lineWidth = Math.max(2.8, h * .016); ctx.stroke();
+    ctx.globalAlpha = .41 + .19 * glow; ctx.lineWidth = Math.max(.62, h * (.0018 + .0014 * (i % 3 === 0 ? 1 : 0))); ctx.stroke();
+    // Advect short light packets rather than moving the entire filament back and forth.
+    for (let k = i; k < solarSparks.length; k += count) {
+      const { progress, speed, glow: bright } = solarSparks[k], p = fraction(progress + t * speed);
+      const rear = Math.max(0, p - .04 - .045 * bright);
+      const packet = ctx.createLinearGradient(x(rear), y(rear), x(p), y(p));
+      packet.addColorStop(0, '#fdaafe00'); packet.addColorStop(.84, '#ffd5b0b8'); packet.addColorStop(1, '#ffefc6');
+      ctx.beginPath(); ctx.moveTo(x(rear), y(rear)); ctx.quadraticCurveTo(x((p + rear) / 2), y((p + rear) / 2), x(p), y(p));
+      ctx.lineWidth = Math.max(.85, h * .0037 * bright); ctx.strokeStyle = packet; ctx.globalAlpha = bright * Math.sin(Math.PI * p) ** .60; ctx.stroke();
     }
   }
+  // A feathered terminator covers the roots, so the wind blends into the illuminated limb.
   ctx.globalAlpha = 1;
+  const planet = ctx.createRadialGradient(cx, cy, r * .87, cx, cy, r * 1.16);
+  planet.addColorStop(0, '#180f24'); planet.addColorStop(.33, '#281129'); planet.addColorStop(.52, '#be664ed9');
+  planet.addColorStop(.70, '#ffcf9b81'); planet.addColorStop(1, '#ffb16500');
+  ctx.fillStyle = planet; ctx.beginPath(); ctx.arc(cx, cy, r * 1.17, 0, Math.PI * 2); ctx.fill();
 }
 
-function drawPulse(ctx: CanvasRenderingContext2D, w: number, h: number, onsets: number[], now: number, kick: number, halo: CanvasGradient) {
+function drawPulse(ctx: CanvasRenderingContext2D, w: number, h: number, onsets: number[], now: number, kick: number, motion: number, halo: CanvasGradient) {
   const radius = Math.min(h, w) * .13;
   const cx = w * .65, cy = h * .49;
   ctx.globalAlpha = .48 + .52 * kick;
@@ -168,7 +165,7 @@ function drawPulse(ctx: CanvasRenderingContext2D, w: number, h: number, onsets: 
   for (const onset of onsets) {
     const age = now - onset;
     const expansion = radius * (1.1 + 3.9 * age);
-    ctx.globalAlpha = .82 * (1 - age / 1.22);
+    ctx.globalAlpha = .82 * motion * (1 - age / 1.22);
     ctx.lineWidth = Math.max(1, radius * .065 * (1 - age / 1.47));
     ctx.beginPath(); ctx.arc(cx, cy, expansion, 0, 2 * Math.PI); ctx.stroke();
   }
@@ -177,100 +174,99 @@ function drawPulse(ctx: CanvasRenderingContext2D, w: number, h: number, onsets: 
   ctx.globalAlpha = 1;
 }
 
-/** A single bounded surface for scenes whose geometry changes each frame. */
-export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'fireworks' | 'pulse' | 'rain' | 'meteors' | 'solar'; tempo: number; sample?: ReadSpectrum }) {
+/** Keep the scene clock across transport changes. Only pulse and meteor coast on pause. */
+export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
+  effect: CanvasEffect; playing: boolean; enabled: boolean; tempo: number; sample?: ReadSpectrum;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const speed = useRef(tempo);
-  speed.current = tempo;
+  const runtime = useRef({ playing, enabled, tempo, sample });
+  const wake = useRef<() => void>(undefined);
+  useEffect(() => {
+    runtime.current = { playing, enabled, tempo, sample };
+    wake.current?.();
+  }, [playing, enabled, tempo, sample]);
   useEffect(() => {
     const element = canvas.current;
     const context = element?.getContext('2d');
     if (!element || !context) return;
     const surface = element, ctx = context;
-    const bins = new Uint8Array(512);
-    const beat = initialBeat();
+    const bins = new Uint8Array(512), beat = initialBeat();
     const onsets: number[] = [];
-    const heights = Float32Array.from(idle);
+    const terrain = effect === 'spectrum' ? spectrumFrames() : undefined;
     const reactive = effect === 'spectrum' || effect === 'pulse';
+    const coast = CANVAS_EFFECTS[effect];
     let period = 1000 / sceneFps(false, reactive);
-    let raf = 0, last = 0, previous = 0, t = 0;
-    let palettes: CanvasGradient[] = [];
+    let raf = 0, last = 0, previous = 0, t = 0, velocity = 0, elapsed = 0;
     let pulseHalo: CanvasGradient | undefined;
-    let solarFilament: CanvasGradient | undefined;
+    function paint(dt: number) {
+      const { width: w, height: h } = surface;
+      if (!w || !h) return;
+      ctx.clearRect(0, 0, w, h);
+      elapsed += dt;
+      const live = runtime.current.playing && runtime.current.enabled && runtime.current.sample?.(bins);
+      const onset = live ? sampleBeat(beat, bins, elapsed) : false;
+      if (!live && dt) beat.kick *= Math.exp(-dt * 8);
+      if (effect === 'spectrum' && terrain) {
+        if (dt > 0 && velocity) advanceSpectrum(terrain, t, live ? bins : undefined);
+        drawSpectrum(ctx, w, h, terrain);
+      } else if (effect === 'pulse' && pulseHalo) {
+        if (onset || (!live && runtime.current.playing && Math.floor(t / 1.25) !== Math.floor((t - dt * velocity / runtime.current.tempo) / 1.25))) onsets.push(t);
+        while (onsets.length && (t - onsets[0] >= 1.22 || !velocity)) onsets.shift();
+        drawPulse(ctx, w, h, onsets, t, velocity ? beat.kick : 0, velocity, pulseHalo);
+      } else if (effect === 'fireworks') fireworks(ctx, w, h, t + 1.05);
+      else if (effect === 'rain') drawRain(ctx, w, h, t);
+      else if (effect === 'meteors') drawMeteors(ctx, w, h, t, velocity);
+      else if (effect === 'solar') drawSolar(ctx, w, h, t, beat.kick);
+      else if (effect === 'aurora') drawAurora(ctx, w, h, t, beat.kick);
+      else if (effect === 'stars') drawStars(ctx, w, h, t, beat.kick);
+      else if (effect === 'orbits') drawOrbits(ctx, w, h, t);
+      else if (effect === 'prism') drawPrism(ctx, w, h, t, beat.kick);
+      else if (effect === 'notes') drawNotes(ctx, w, h, t, beat.kick);
+    }
+    function schedule() {
+      const { playing: active, enabled: canMove } = runtime.current;
+      if (!canMove || (!active && (!coast || !velocity))) {
+        if (raf) cancelAnimationFrame(raf);
+        if (velocity) { velocity = 0; paint(0); }
+        raf = last = previous = 0;
+      } else if (!raf) {
+        previous = 0;
+        raf = requestAnimationFrame(draw);
+      }
+    }
+    function draw(now: number) {
+      raf = 0;
+      const delta = now - last;
+      if (delta >= period - 1) {
+        const dt = previous ? Math.min((now - previous) / 1000, .105) : 0;
+        previous = now;
+        last = delta >= period ? now - delta % period : now;
+        const { playing: active, enabled: canMove, tempo: factor } = runtime.current;
+        const next = canMove ? coast ? coastSpeed(velocity, active, dt) : Number(active) : 0;
+        t += (next + velocity) * .5 * dt / factor;
+        velocity = next;
+        paint(dt);
+      }
+      if (runtime.current.enabled && (runtime.current.playing || (coast && velocity))) raf = requestAnimationFrame(draw);
+      else previous = last = 0;
+    }
     const resize = new ResizeObserver(([{ contentRect }]) => {
       period = 1000 / sceneFps(compactScene(contentRect.width, contentRect.height), reactive);
       const { width, height } = sceneBufferSize(contentRect.width, contentRect.height, devicePixelRatio);
       if (width === surface.width && height === surface.height) return;
       surface.width = width;
       surface.height = height;
-      if (effect === 'pulse') {
-        pulseHalo = ctx.createRadialGradient(width * .65, height * .49, 0, width * .65, height * .49, .43 * Math.min(width, height));
+      if (effect === 'pulse' && width && height) {
+        pulseHalo = ctx.createRadialGradient(width * .65, height * .49, 0, width * .65, height * .49, .45 * Math.min(width, height));
         pulseHalo.addColorStop(0, '#f1c9face'); pulseHalo.addColorStop(.28, '#b883e371'); pulseHalo.addColorStop(1, '#853ae500');
       }
-      if (effect === 'solar') {
-        solarFilament = ctx.createLinearGradient(0, 0, width, height * .36);
-        solarFilament.addColorStop(0, '#71267c00'); solarFilament.addColorStop(.27, '#c95dba38');
-        solarFilament.addColorStop(.63, '#f97c71ad'); solarFilament.addColorStop(.86, '#ffab63f4'); solarFilament.addColorStop(1, '#fff2bfe8');
-      }
-      if (effect === 'spectrum') palettes = ['#ab9dff', '#6ad9f7', '#e09abf'].map((color) => {
-        const gradient = ctx.createLinearGradient(0, height, 0, height * .09);
-        gradient.addColorStop(0, `${color}04`);
-        gradient.addColorStop(.69, `${color}b0`);
-        gradient.addColorStop(1, '#fff5eb');
-        return gradient;
-      });
+      paint(0);
     });
-    // Force initialization even if the stage happens to match the canvas's default 300×150.
     surface.width = surface.height = 0;
     resize.observe(surface);
-    function draw(now: number) {
-      t += (previous ? Math.min(now - previous, 100) : 0) / (1000 * speed.current);
-      previous = now;
-      const elapsed = now - last;
-      if (elapsed >= period - 1 && surface.width && surface.height) {
-        last = elapsed >= period ? now - elapsed % period : now;
-        const { width, height } = surface;
-        ctx.clearRect(0, 0, width, height);
-        if (effect === 'fireworks') fireworks(ctx, width, height, t + 1.05);
-        else if (effect === 'rain') drawRain(ctx, width, height, t);
-        else if (effect === 'meteors') drawMeteors(ctx, width, height, t);
-        else if (effect === 'solar' && solarFilament) {
-          const live = sample?.(bins);
-          if (live) sampleBeat(beat, bins, now / 1000);
-          else beat.kick *= .88;
-          drawSolar(ctx, width, height, t, beat.kick, solarFilament);
-        }
-        else if (effect === 'pulse' && pulseHalo) {
-          const seconds = now / 1000;
-          const live = sample?.(bins);
-          if (live && sampleBeat(beat, bins, seconds)) onsets.push(seconds);
-          if (!live) beat.kick = .14 + .12 * Math.sin(t * 1.4);
-          while (onsets.length && seconds - onsets[0] >= 1.22) onsets.shift();
-          drawPulse(ctx, width, height, onsets, seconds, beat.kick, pulseHalo);
-        } else {
-          const live = sample?.(bins);
-          const slot = width * .89 / idle.length;
-          const base = height * .92;
-          for (let i = 0; i < idle.length; i++) {
-            let target = idle[i] * (.74 + .19 * Math.sin(t * (2.35 + i * .11) + i * .88));
-            if (live) {
-              let energy = 0;
-              for (let bin = bands[i]; bin < bands[i + 1]; bin++) energy = Math.max(energy, bins[bin]);
-              target = .06 + .82 * (energy / 255) ** 1.22;
-            }
-            heights[i] += (target - heights[i]) * (target > heights[i] ? .56 : .29);
-            const x = width * .055 + i * slot, bar = heights[i] * base;
-            ctx.fillStyle = palettes[i % palettes.length];
-            ctx.fillRect(x, base - bar, slot * .70, bar);
-            ctx.fillStyle = '#f8efffd9';
-            ctx.fillRect(x, base - bar, slot * .70, Math.max(1, height * .0035));
-          }
-        }
-      }
-      raf = requestAnimationFrame(draw);
-    }
-    raf = requestAnimationFrame(draw);
-    return () => { resize.disconnect(); cancelAnimationFrame(raf); };
-  }, [effect, sample]);
+    wake.current = schedule;
+    schedule();
+    return () => { resize.disconnect(); cancelAnimationFrame(raf); wake.current = undefined; };
+  }, [effect]);
   return <canvas className="scene-canvas" ref={canvas} aria-hidden="true" />;
 }

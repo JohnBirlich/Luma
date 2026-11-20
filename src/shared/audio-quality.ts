@@ -57,6 +57,7 @@ export function describeAudioFormat(format: AudioFormat | undefined, locale: str
 }
 
 export function describeStream(track: Track, url: string, language: UiLanguage = 'ru') {
+  if (track.online?.source === 'broadcast') return language === 'en' ? 'Live stream · source bitrate' : 'Прямой эфир · битрейт станции';
   if (language === 'en') return track.online?.source === 'jamendo' ? new URL(url).searchParams.get('format') === 'mp31'
     ? 'MP3 96 kbps · ~0.72 MB/min' : 'MP3 VBR · variable bitrate'
     : `${new URL(url).pathname.split('.').pop()?.toUpperCase() ?? 'Original'} · source bitrate`;

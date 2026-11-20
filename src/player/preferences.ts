@@ -1,3 +1,6 @@
+import { readStationIds, STATION_IDS } from '../shared/radio';
+import { readLumaPlaylists } from '../shared/luma-playlists';
+import type { LumaPlaylist } from '../shared/luma-playlists';
 import { readUiLanguage } from '../shared/ui-language';
 import type { UiLanguage } from '../shared/ui-language';
 import { readOnlineShelf } from '../shared/online';
@@ -29,6 +32,8 @@ export interface Preferences {
   favorites: string[];
   disliked: string[];
   recent: string[];
+  stationIds: string[];
+  playlists: LumaPlaylist[];
   onlineTracks: OnlineTrack[];
   onlineRefs: OnlineTrack[];
 }
@@ -38,15 +43,15 @@ export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
   playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false,
-  resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], onlineTracks: [], onlineRefs: [],
+  resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
 };
 const readRepeat = (value: unknown): Repeat => value === 'all' || value === 'one' ? value : 'off';
 const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.every((id) => typeof id === 'string');
 export function readFavorites(value: unknown): string[] {
-  return Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128))] : [];
+  return Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128 && !STATION_IDS.has(id)))] : [];
 }
 export function rememberTrack(ids: string[], id: string): string[] {
-  return ids[0] === id ? ids : [id, ...ids.filter((item) => item !== id)].slice(0, RECENT_LIMIT);
+  return ids[0] === id || STATION_IDS.has(id) ? ids : [id, ...ids.filter((item) => item !== id)].slice(0, RECENT_LIMIT);
 }
 const numeric = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? clamp(value, min, max) : fallback;
@@ -71,6 +76,8 @@ export function decodePreferences(value: string | null): Preferences {
       appearance: readAppearance(data.appearance),
       favorites: readFavorites(data.favorites).filter((id) => !excluded.has(id)), disliked,
       recent: readFavorites(data.recent).slice(0, RECENT_LIMIT),
+      stationIds: readStationIds(data.stationIds),
+      playlists: readLumaPlaylists(data.playlists),
       onlineTracks: readOnlineShelf(data.onlineTracks),
       onlineRefs: readOnlineShelf(data.onlineRefs),
       playback,
@@ -93,8 +100,8 @@ export function readPreferences(): Preferences {
   try { return decodePreferences(localStorage.getItem(KEY)); } catch { return defaults; }
 }
 
-export function activeOnlineRefs({ onlineTracks, onlineRefs, recent, favorites, queue }: Preferences) {
-  const keep = new Set([...recent, ...favorites, ...(queue?.order ?? [])]);
+export function activeOnlineRefs({ onlineTracks, onlineRefs, recent, favorites, queue, playlists }: Preferences) {
+  const keep = new Set([...recent, ...favorites, ...(queue?.order ?? []), ...playlists.flatMap(({ trackIds }) => trackIds)]);
   const saved = new Set(onlineTracks.map(({ id }) => id));
   return onlineRefs.filter(({ id }) => keep.has(id) && !saved.has(id));
 }
@@ -117,7 +124,7 @@ export function savePreferences(preferences: Preferences, queue: QueueState) {
 }
 
 /** Keep all recording references needed by the replacement queue and existing profile. */
-export function radioQueueRefs(preferences: Preferences, queue: QueueState, tracks: readonly OnlineTrack[]) {
+export function catalogQueueRefs(preferences: Preferences, queue: QueueState, tracks: readonly OnlineTrack[]) {
   const refs = activeOnlineRefs({ ...preferences, queue });
   const known = new Set([...preferences.onlineTracks, ...refs].map(({ id }) => id));
   for (const track of tracks) {

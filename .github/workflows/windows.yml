@@ -9,6 +9,10 @@ on:
         description: 'Also check playback from the public music catalogs (requires network access)'
         type: boolean
         default: false
+      live_radio:
+        description: 'Probe response, audio decode and artwork from the curated live radio providers (no release artifact)'
+        type: boolean
+        default: false
       live_services:
         description: 'Check the live Apple Music and LRCLIB endpoints'
         type: boolean
@@ -18,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-${{ github.ref }}
+  group: windows-${{ github.ref }}${{ inputs.live_radio && '-live-radio' || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -37,10 +41,14 @@ jobs:
       - run: npm run test:desktop
         env:
           LUMA_LIVE_CATALOG: ${{ inputs.live_catalog && '1' || '0' }}
+          LUMA_LIVE_RADIO: ${{ inputs.live_radio && '1' || '0' }}
           LUMA_LIVE_SERVICES: ${{ inputs.live_services && '1' || '0' }}
       - run: npm run package:win
+        if: ${{ !inputs.live_radio }}
       - run: npm run test:package
+        if: ${{ !inputs.live_radio }}
       - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.live_radio }}
         with:
           name: Luma-Player-Windows-x64
           path: release/*.exe

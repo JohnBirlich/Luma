@@ -41,7 +41,7 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
   const title = track?.title, artist = track?.artist, album = track?.album;
   // Catalog duration belongs to that record. For files without a tag, use the decoded duration.
   const length = track?.duration || Math.round(duration);
-  const query = useMemo(() => demo ? undefined : readLyricsQuery({ title, artist,
+  const query = useMemo(() => demo || online?.source === 'broadcast' ? undefined : readLyricsQuery({ title, artist,
     album: online && album === ONLINE_SOURCES[online.source] ? undefined : album, duration: length }), [title, artist, album, length, online, demo]);
   const key = query ? JSON.stringify(query) : '';
   const cached = remote && remote.key === key ? remote : undefined;

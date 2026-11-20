@@ -45,6 +45,8 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   const t = useText();
   const { track, tint, appearance, playing, favorite, close, karaoke } = props;
   const { hero, effect, effectStrength, motion } = appearance;
+  const ambient = karaoke || appearance.theme === 'macos';
+  const scene = ambient && effect === 'cover' ? 'off' : effect;
   const artworkBackdrop = track.backdropUrl ?? track.artworkUrl;
   const ref = useRef<HTMLDialogElement>(null);
   const [karaokeQueue, setKaraokeQueue] = useState(false);
@@ -61,19 +63,17 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   }, []);
 
   return <dialog ref={ref} className="immersive-player" aria-labelledby="immersive-title" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <div ref={props.stage} data-effect={karaoke ? 'off' : effect} className={`immersive-stage ${karaoke ? 'karaoke-stage' : `immersive-${hero}`}`} style={{ '--immersive-tone': tint } as CSSProperties}>
-      {!karaoke && <>
-        {effect !== 'cover' && artworkBackdrop && (hero === 'cover' || (appearance.coverColors && effect === 'off')) &&
-          <Artwork track={track} className="immersive-backdrop" imageUrl={artworkBackdrop} />}
-        <SceneBackground effect={effect} track={track} strength={effectStrength} tempo={appearance.effectTempo}
-          animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
-        <div aria-hidden="true" className="immersive-scrim" />
-      </>}
+    <div ref={props.stage} data-effect={scene} data-ambient={ambient || undefined} className={`immersive-stage ${karaoke ? 'karaoke-stage' : `immersive-${hero}`}`} style={{ '--immersive-tone': tint } as CSSProperties}>
+      {!ambient && scene === 'off' && artworkBackdrop && (hero === 'cover' || appearance.coverColors) &&
+        <Artwork track={track} className="immersive-backdrop" imageUrl={artworkBackdrop} />}
+      <SceneBackground effect={scene} track={track} strength={effectStrength * (karaoke ? .62 : 1)} tempo={appearance.effectTempo}
+        animate={playing} visible={motion && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
+      {(!ambient || scene !== 'off') && <div aria-hidden="true" className="immersive-scrim" />}
       <header className="immersive-header">
         <button type="button" className="icon-button immersive-collapse" onClick={close} title={t("Свернуть (Esc)")} aria-label={t("Свернуть полноэкранный плеер")}><ChevronDown size={24} /></button>
-        <div><p className="overline">{t(karaoke ? "Караоке" : "Сейчас играет")}</p><strong>{track.online ? t("Онлайн-трек") : track.demo ? t("Демотреки Luma") : t("Локальная медиатека")}</strong></div>
+        <div><p className="overline">{t(karaoke ? "Караоке" : "Сейчас играет")}</p><strong>{props.live ? t("Прямой эфир") : track.online ? t("Онлайн-трек") : track.demo ? t("Демотреки Luma") : t("Локальная медиатека")}</strong></div>
         <div className="immersive-header-actions">
-          <button type="button" className="icon-button immersive-karaoke-toggle" onClick={props.toggleKaraoke}
+          <button type="button" className="icon-button immersive-karaoke-toggle" onClick={props.toggleKaraoke} disabled={props.live && !karaoke}
             aria-pressed={karaoke} aria-label={t('Караоке')} title={t(karaoke ? 'Вернуться к обложке' : 'Караоке (L)')}><MicVocal size={20} /></button>
           <button type="button" className="icon-button immersive-queue-toggle" onClick={karaoke ? () => setKaraokeQueue(!karaokeQueue) : props.toggleQueue}
             aria-expanded={queueVisible} aria-controls={queueVisible ? 'immersive-upcoming' : undefined} aria-label={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}
@@ -109,7 +109,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
             <div><h1 id="immersive-title" title={track.title}>{track.title}</h1><p title={track.artist}>{track.artist}</p><small title={track.album}>{track.online ? <OnlineCredit track={{ online: track.online }} /> : track.album}</small></div>
             <div className="immersive-feedback">
               <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />
-              <DislikeButton track={track} selected={props.disliked} toggle={props.toggleDislike} immersive />
+              {!props.live && <DislikeButton track={track} selected={props.disliked} toggle={props.toggleDislike} immersive />}
             </div>
           </div>
           <SeekTimeline {...props} />

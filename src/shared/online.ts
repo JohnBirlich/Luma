@@ -14,8 +14,8 @@ export const ONLINE_FILTERS = { ...ONLINE_SOURCES, southern_city: 'Southern City
 export type CommunitySource = 'netlabels' | 'southern_city';
 export type OnlineFilter = keyof typeof ONLINE_FILTERS | 'all';
 export const MAX_ONLINE_TRACKS = 180;
-export interface OnlineCreditData { source: OnlineSource; page: string; license: string; licenseUrl: string }
-export interface OnlineTrack extends Track { online: OnlineCreditData }
+export interface OnlineCreditData { source: OnlineSource | 'broadcast'; page: string; license: string; licenseUrl: string }
+export interface OnlineTrack extends Track { online: OnlineCreditData & { source: OnlineSource } }
 type LyricWrite = 'saved' | 'existing' | 'failed';
 export interface Mp3ExportResult { saved: boolean; lyrics?: { synced?: LyricWrite; plain?: LyricWrite }; credit?: boolean }
 

@@ -3,7 +3,6 @@
 .hero > .scene-background, .settings-preview-hero > .scene-background { z-index: -3; --scene-tone: var(--hero-tone, var(--sample-tone, var(--accent))); }
 .scene-dialog-preview > .scene-background { --scene-tone: var(--preview-tone, var(--accent)); }
 .scene-canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
-.scene-audio-halo { position: absolute; inset: 25% 0 8% 40%; opacity: 0; transition: opacity 160ms linear; background: radial-gradient(ellipse, color-mix(in srgb, var(--scene-tone) 56%, transparent), transparent 68%); }
 @keyframes scene-swell { from { transform: translate3d(-1%, 2%, 0) scale(1); opacity: .63; } to { transform: translate3d(3%, -2%, 0) scale(1.11); opacity: 1; } }
 @keyframes scene-glimmer { from { opacity: .38; } to { opacity: .88; } }
 
@@ -13,58 +12,24 @@
 .scene-cover .scene-cover-art img { object-fit: cover; object-position: center 43%; }
 .scene-cover .scene-cover-art.artwork-fallback { display: none; }
 
-/* Aurora: cold folds over a separate violet curtain. */
-.scene-aurora { background: radial-gradient(ellipse at 74% 81%,#0b3f48,#0b172b 61%,#0d1020); }
-.aurora-curtain { position: absolute; inset: 0; background: url('./assets/scenes/stars.svg') 58% 36% / cover; }
-.aurora-curtain i { position: absolute; width: 102%; height: 82%; right: -14%; top: 1%; rotate: -19deg; border-radius: 65% 22% 48% 36%;
-  background: radial-gradient(ellipse at 48% -10%,transparent 44%,#36caa424 49%,#a0ffe68c 57%,#4ebfbb3d 59%,transparent 75%),
-    repeating-radial-gradient(ellipse at 55% -11%,transparent 0 3.6%,#c7fff51f 4.2%,transparent 4.8% 8%); }
-.aurora-curtain i + i { top: 13%; right: -2%; opacity: .68; rotate: 13deg; background: radial-gradient(ellipse at 53% -16%,transparent 45%,#8d64ed29 54%,#d8a4fc91 60%,#6f5bcb45 65%,transparent 76%); }
-.scene-moving .aurora-curtain i { animation: scene-swell calc(11s * var(--scene-tempo)) ease-in-out infinite alternate; }
-.scene-moving .aurora-curtain i + i { animation-duration: calc(16s * var(--scene-tempo)); animation-direction: alternate-reverse; }
+.scene-aurora { background: url('./assets/scenes/stars.svg') center / cover no-repeat,radial-gradient(ellipse at 63% 61%,#143249,#081321 75%); }
 
 /* Ocean: a capped silent clip with the same static poster; the colored horizon stays in pause. */
 .scene-waves { background: #0b242e url('./assets/scenes/ocean.webp') center / cover no-repeat; }
 .scene-ocean-film { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .scene-waves::after { content: ''; position: absolute; inset: 0; background: linear-gradient(179deg,#0b244854,#376fb31c 43%,#166d7f38 65%,#0c1b33a1),radial-gradient(ellipse at 32% 31%,#bfa7dd38,transparent 56%); }
 
-/* Stars: low-contrast depth, then brighter constellation points. */
-.scene-stars { background: radial-gradient(ellipse at 68% 52%,#20436b,transparent 64%),linear-gradient(150deg,#0d1020,#111d35 62%,#241c44); }
-.star-field { position: absolute; inset: -8%; background: url('./assets/scenes/stars.svg') 62% center / cover; opacity: .76; }
-.scene-constellations { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .66; }
-.scene-constellations path { stroke: #b3d6fb9c; stroke-width: 1.15; stroke-dasharray: 3 5.5; }
-.scene-constellations circle { fill: #e5f5ff; }
-.scene-moving .star-field { animation: scene-swell calc(28s * var(--scene-tempo)) ease-in-out infinite alternate; }
-.scene-moving .scene-constellations { animation: scene-glimmer calc(13s * var(--scene-tempo)) ease-in-out infinite alternate; }
-
-/* Spectrum draws the same bars in pause and playback, behind a restrained meter grid. */
-.scene-spectrum { background: repeating-linear-gradient(0deg,transparent 0 11%,#6b75ae24 11.1%,transparent 11.4% 12%),radial-gradient(ellipse at 72% 88%,#23267a,transparent 76%),#0e1329; }
-.scene-bars { display: flex; align-items: flex-end; gap: 1.6%; position: absolute; inset: 12% 6% 8%; }
-.scene-bars > i { flex: 1; height: 100%; transform: scaleY(var(--bar)); transform-origin: center bottom; border-top: 2px solid #e4eeff; border-radius: 4px 4px 0 0; background: linear-gradient(0deg,transparent,#7764f09e 54%,#bfbaff); }
-.scene-bars > i:nth-child(3n+2) { background: linear-gradient(0deg,transparent,#3399caaa 54%,#93e8ff); }
-.scene-bars > i:nth-child(3n) { background: linear-gradient(0deg,transparent,#aa569da5 54%,#f4b5dc); }
-
-/* Orbits: ring geometry with a crescent and grounded shadows. */
-.scene-orbits { background: url('./assets/scenes/stars.svg') center / cover no-repeat,radial-gradient(ellipse at 67% 56%,#412b58,transparent 64%),#0e1224; }
-.orbit-planet { position: absolute; left: 66%; top: 54%; translate: -50% -50%; width: min(39%,55dvh,330px); aspect-ratio: 1; border-radius: 50%;
-  background: radial-gradient(ellipse at 38% 29%,transparent 18%,#20183140 38%,#070c22 76%),repeating-linear-gradient(-19deg,#f7ebc898 0 1.1%,#b771c696 2.3%,#948bd2ac 4.4% 7.2%),linear-gradient(154deg,#f8daae,#71558d);
-  box-shadow: inset 0 2px 5px #ffe7c98a,0 0 32px #a17bc44f; }
-.orbit-lines { position: absolute; inset: 0; }
-.orbit-lines i { position: absolute; top: 34%; left: 40%; width: 55%; height: 42%; border: 1px solid #f2d3bb8c; border-radius: 50%; rotate: -23deg; }
-.orbit-lines i + i { top: 28%; left: 40%; width: 57%; height: 54%; rotate: 19deg; border-color: #b5ccfe71; }
-.orbit-lines i::after { content: ''; position: absolute; left: 12%; top: 17%; width: 5px; aspect-ratio: 1; border-radius: 50%; background: #fff4d5; box-shadow: 0 0 8px 2px #ecd4fc; }
-.scene-moving .orbit-lines i { animation: orbit-precession calc(17s * var(--scene-tempo)) ease-in-out infinite alternate; }
-.scene-moving .orbit-lines i + i { animation-duration: calc(23s * var(--scene-tempo)); animation-direction: alternate-reverse; }
-@keyframes orbit-precession { from { transform: rotate(-12deg) scaleY(.85); } to { transform: rotate(18deg) scaleY(1.05); } }
-
-.scene-prism { background: radial-gradient(ellipse at 67% 49%,#363558,#0d1026 66%); }
-.scene-prism-optics { position: absolute; inset: -8% -3%; background: url('./assets/scenes/prism.svg') 63% 48% / cover no-repeat; }
-.scene-prism::after { content: ''; position: absolute; inset: 24% 8% 15% 54%; background: radial-gradient(ellipse,#b694f55c,#6046c133 32%,transparent 71%); }
-.scene-moving .scene-prism-optics { animation: scene-swell calc(14s * var(--scene-tempo)) ease-in-out infinite alternate; }
-.scene-moving.scene-prism::after { animation: scene-glimmer calc(10s * var(--scene-tempo)) ease-in-out infinite alternate-reverse; }
+.scene-stars { background: radial-gradient(ellipse 41% 50% at 75% 49%,#56447757,transparent 85%),
+  radial-gradient(ellipse 54% 64% at 52% 49%,#325c926b,#13253d36 64%,transparent 89%),linear-gradient(150deg,#090d1c,#15142b 62%,#171128); }
+.scene-spectrum { background: radial-gradient(ellipse at 63% 70%,#32307280,transparent 70%),linear-gradient(168deg,#10142a,#171732 55%,#0b1429); }
+.scene-orbits { background: url('./assets/scenes/stars.svg') center / cover no-repeat,radial-gradient(ellipse at 67% 55%,#4a3159,#171831 57%,#0d1121); }
+.scene-prism { background: radial-gradient(ellipse at 65% 46%,#3c3a696f,transparent 66%),linear-gradient(160deg,#0a1225,#1b1737 68%,#101529); }
+.scene-notes { background: url('./assets/scenes/stars.svg') center / cover no-repeat,radial-gradient(ellipse at 87% 40%,#543b826f,transparent 61%),linear-gradient(135deg,#11142b,#27204c 67%,#173054); }
+.scene-liquid { background: #dce9fa url('./assets/liquid-wallpaper.webp') center / cover no-repeat; }
+.scene-liquid-light { position: absolute; inset: -12%; background: radial-gradient(ellipse at 71% 33%,#f9fdffca,transparent 52%),radial-gradient(ellipse at 27% 72%,#bfedffa7,transparent 55%); }
+.scene-moving .scene-liquid-light { animation: scene-swell calc(16s * var(--scene-tempo)) ease-in-out infinite alternate; }
 
 .scene-pulse { background: radial-gradient(ellipse at 65% 49%,#4e2f66,#201839 44%,#101426 75%); }
-.scene-pulse-still { position: absolute; inset: 0; background: repeating-radial-gradient(circle at 65% 49%,transparent 0 8.4%,#c3a6f165 8.6%,transparent 9% 12%),radial-gradient(circle at 65% 49%,#eebcfd68,transparent 28%); }
 
 .scene-nebula { background: #100c23; }
 .nebula-plate { position: absolute; inset: -6%; background: url('./assets/scenes/nebula.webp') 70% 52% / cover no-repeat; }
@@ -91,13 +56,9 @@
 .rain-glass-beads { position: absolute; inset: 0; opacity: .78; background: radial-gradient(ellipse 5px 14px at 82% 14%,#cdedfa78,transparent),radial-gradient(ellipse 3px 10px at 64% 39%,#caa3f16b,transparent),radial-gradient(ellipse 4px 13px at 77% 64%,#dde7fa65,transparent),radial-gradient(ellipse 6px 11px at 95% 42%,#d5b0cb68,transparent); }
 
 .scene-solar { background:
-  radial-gradient(circle at 92% 34%, #1c1028 0 5.5%, #775540 6.5%, #ffe4b8 6.9%, #ffc078ae 7.5%, #f9613360 9.6%, #f23f321f 18%, transparent 29%),
   radial-gradient(ellipse at 72% 35%, #722b345e, transparent 66%),
   url('./assets/scenes/stars.svg') center / cover no-repeat, linear-gradient(155deg, #150d21 9%, #28152d 55%, #170e25); }
-.solar-filaments-still { position: absolute; inset: 0; background: url('./assets/scenes/solar-wind.svg') center / 100% 100% no-repeat; }
 
 .scene-meteors { background: url('./assets/scenes/stars.svg') center / cover no-repeat,radial-gradient(ellipse at 69% 31%,#303b76,#161c3d 51%,#0c1128); }
-.scene-meteors:not(.scene-moving)::after { position: absolute; inset: 0; content: ''; background: linear-gradient(153deg,transparent 55%,#b9d3ff87 55.8%,transparent 56.5%) 67% 18% / 44% 50% no-repeat,linear-gradient(153deg,transparent 63%,#e8beee86 63.6%,transparent 64.2%) 77% 42% / 35% 45% no-repeat; }
 
 .scene-fireworks { background: url('./assets/scenes/stars.svg') center / cover no-repeat,radial-gradient(ellipse at 72% 36%,#4c274f,transparent 50%),linear-gradient(140deg,#121a31,#17142e 80%); }
-.scene-fireworks:not(.scene-moving)::after { content: ''; position: absolute; inset: 0; background: url('./assets/scenes/fireworks.svg') center / 100% 100% no-repeat; }

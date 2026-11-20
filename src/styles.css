@@ -201,7 +201,7 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 @keyframes measure { from { transform: scaleY(.6); } to { transform: scaleY(1.51); } }
 .hero h2 {
   font: 800 clamp(38px, 4.65vw, 72px)/1.07 var(--display); letter-spacing: -.069em; color: #fff8f1;
-  margin: 14px 0 11px; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  margin: 14px 0 11px; overflow-wrap: anywhere;
 }
 .hero-meta { display: flex; flex-wrap: wrap; align-items: center; column-gap: 9px; row-gap: 4px; min-width: 0; color: #dcd0c8; font-size: 13px; line-height: 1.4; }
 .hero-meta > span:not(.hero-dot) { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1266,9 +1266,10 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .immersive-stage[data-effect='cover']:not(.karaoke-stage) > .immersive-scrim { background: linear-gradient(90deg, #110b1c42, #110b1ca1 59%, #100c17bd), linear-gradient(0deg, #0b0a17d8, transparent 36%, #0b0a1759 75%, #0b0a17bc); }
 .immersive-cover .immersive-scrim { background: linear-gradient(0deg, #0c0916ea, #0c09166b 72%, #0c0916c9), linear-gradient(100deg, #120d196b, #0f0b18ac 63%); }
 .immersive-cover .immersive-art { width: min(100%, 53dvh, 470px); }
-.immersive-center .immersive-main:not(.immersive-with-queue) { width: min(100%, 540px); grid-template-columns: minmax(0, 1fr); gap: clamp(16px, 3dvh, 27px); }
-.immersive-center .immersive-art { width: min(70vw, 44dvh, 430px); }
-.immersive-center .immersive-meta { display: grid; justify-items: center; text-align: center; gap: 11px; }
+.immersive-center .immersive-main:not(.immersive-with-queue) { width: min(100%, 540px); grid-template-columns: minmax(0, 1fr); gap: clamp(12px, 2dvh, 21px); padding-block: clamp(12px, 2.5dvh, 28px); }
+.immersive-center .immersive-main:not(.immersive-with-queue) .immersive-content { gap: clamp(11px, 2dvh, 21px); }
+.immersive-center .immersive-art { width: min(70vw, 36dvh, 405px); }
+.immersive-center .immersive-meta { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; justify-items: center; text-align: center; gap: 11px; }
 .immersive-center .immersive-meta > div:first-child { max-width: 100%; }
 .immersive-center .immersive-meta h1 { font-size: clamp(27px, 5.1vw, 64px); }
 .immersive-center .immersive-with-queue .immersive-art { width: min(69vw, 36dvh, 380px); }
@@ -1299,3 +1300,5 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .lastfm-fields input { min-width: 0; width: 100%; padding: 8px 10px; border-radius: 7px; border: 1px solid var(--accent-border); background: var(--chrome-bg); color: var(--text); }
 .lastfm-issue { padding: 8px 10px; border-radius: 8px; background: var(--accent-fill); color: var(--text); }
 .lastfm-issue > b { white-space: nowrap; color: var(--accent-light); }
+
+.live-timeline { display: flex; align-items: center; justify-content: center; gap: 6px; font: 680 11px/1.35 var(--display); color: var(--muted); }

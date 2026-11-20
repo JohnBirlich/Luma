@@ -31,7 +31,7 @@ export function DesktopWidget({ track, tint, background, restore, controls, pend
         <button className="icon-button" type="button" aria-label={t("Закрыть Luma")} title={t("Закрыть Luma")} onClick={() => window.luma?.window.close()}><X size={17} /></button>
       </div>
     </header>
-    <div className="widget-track"><Artwork track={track} /><div><strong>{track?.title ?? t("Нет трека")}</strong><small>{track?.artist ?? t("Откройте медиатеку")}</small></div><VolumeControl {...controls} /></div>
+    <div className="widget-track"><Artwork track={track} /><div><strong title={track?.title}>{track?.title ?? t("Нет трека")}</strong><small title={track?.artist}>{track?.artist ?? t("Откройте медиатеку")}</small></div><VolumeControl {...controls} /></div>
     <TransportControls {...controls} />
     <SeekTimeline {...controls} />
   </WidgetSurface>;

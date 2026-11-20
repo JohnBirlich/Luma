@@ -9,25 +9,24 @@ import oceanPoster from '../assets/scenes/ocean.webp?url';
 import type { Track } from '../shared/media';
 import { Artwork } from './Artwork';
 import { SceneCanvas } from './SceneCanvas';
+import { isCanvasEffect } from '../shared/scene-motion';
 
 interface SceneProps {
   effect: BackgroundEffect;
   track?: Track | null;
   strength?: number;
   animate?: boolean;
+  visible?: boolean;
   tempo?: EffectTempo;
   sample?: ReadSpectrum;
 }
-const stillBars = [22, 44, 36, 54, 62, 52, 82, 89, 65, 77, 57, 50, 58, 41, 35, 46, 26];
-const haloEffects = new Set<BackgroundEffect>(['aurora', 'nebula', 'prism', 'orbits', 'stars']);
-
-export const SceneBackground = memo(function SceneBackground({ effect, track, strength = 0.75, animate = false, tempo = 'normal', sample }: SceneProps) {
+export const SceneBackground = memo(function SceneBackground({ effect, track, strength = 0.75, animate = false, visible = true, tempo = 'normal', sample }: SceneProps) {
   const element = useRef<HTMLDivElement>(null);
-  const halo = useRef<HTMLDivElement>(null);
   const ocean = useRef<HTMLVideoElement>(null);
   const [inView, setInView] = useState(typeof IntersectionObserver === 'undefined');
-  const allowed = useVisualMotion(animate && strength > 0 && effect !== 'off' && effect !== 'cover');
-  const moving = allowed && inView;
+  const allowed = useVisualMotion(visible && strength > 0 && effect !== 'off' && effect !== 'cover');
+  const enabled = allowed && inView;
+  const moving = enabled && animate;
   const factor = EFFECT_TEMPOS[tempo].factor;
 
   useEffect(() => {
@@ -47,41 +46,16 @@ export const SceneBackground = memo(function SceneBackground({ effect, track, st
   useEffect(() => {
     if (ocean.current) ocean.current.playbackRate = 1 / factor;
   }, [factor, moving, effect]);
-  useEffect(() => {
-    const light = halo.current;
-    if (!moving || !sample || !light) return;
-    const bins = new Uint8Array(128);
-    let glow = 0, shown = 0;
-    // Write to one small, non-inherited opacity layer at 10 Hz. Never invalidate every scene node.
-    const timer = window.setInterval(() => {
-      let peak = 0;
-      if (sample(bins)) for (let i = 1; i < 10; i++) peak = Math.max(peak, bins[i]);
-      glow += (.7 * peak / 255 - glow) * .38;
-      if (Math.abs(glow - shown) > .028) light.style.opacity = (shown = glow).toFixed(2);
-    }, 100);
-    return () => window.clearInterval(timer);
-  }, [moving, effect, sample]);
-
   if (effect === 'off') return null;
   return <div className={`scene-background scene-${effect}${moving ? ' scene-moving' : ''}`} ref={element}
     style={{ '--strength': strength, '--scene-tempo': factor } as CSSProperties} aria-hidden="true">
     {effect === 'cover' && (track?.backdropUrl || track?.artworkUrl) && <Artwork track={track} imageUrl={track.backdropUrl} className="scene-cover-art" />}
-    {effect === 'aurora' && <div className="aurora-curtain"><i /><i /></div>}
     {effect === 'waves' && moving && <video ref={ocean} className="scene-ocean-film" poster={oceanPoster} loop muted playsInline disablePictureInPicture preload="none" />}
-    {effect === 'stars' && <><i className="star-field" /><svg className="scene-constellations" viewBox="0 0 840 430" preserveAspectRatio="xMidYMid slice" fill="none">
-      <path d="M95 293 219 209 304 249 398 119 515 158 607 82 712 117 M304 249 433 309 571 255 687 278" />
-      <circle cx="398" cy="119" r="4"/><circle cx="607" cy="82" r="3"/><circle cx="219" cy="209" r="2.5" />
-    </svg></>}
-    {effect === 'spectrum' && !moving && <div className="scene-bars">{stillBars.map((height, index) => <i key={index} style={{ '--bar': height / 100 } as CSSProperties} />)}</div>}
-    {moving && (effect === 'spectrum' || effect === 'fireworks' || effect === 'pulse' || effect === 'rain' || effect === 'meteors' || effect === 'solar') && <SceneCanvas effect={effect} tempo={factor} sample={sample} />}
-    {effect === 'pulse' && !moving && <div className="scene-pulse-still" />}
+    {strength > 0 && isCanvasEffect(effect) && <SceneCanvas effect={effect} enabled={enabled} playing={animate} tempo={factor} sample={sample} />}
     {effect === 'nebula' && <><i className="nebula-plate" /><i className="nebula-stars" /></>}
-    {effect === 'orbits' && <><i className="orbit-planet" /><div className="orbit-lines"><i /><i /></div></>}
     {effect === 'horizon' && <><i className="scene-neon-sun" /><i className="scene-neon-floor" /><i className="scene-neon-light" /></>}
     {effect === 'kaleidoscope' && <div className="scene-chromatic"><i /><i /></div>}
+    {effect === 'liquid' && <div className="scene-liquid-light" />}
     {effect === 'rain' && <i className="rain-glass-beads" />}
-    {effect === 'prism' && <div className="scene-prism-optics" />}
-    {effect === 'solar' && !moving && <i className="solar-filaments-still" />}
-    {moving && sample && haloEffects.has(effect) && <div className="scene-audio-halo" ref={halo} />}
   </div>;
 });

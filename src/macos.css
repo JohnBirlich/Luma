@@ -15,7 +15,7 @@
   --glass-inset: clamp(10px, 2.4vw, 34px);
   --frame-height: 57px;
   --player-height: 92px;
-  --dock-height: 71px;
+  --dock-height: 88px;
   --queue-width: clamp(276px, 22.8vw, 335px);
   color-scheme: light;
   color: var(--text);
@@ -84,18 +84,29 @@
 [data-layout='glass'] .player-bar .range::-webkit-slider-runnable-track { background: linear-gradient(to right,var(--accent) var(--filled),#34507342 var(--filled)); }
 [data-layout='glass'] .player-bar .range::-moz-range-track { background: linear-gradient(to right,var(--accent) var(--filled),#34507342 var(--filled)); }
 [data-layout='glass'] .player-bar .timeline > span { color: var(--quiet); }
-.glass-dock { grid-area: 4 / 1 / 5 / -1; align-self: start; justify-self: center; display: flex; align-items: stretch; gap: 9px;
-  max-width: calc(100% - 16px); padding: 4px 0 10px; z-index: 4; }
-.glass-navigation { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2px; width: min(520px,calc(100vw - 94px)); min-width: 0;
-  border-radius: 999px; padding: 4px; }
-.glass-navigation button { display: grid; place-items: center; align-content: center; gap: 3px; min-width: 0; min-height: 45px; padding: 3px 5px;
-  border: 1px solid transparent; border-radius: 999px; color: var(--muted); background: none; font-size: 10px; font-weight: 660; }
-.glass-navigation button > span { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.glass-navigation button[aria-current='page'] { color: var(--accent-light); border-color: #fffdf6; background: linear-gradient(155deg,#fff,#bcd4ffab);
-  box-shadow: inset 0 1px 1px #fff, 0 2px 6px #264e9531; }
-.glass-navigation button:hover:not([aria-current]), .glass-sound:hover { background-color: #fff6; color: var(--accent-light); }
-.glass-sound { position: relative; flex: none; width: 55px; border-radius: 50%; color: var(--accent-light); display: grid; place-items: center; }
-.glass-sound .enabled-dot { position: absolute; top: 9px; right: 10px; }
+/* A macOS-style app dock, not a second set of pill tabs. Only Luma destinations. */
+.glass-dock { grid-area: 4 / 1 / 5 / -1; align-self: center; justify-self: center; max-width: calc(100% - 16px); z-index: 4; }
+.glass-navigation { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; align-items: stretch;
+  gap: clamp(2px,.65vw,9px); width: min(490px,calc(100vw - 18px)); min-width: 0;
+  border-radius: 22px; padding: 6px 8px 4px; background: linear-gradient(175deg,#fcfeffaf,#bcd0ed80); }
+.glass-navigation button { position: relative; display: grid; place-items: center; align-content: start; gap: 3px; min-width: 0; min-height: 61px;
+  padding: 2px 3px 7px; border: 0; background: none; color: var(--text); font: 680 clamp(8px,1.45vw,11px)/1.1 var(--display); }
+.glass-navigation button > span { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+.glass-navigation button[aria-current='page']::after { content: ''; position: absolute; bottom: 1px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent-light); }
+.glass-dock-icon { width: clamp(29px,5.4vw,41px); aspect-ratio: 1; display: grid; place-items: center; border-radius: 28%;
+  color: #fff; background: linear-gradient(151deg,var(--dock-high,#afb8cf),var(--dock-low,#38476d));
+  box-shadow: inset 0 1px 1px #fff9, inset 0 -1px 1px #15205461, 0 4px 8px #2337583b;
+  transform-origin: 50% 88%; transition: transform .2s cubic-bezier(.2,.75,.25,1); }
+.glass-navigation button:is(:hover,:focus-visible) .glass-dock-icon { transform: translateY(-4px) scale(1.13); }
+[data-dock-item='player'] { --dock-high:#4ac3fa; --dock-low:#1b56ba; }
+[data-dock-item='search'] { --dock-high:#ad8df6; --dock-low:#6041c0; }
+[data-dock-item='library'] { --dock-high:#ff7c8c; --dock-low:#b62373; }
+[data-dock-item='favorites'] { --dock-high:#ff9e93; --dock-low:#c64c27; }
+[data-dock-item='menu'] { --dock-high:#6e9cb0; --dock-low:#253746; }
+.glass-navigation .glass-sound { margin-left: 1px; border-left: 1px solid var(--glass-rim); padding-inline: clamp(4px,.7vw,10px) 3px;
+  width: auto; border-radius: 0; box-shadow: none; backdrop-filter: none; }
+.glass-sound .enabled-dot { position: absolute; top: 1px; right: 1px; background: #5fffd2; }
+.glass-navigation .glass-sound .glass-dock-icon { --dock-high:#4fa994; --dock-low:#15685d; }
 
 /* Dedicated glass cards, cohesive styling for every tab, popover and preference panel. */
 [data-layout='glass'] :is(.home-now,.hub-shelf,.setting-card,.settings-preview,.menu-items,.menu-profile,.menu-about,.online-surface,.online-panel,.journal,.diagnostic-system > div,.mix-control,.mix-card,.track-card,.track-list-item,.lyrics-card) {
@@ -185,13 +196,24 @@
 [data-theme-choice='macos'] .theme-option-preview > b { width: 72%; height: 9px; border: 1px solid white; border-radius: 10px; background: #fff9; }
 
 /* Large player still respects selected art/effect; karaoke is never an album-art backdrop. */
-[data-layout='glass'] .immersive-player:not(:has(.karaoke-stage)) {
-  --text: #fcfaff; --muted: #e0def3; --quiet: #d5cee5;
-  --accent: #d0e4ff; --accent-light: #e7f0ff; --accent-ink: #112447; --accent-border: #ffffff67; --accent-fill: #e4eeff22;
-  --chrome-bg: #142642; --raised-bg: #283753; --glass-lens: linear-gradient(135deg,#ffffff24,#d2dbff18);
-  --glass-edge: #fff6; --glass-shadow: 0 14px 36px #070a203b, inset 0 1px #fff6;
-  color-scheme: dark;
+[data-layout='glass'] .immersive-player { background: var(--stage-bg); color-scheme: light; }
+[data-layout='glass'] .immersive-stage[data-ambient] {
+  background: linear-gradient(140deg,#eff8ffb0,#e9f4ff62 52%,#dce6ff83), #e6f2ff url('./assets/liquid-wallpaper.webp') center / cover no-repeat;
 }
+[data-layout='glass'] .immersive-stage[data-ambient] > .immersive-scrim {
+  background: linear-gradient(180deg,#eff7ffcf, #eff7ff22 28% 72%,#dde9ff8a);
+}
+[data-layout='glass'] .immersive-meta :is(p,small), [data-layout='glass'] .immersive-content .timeline > span,
+[data-layout='glass'] .immersive-content .transport-controls .icon-button { color: var(--muted); }
+[data-layout='glass'] .immersive-content .transport-controls .icon-button[aria-pressed='true'] { color: var(--accent-light); }
+[data-layout='glass'] .immersive-content:not(.karaoke-controls), [data-layout='glass'] .karaoke-deck { --glass-lens: var(--glass-surface); }
+[data-layout='glass'] .immersive-meta { align-items: start; flex-wrap: wrap; }
+[data-layout='glass'] .immersive-meta > div:first-child { flex: 1 1 min(100%,150px); }
+[data-layout='glass'] .immersive-meta h1 { font-size: clamp(25px,4vw,52px); }
+[data-layout='glass'] :is(.karaoke-meta,.immersive-meta) :is(h1,p,small) { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+[data-layout='glass'] :is(.home-now-header,.theme-option-label,.setting-row,.dialog-header) > :is(h2,strong,span,div) { min-width: 0; overflow-wrap: anywhere; }
+[data-layout='glass'] .setting-row select { max-width: 100%; }
+[data-layout='glass'] .hub-topline { flex-wrap: wrap; }
 [data-layout='glass'] .immersive-header :is(.immersive-collapse,.immersive-queue-toggle,.immersive-karaoke-toggle),
 [data-layout='glass'] .immersive-stage :is(.immersive-favorite,.immersive-tools .icon-button) {
   color: var(--accent-light); background: var(--glass-lens); border: 1px solid var(--glass-edge); border-radius: 50%; box-shadow: var(--glass-shadow);
@@ -201,7 +223,6 @@
   box-shadow: var(--glass-shadow); backdrop-filter: blur(21px) saturate(1.35); }
 [data-layout='glass'] .immersive-upcoming { border-color: var(--glass-edge); border-radius: 27px; background: var(--glass-lens); box-shadow: var(--glass-shadow); }
 [data-layout='glass'] :is(.upcoming-copy small,.upcoming-time,.upcoming-index,.upcoming-note) { color: var(--muted); }
-[data-layout='glass'] .immersive-stage.karaoke-stage { background: radial-gradient(ellipse at 18% 11%,#f8fcff,transparent 65%),linear-gradient(135deg,#cdddff,#eef6ff 52%,#d6dfff); }
 [data-layout='glass'] .karaoke-deck { padding: clamp(10px,2vw,23px); border: 1px solid var(--glass-edge); border-radius: 30px; background: var(--glass-lens); box-shadow: var(--glass-shadow); }
 [data-layout='glass'] .karaoke-track .artwork { border-color: var(--glass-edge); box-shadow: 0 11px 25px #2d4b8f35; }
 [data-layout='glass'] .karaoke-meta > p { color: var(--muted); }
@@ -211,14 +232,14 @@
 [data-layout='glass'] .karaoke-lyrics .lyrics-timed > p[aria-current] { color: var(--text); background: linear-gradient(90deg,#89afff55,#ffffff20); text-shadow: none; }
 [data-layout='glass'] .karaoke-lyrics :is(header,.lyrics-sources) { border-color: var(--line); }
 [data-layout='glass'] .desktop-widget { border-radius: 23px; }
-[data-layout='glass'] .desktop-widget:not([data-widget-background='white'],[data-widget-background='paper']) { --accent: #dce7ff; --accent-light: #e9efff; --accent-ink: #1b2852; }
+[data-layout='glass'] .desktop-widget:not([data-widget-background='white'],[data-widget-background='paper'],[data-widget-background='liquid']) { --accent: #dce7ff; --accent-light: #e9efff; --accent-ink: #1b2852; }
 
 @media (max-width: 1079px) {
   .app-shell[data-layout='glass'].queue-visible { grid-template-columns: minmax(0, 1fr) 0; }
   [data-layout='glass'] > .queue-panel { margin: 4px 8px 5px 0; grid-area: auto; }
 }
 @media (max-width: 700px) {
-  .app-shell[data-layout='glass'] { --frame-height: 51px; --player-height: 96px; --dock-height: 65px; }
+  .app-shell[data-layout='glass'] { --frame-height: 51px; --player-height: 96px; --dock-height: 79px; }
   [data-layout='glass'] .wordmark { margin-left: 77px; }
   [data-layout='glass'] :is(.window-buttons,.mac-lights) { left: 11px; }
   [data-layout='glass'] .wordmark > strong > span { display: none; }
@@ -233,7 +254,43 @@
   [data-layout='glass'] .karaoke-deck { border-radius: 22px; }
 }
 @media (max-width: 430px) {
-  [data-layout='glass'] .web-status, .glass-sound { display: none; }
-  .glass-navigation { width: min(404px,calc(100vw - 24px)); }
-  .glass-navigation button { padding-inline: 2px; }
+  [data-layout='glass'] .web-status { display: none; }
+  [data-layout='glass'] .hub-tabs { flex-wrap: wrap; justify-content: center; border-radius: 18px; }
+  [data-layout='glass'] .hub-tabs button { padding-inline: 7px; }
+  .glass-navigation { padding-inline: 4px; }
+  .glass-navigation button { padding-inline: 1px; min-height: 58px; }
+  .glass-dock-icon svg { width: 17px; height: 17px; }
 }
+
+/* Liquid Glass is also an explicit widget material, independent of the app theme. */
+.desktop-widget[data-widget-background='liquid'] {
+  --text: #132649; --muted: #354a6b; --quiet: #486081;
+  --accent: #254d9d; --accent-light: #163c86; --accent-ink: #fff;
+  --accent-fill: #d5e5ffba; --accent-border: #9fb5df;
+  background: linear-gradient(157deg,#fcfeffd9,#d7e6fca6 66%,#eafbff91), #dce9fa url('./assets/liquid-wallpaper.webp') center / cover;
+  color-scheme: light; color: var(--text); border-color: #ffffffe6;
+  box-shadow: inset 0 1px 1px white, inset 0 -1px 1px #688ad775, 0 5px 18px #15365a40;
+}
+.desktop-widget[data-widget-background='liquid'] :is(.icon-button,.timeline > span) { color: var(--muted); }
+.desktop-widget[data-widget-background='liquid'] .widget-track .artwork { border-radius: 10px; border: 1px solid #fff9; }
+.desktop-widget[data-widget-background='liquid'] .icon-button:hover { color: var(--accent-light); background: #fff8; }
+
+[data-layout='glass'] .hub-shelf :is(.topic-detail,.playlist-editor,.music-site,.station-tile) {
+  border-color: var(--glass-edge); box-shadow: var(--glass-shadow);
+}
+[data-layout='glass'] .hub-shelf :is(.topic-detail,.playlist-editor,.music-site,.hub-chips > button:not([aria-pressed='true'])) { background: var(--glass-lens); }
+[data-layout='glass'] .station-tile {
+  background: radial-gradient(ellipse at 80% 10%,color-mix(in srgb,var(--station-tint) 28%,transparent),transparent 74%),var(--glass-lens);
+}
+[data-layout='glass'] .station-tile[data-active] { border-color: var(--accent-border); }
+[data-layout='glass'] :is(.browse-mark,.hub-shelf .hub-badge,.playlist-fields input) { background: var(--glass-lens); border-color: var(--glass-edge); }
+[data-layout='glass'] .hero :is(h2,.hero-meta) { overflow-wrap: anywhere; }
+[data-layout='glass'] .hero-meta > span:not(.hero-dot) { white-space: normal; }
+[data-layout='glass'] .desktop-widget[data-widget-background='liquid'] .range { --widget-track-line: #263d6546; }
+[data-layout='glass'] .immersive-header > div:nth-child(2) { overflow-wrap: anywhere; }
+[data-layout='glass'] .immersive-meta h1, [data-layout='glass'] .karaoke-meta h1 { line-height: 1.12; }
+[data-layout='glass'] .glass-navigation button:not(.glass-sound) { border-radius: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .glass-navigation button:is(:hover,:focus-visible) .glass-dock-icon { transform: none; }
+}
+.motion-off .glass-navigation button:is(:hover,:focus-visible) .glass-dock-icon { transform: none; }

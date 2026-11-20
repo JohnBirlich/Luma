@@ -1,6 +1,6 @@
 import { useText } from '../i18n/context';
 import { useMemo, useState, useSyncExternalStore } from 'react';
-import { Cloud, CloudOff, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, MicVocal, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { Cloud, CloudOff, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, MicVocal, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, Trash2, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { formatCount } from '../shared/customization';
@@ -8,6 +8,7 @@ import { musicGroups, tracksInGroup } from '../shared/mix';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
 import type { OnlineFilter, OnlineTrack } from '../shared/online';
+import { MusicSites } from './MusicSites';
 import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
 import type { OnlineAction } from './OnlineMusic';
 import type { Track } from '../shared/media';
@@ -82,9 +83,7 @@ interface NowPlayingProps {
   loading: boolean;
   position: number;
   count: number;
-  eqEnabled: boolean;
   toggle(): void;
-  openEqualizer(): void;
   editCover(id: string): void;
   editDetails(id: string): void;
   addMusic(): void;
@@ -98,7 +97,7 @@ export function NowPlayingCard(props: NowPlayingProps) {
   const source = track?.backdropUrl ?? track?.artworkUrl;
   const fallback = !source || source === failedPicture;
   const artwork = fallback ? DEFAULT_ARTWORK_URL : source;
-  const showPicture = !!track && effect !== 'cover' && (hero === 'cover' || hero === 'blur');
+  const showPicture = !!track && effect === 'off' && (hero === 'cover' || hero === 'blur');
   const centered = hero === 'center';
   return (
     <section className="home-now" aria-labelledby="home-now-title">
@@ -108,22 +107,20 @@ export function NowPlayingCard(props: NowPlayingProps) {
           <button type="button" className="button outline-button scene-open" onClick={props.openAppearance} aria-label={t("Оформление экрана «Сейчас играет»")} title={t("Оформление")} aria-haspopup="dialog"><Palette size={17} /></button>
           {track && !track.demo && !track.online && <button type="button" className="button outline-button track-details-button" onClick={() => props.editDetails(track.id)}
             aria-label={t("Редактировать данные трека")} title={t("Редактировать данные трека")} aria-haspopup="dialog"><Pencil size={16} /></button>}
-          {track && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
+          {track && track.online?.source !== "broadcast" && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
             aria-label={t("Редактировать обложку")} title={t("Редактировать обложку")} aria-haspopup="dialog"><ImagePlus size={17} /></button>}
-          <button type="button" className="button outline-button page-equalizer" onClick={props.openEqualizer} aria-label={t("Эквалайзер")} title={t("Эквалайзер")} aria-haspopup="dialog">
-            <SlidersHorizontal size={17} />{props.eqEnabled && <i className="enabled-dot" />}
-          </button>
+
         </div>
       </header>
       <section aria-label={t("Текущий трек")} data-effect={effect} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
-        <SceneBackground effect={effect} track={track} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
+        <SceneBackground effect={effect} track={track} strength={effectStrength} tempo={appearance.effectTempo} animate={playing} visible={motion && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
         {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
           onError={() => { if (!fallback) setFailedPicture(source); }} />}
         {hero === 'vinyl' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
         <div className="hero-scrim" aria-hidden="true" />
         {centered && <Artwork track={track} className="hero-center-art" />}
         <div className="hero-content">
-          <div className="hero-label"><Signal playing={playing} /> {track?.demo ? t("Демо-трек") : track?.online ? t("Онлайн-трек") : track ? t("Воспроизведение") : t("Ваша коллекция")}</div>
+          <div className="hero-label"><Signal playing={playing} /> {track?.online?.source === "broadcast" ? t("Прямой эфир") : track?.demo ? t("Демо-трек") : track?.online ? t("Онлайн-трек") : track ? t("Воспроизведение") : t("Ваша коллекция")}</div>
           <h2 title={track?.title}>{track?.title ?? t("Время для музыки")}</h2>
           <div className="hero-meta">
             {track ? <><span>{track.artist}</span><span className="hero-dot" />{track.online ? <OnlineCredit track={{ online: track.online }} /> : <span>{track.album}</span>}</> : <span>{t("Добавьте аудиофайлы, чтобы начать.")}</span>}
@@ -135,8 +132,8 @@ export function NowPlayingCard(props: NowPlayingProps) {
             </button>
             {track && <>
               <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />
-              <DislikeButton track={track} selected={props.disliked.has(track.id)} toggle={props.toggleDislike} />
-              <button type="button" className="icon-button hero-karaoke" onClick={props.openKaraoke} aria-label={t("Караоке")} title={t("Караоке (L)")} aria-haspopup="dialog"><MicVocal size={17} /></button>
+              {track.online?.source !== "broadcast" && <DislikeButton track={track} selected={props.disliked.has(track.id)} toggle={props.toggleDislike} />}
+              <button type="button" className="icon-button hero-karaoke" disabled={track.online?.source === "broadcast"} onClick={props.openKaraoke} aria-label={t("Караоке")} title={t("Караоке (L)")} aria-haspopup="dialog"><MicVocal size={17} /></button>
               <button type="button" className="icon-button hero-fullscreen" onClick={props.openPresentation} aria-label={t("Развернуть текущий трек")} title={t("Во весь экран (F)")} aria-haspopup="dialog"><Maximize2 size={17} /></button>
             </>}
           </div>
@@ -272,6 +269,7 @@ export function LibraryPage(props: LibraryPageProps) {
           : <button type="button" className="button outline-button" onClick={props.addMusic} disabled={props.busy}><Plus size={17} />{" "}{t("Выбрать файлы")}</button>)}
       </div>}
       {isSearch && search.trim().length >= 2 && <OnlineSearch key={search.trim()} query={search.trim()} hasLocal={results.length > 0} filter={catalogSource} setFilter={setCatalogSource} saved={saved} disabled={props.busy} choose={props.chooseOnline} />}
+      {isSearch && <MusicSites query={search} />}
     </div>
   );
 }

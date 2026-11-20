@@ -22,13 +22,13 @@ export function PlayerBar(props: PlayerBarProps) {
     <footer className={`player-bar${props.classic ? ' classic-player-bar' : ''}`} aria-label={t("Управление воспроизведением")}>
       <button className="playing-mini" type="button" onClick={props.goToPlayer} aria-label={t("Открыть экран «Сейчас играет»")}>
         <Artwork track={track} />
-        <span><strong>{track?.title ?? t("Нет трека")}</strong><small>{track?.artist ?? t("Добавьте музыку")}</small></span>
+        <span><strong title={track?.title}>{track?.title ?? t("Нет трека")}</strong><small title={track?.artist}>{track?.artist ?? t("Добавьте музыку")}</small></span>
       </button>
       <div className="transport"><TransportControls {...props} /><SeekTimeline {...props} /></div>
       <div className="player-side-controls">
         <VolumeControl {...props} />
         <span className="utility-divider" />
-        <button type="button" className="icon-button karaoke-toggle" aria-haspopup="dialog" disabled={!track} onClick={props.openKaraoke}
+        <button type="button" className="icon-button karaoke-toggle" aria-haspopup="dialog" disabled={!track || props.live} onClick={props.openKaraoke}
           title={t("Караоке (L)")} aria-label={t("Караоке")}><MicVocal size={18} /></button>
         <button type="button" className="icon-button presentation-toggle" aria-haspopup="dialog" disabled={!track} onClick={props.openPresentation}
           title={t("Во весь экран (F)")} aria-label={t("Развернуть трек во весь экран")}><Maximize2 size={18} /></button>

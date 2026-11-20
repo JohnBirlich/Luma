@@ -184,10 +184,4 @@
 <circle cx="748.3" cy="62.7" r="0.50" fill="#e9fcff" opacity="0.78"/>
 <circle cx="1053.9" cy="403.9" r="0.60" fill="#e9fcff" opacity="0.72"/>
 <circle cx="1139.6" cy="560.6" r="1.36" fill="#e9fcff" opacity="0.56"/>
-<path d="M111 175h10 M116 170v10" stroke="#d5efff" stroke-width=".85" opacity=".65"/>
-<path d="M410 389h10 M415 384v10" stroke="#d5efff" stroke-width=".85" opacity=".65"/>
-<path d="M589 178h10 M594 173v10" stroke="#d5efff" stroke-width=".85" opacity=".65"/>
-<path d="M907 113h10 M912 108v10" stroke="#d5efff" stroke-width=".85" opacity=".65"/>
-<path d="M1034 286h10 M1039 281v10" stroke="#d5efff" stroke-width=".85" opacity=".65"/>
-<path d="M821 439h10 M826 434v10" stroke="#d5efff" stroke-width=".85" opacity=".65"/>
 </svg>

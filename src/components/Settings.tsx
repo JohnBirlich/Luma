@@ -134,7 +134,6 @@ interface SettingsProps {
   sectionId: SettingsSectionId | undefined;
   selectSection(id?: SettingsSectionId): void;
   returnToTab(): void;
-  openVkBookmarks(): void;
 }
 
 const SECTIONS = [
@@ -339,7 +338,6 @@ export function SettingsPage(props: SettingsProps) {
               <ToggleRow title={t("Передавать данные трека системе")} detail={t("Название, исполнитель и обложка для медиапанели. Медиаклавиши работают отдельно.")} enabled={playback.publishTrack} change={() => changePlayback({ ...playback, publishTrack: !playback.publishTrack })} />
             </SettingCard>
             <SettingCard title={t("Сервисы")}>
-              <VkBookmarkSettings openVkBookmarks={props.openVkBookmarks} />
               <LastFmSettings connected={props.connected} />
               <Service title={t("Тексты песен")} status="LRCLIB">
                 <p>{t("Теги и локальные .lrc / .lyrics.txt, LRCLIB и несколько оригинальных изданий из Викитеки. Для полного каталога Musixmatch нужен отдельный договор.")}</p>
@@ -525,21 +523,4 @@ function StreamCacheSettings() {
     {!bridge && <span className="setting-status">{t("В приложении Windows")}</span>}
     {failed && <p role="status">{t("Не удалось полностью очистить кэш. Остановите воспроизведение и повторите.")}</p>}
   </SettingCard>;
-}
-
-function VkBookmarkSettings({ openVkBookmarks }: { openVkBookmarks(): void }) {
-  const t = useText();
-  const [resetting, setResetting] = useState(false);
-  const [notice, setNotice] = useState('');
-  return <Service title={t('Закладки VK')} status={t('Внешние ссылки')}>
-    <p>{t('У Luma нет доступа к личной медиатеке и потокам VK Музыки. Здесь сохраняются только ссылки на плейлисты.')}</p>
-    <div className="settings-actions">
-      <button className="button outline-button" type="button" onClick={openVkBookmarks}>{t('Открыть закладки VK на главной')}</button>
-      {window.luma && <button className="button outline-button" type="button" disabled={resetting} onClick={() => {
-        setResetting(true); setNotice('');
-        void window.luma?.clearLegacyVkSession().then(() => setNotice('Данные старого сеанса VK удалены.'), () => setNotice('Не удалось очистить данные входа VK.')).finally(() => setResetting(false));
-      }}>{resetting ? t('Сбрасываем…') : t('Удалить старые данные входа VK')}</button>}
-    </div>
-    {notice && <p className="setting-hint" role="status">{t(notice)}</p>}
-  </Service>;
 }

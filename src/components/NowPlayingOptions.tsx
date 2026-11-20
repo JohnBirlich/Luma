@@ -1,7 +1,7 @@
 import { useText } from '../i18n/context';
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Activity, AudioLines, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Sparkles, Sunset, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
+import { Activity, AudioLines, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Music2, Droplets, Sparkles, Sunset, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
 import type { Track } from '../shared/media';
 import type { ReadSpectrum } from '../player/useAudio';
 import { EFFECT_TEMPOS } from '../shared/customization';
@@ -19,12 +19,12 @@ const LAYOUTS = [
 const EFFECTS = [
   { id: 'off', label: 'Без эффекта', description: 'Только оформление трека', icon: CircleSlash },
   { id: 'cover', label: 'Обложка на фоне', description: 'Обложка альбома или широкая обложка', icon: Image },
-  { id: 'aurora', label: 'Сияние', description: 'Северное сияние и переливы', icon: Sparkles },
+  { id: 'aurora', label: 'Сияние', description: 'Зелёные и лиловые шторы северного сияния', icon: Sparkles },
   { id: 'waves', label: 'Волны', description: 'Морской прибой в сумерках', icon: Waves },
-  { id: 'stars', label: 'Звёзды', description: 'Созвездия и звёздное поле', icon: Sparkles },
-  { id: 'spectrum', label: 'Спектр', description: 'Световые полосы частот', icon: AudioLines },
-  { id: 'orbits', label: 'Орбиты', description: 'Планета и световые кольца', icon: Orbit },
-  { id: 'prism', label: 'Призма', description: 'Стекло преломляет белый луч', icon: Triangle },
+  { id: 'stars', label: 'Звёзды', description: 'Звёздная пыль и мягкий параллакс', icon: Sparkles },
+  { id: 'spectrum', label: 'Спектр', description: 'Неоновый рельеф частот', icon: AudioLines },
+  { id: 'orbits', label: 'Орбиты', description: 'Планета, кольца и спутники', icon: Orbit },
+  { id: 'prism', label: 'Призма', description: 'Объёмная призма и дисперсия луча', icon: Triangle },
   { id: 'pulse', label: 'Импульс', description: 'Кольца в ритме баса', icon: Activity },
   { id: 'nebula', label: 'Туманность', description: 'Глубокая туманность и параллакс звёзд', icon: Wind },
   { id: 'horizon', label: 'Неон', description: 'Линии горизонта и синтвейв', icon: Sunset },
@@ -33,6 +33,8 @@ const EFFECTS = [
   { id: 'rain', label: 'Дождь', description: 'Капли и круги на мокрой улице', icon: CloudRain },
   { id: 'solar', label: 'Солнечный ветер', description: 'Корональный свет, потоки плазмы и искры', icon: Sun },
   { id: 'meteors', label: 'Метеоры', description: 'Падающие звёзды и следы', icon: Telescope },
+  { id: 'notes', label: 'Ноты', description: 'Светящиеся ноты в потоке', icon: Music2 },
+  { id: 'liquid', label: 'Жидкое стекло', description: 'Переливы света в стекле', icon: Droplets },
 ] as const;
 
 export interface SceneOptionsProps { appearance: Appearance; change(value: Appearance): void }
@@ -54,7 +56,7 @@ export function NowPlayingOptions({ appearance, change, track }: SceneOptionsPro
         {EFFECTS.map(({ id, label, description, icon: Icon }) => <button key={id} type="button" aria-pressed={appearance.effect === id} aria-label={t(label)} title={t(description)}
           className="scene-choice" onClick={() => change({ ...appearance, effect: id })}>
           <span className="scene-choice-preview">
-            <SceneBackground effect={id} track={id === 'cover' ? track : undefined} strength={0.82} />
+            <SceneBackground effect={id} track={id === 'cover' ? track : undefined} strength={0.82} visible={false} />
             <Icon size={16} aria-hidden="true" />{appearance.effect === id && <Check className="scene-choice-check" size={13} aria-hidden="true" />}
           </span>
           <strong>{t(label)}</strong><small>{t(description)}</small>

@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, screen, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
+import { STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
 import { LEGACY_VK_SESSION } from '../dist-electron/src/shared/vk.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
@@ -38,7 +39,8 @@ async function waitFor(label, check) {
 
 const liveCatalog = process.env.LUMA_LIVE_CATALOG === '1';
 const liveServices = process.env.LUMA_LIVE_SERVICES === '1';
-const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), (liveCatalog || liveServices) ? 260_000 : 155_000);
+const liveRadio = process.env.LUMA_LIVE_RADIO === '1';
+const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), (liveCatalog || liveServices || liveRadio) ? 260_000 : 155_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
 const cover = await readFile(join(root, 'public/artwork/afterimage.webp'));
@@ -183,7 +185,7 @@ async function smoke() {
     const text = document.querySelector('.karaoke-lyrics').getBoundingClientRect();
     return innerWidth <= 690 || (art.width >= 150 && art.right < text.left);
   })()`), true, 'karaoke keeps only a bounded cover next to lyrics');
-  assert.equal(await run(`!document.querySelector('.karaoke-stage > :is(.scene-background,.immersive-backdrop,.immersive-scrim)')`), true);
+  assert.equal(await run(`!document.querySelector('.karaoke-stage > :is(.scene-cover,.immersive-backdrop,.immersive-scrim)')`), true);
   assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-track h1')).userSelect`), 'none');
   assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-lyrics .lyrics-scroll')).userSelect`), 'text');
   await run(`[...document.querySelectorAll('.karaoke-lyrics .lyrics-sources button')].find((item) => item.textContent === 'Убрать текст из файла').click()`);
@@ -298,11 +300,20 @@ async function smoke() {
   await expand();
   await waitFor('normal fullscreen still shows the selected cover backdrop', () => run(`!!document.querySelector('.immersive-stage > .scene-cover')`));
   await click('.immersive-karaoke-toggle');
-  await waitFor('karaoke never mounts the cover backdrop or effect, regardless of the selected scene', () => run(`!!document.querySelector('.karaoke-track .artwork') && !document.querySelector('.karaoke-stage > :is(.scene-background,.immersive-backdrop,.immersive-scrim)')`));
+  await waitFor('karaoke substitutes ambient light for the selected cover backdrop', () => run(`!!document.querySelector('.karaoke-track .artwork') && !document.querySelector('.karaoke-stage > :is(.scene-background,.immersive-backdrop,.immersive-scrim)')`));
+  await click('.immersive-karaoke-toggle');
+  await click('.immersive-tools button[aria-label="Оформление полноэкранного плеера"]');
+  await waitFor('fullscreen scene dialog', () => run(`!!document.querySelector('.scene-dialog[open]')`));
+  await click('.scene-choice[aria-label="Сияние"]');
+  await click('.scene-dialog .primary-button');
+  await click('.immersive-karaoke-toggle');
+  await waitFor('karaoke uses the selected non-cover scene with only the foreground art', () => run(`!!document.querySelector('.karaoke-stage > .scene-aurora')
+    && !!document.querySelector('.karaoke-track .artwork') && !document.querySelector('.karaoke-stage > :is(.scene-cover,.immersive-backdrop)')`));
   await click('.immersive-collapse');
   await waitFor('fullscreen exits after switching modes', async () => !window.isFullScreen() && await run(`!document.querySelector('.immersive-player')`));
 
-  await click('.page-equalizer');
+  assert.equal(await run(`document.querySelector('.home-now [aria-label="Эквалайзер"]')`), null);
+  await click('.sidebar [aria-label="Эквалайзер из боковой панели"]');
   await waitFor('parametric EQ and response graph', () => run(`document.querySelectorAll('.equalizer-dialog[open] .eq-band input').length === 10 && !!document.querySelector('.eq-response-path')`));
   const volumeBeforeEq = (await preferences()).volume;
   await select('.preset-label select', 'bass');
@@ -344,14 +355,14 @@ async function smoke() {
   await click('.settings-back');
   await click('.settings-page [aria-label="Интеграции"]');
   await waitFor('widget setting', () => run(`!!document.querySelector('[aria-label="Виджеты рабочего стола"] select')`));
-  await select('[aria-label="Виджеты рабочего стола"] select', 'glass');
-  await waitFor('widget material updates in place', () => run(`document.querySelector('.widget-sample')?.dataset.widgetBackground === 'glass'`));
-  assert.equal(await run(`document.querySelectorAll('[aria-label="Виджеты рабочего стола"] select option').length`), 9);
+  await select('[aria-label="Виджеты рабочего стола"] select', 'liquid');
+  await waitFor('widget material updates in place', () => run(`document.querySelector('.widget-sample')?.dataset.widgetBackground === 'liquid'`));
+  assert.equal(await run(`document.querySelectorAll('[aria-label="Виджеты рабочего стола"] select option').length`), 10);
   const widgetBounds = window.getBounds();
   const widgetTime = await run('document.querySelector("audio").currentTime');
   await click('[aria-label="Виджеты рабочего стола"] button');
   await waitFor('floating widget opens without replacing the renderer', async () => window.isAlwaysOnTop() && window.getBounds().width < widgetBounds.width
-    && await run(`document.querySelector('.widget-mode > .desktop-widget')?.dataset.widgetBackground === 'glass' && window.testAudio === document.querySelector('audio')`));
+    && await run(`document.querySelector('.widget-mode > .desktop-widget')?.dataset.widgetBackground === 'liquid' && window.testAudio === document.querySelector('audio')`));
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   await click('.widget-window-buttons [aria-label="Вернуться в плеер"]');
   await waitFor('widget restores the old window', async () => !window.isAlwaysOnTop() && !await run(`!!document.querySelector('.widget-mode > .desktop-widget')`));
@@ -437,6 +448,11 @@ async function smoke() {
 
   const catalogCalls = [];
   const streamCalls = [];
+  const radioCalls = [];
+  const recordStation = STATIONS[0];
+  const stationSection = '[aria-labelledby="radio-stations"]';
+  const savedStations = '[aria-labelledby="radio-added"]';
+  const recordPlay = 'button[aria-label="Слушать станцию: Record"]';
   const titleQueries = [];
   const fingerprints = [];
   const legacyVk = session.fromPartition(LEGACY_VK_SESSION);
@@ -475,12 +491,14 @@ async function smoke() {
     }
     if (url.origin === 'https://api.openverse.org' && url.pathname.startsWith('/v1/audio/')) {
       catalogCalls.push(url);
-      const rows = url.searchParams.get('q') === 'fixture-mp3' ? [synced, plain] : [jamendoRecording, commonsRecording];
+      const rows = url.searchParams.get('q') === 'fixture-mp3' ? [synced, plain]
+        : url.searchParams.get('source') === 'jamendo' ? [jamendoRecording] : [jamendoRecording, commonsRecording];
       return Response.json(url.pathname === '/v1/audio/' ? { results: rows } : [...rows, synced, plain].find((item) => url.pathname.endsWith(`/${item.id}/`)), { headers: fixtureHeaders });
     }
-    if ([jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url].includes(url.href)) {
+    if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
+    if (url.href === recordStation.stream || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url].includes(url.href)) {
       // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
-      streamCalls.push(url.href);
+      (url.href === recordStation.stream ? radioCalls : streamCalls).push(url.href);
       const range = request.headers.get('Range');
       const bytes = range && parseByteRange(range, sample.length);
       const body = bytes ? sample.subarray(bytes.start, bytes.end + 1) : sample;
@@ -559,7 +577,7 @@ async function smoke() {
     await fill('main input[type="search"]', 'jazz');
     await waitFor('online fallback prompt', () => run(`!!document.querySelector('.online-search-form button')`));
     assert.equal(catalogCalls.length, 0, 'typing stays local until the user opts in');
-    assert.equal(await run(`document.querySelectorAll('.service-search-link').length`), 0);
+    assert.equal(await run(`document.querySelectorAll('.music-site-grid a').length`), 6);
     assert.deepEqual(await run(`[...document.querySelector('.online-search-form select').options].map(option => option.value)`), ['all', 'jamendo', 'wikimedia_audio', 'netlabels', 'southern_city']);
     await click('.online-search-form button');
     await waitFor('both online sources', () => run(`document.querySelectorAll('.online-results li').length === 2`));
@@ -600,6 +618,12 @@ async function smoke() {
       await fill('.hub-search input', 'Ты здесь');
       await waitFor('native search finds a local track', () => run(`document.querySelector('.hub-track strong')?.textContent === 'Ты здесь'`));
       assert.equal(catalogCalls.length, 1, 'native search does not send typed metadata');
+      assert.equal(await run(`document.querySelectorAll('.music-site-grid a').length`), 6);
+      await click('.music-site-grid a[href^="https://vk.ru/audio?"]');
+      await waitFor('an explicit query goes to the system browser', () => opened.length === 1);
+      assert.equal(new URL(opened.pop()).searchParams.get('q'), 'Ты здесь');
+      assert.equal(catalogCalls.length, 1, 'a browser destination is not a native search request');
+      assert.equal(await run(`window.luma.openOnlineLink('https://example.invalid/').then(() => false, () => true)`), true);
       await click('.hub-tabs button:nth-child(2)');
       await waitFor('existing VK bookmark migrated', () => run(`document.querySelector('.hub-bookmarks a[href="https://vk.ru/music/playlist/-31_4"]') !== null`));
       await click('.hub-bookmarks header button');
@@ -611,25 +635,62 @@ async function smoke() {
       await waitFor('bookmark handed to the system browser', () => opened.length === 1);
       assert.deepEqual(opened, [link]);
       assert.equal(await run(`window.luma.openVkLink('https://example.invalid/').then(() => false, () => true)`), true);
-      await settings('Интеграции');
-      await click('[aria-label="Закладки VK"] .settings-actions button:last-child');
-      await waitFor('old session cleanup acknowledged', () => run(`document.querySelector('[aria-label="Закладки VK"] [role="status"]')?.textContent.includes('удалены')`));
+      await click('.hub-bookmarks .vk-cleanup');
+      await waitFor('old session cleanup acknowledged in the bookmarks shelf', () => run(`document.querySelector('.hub-bookmarks [role="status"]')?.textContent.includes('удалены')`));
       assert.equal((await legacyVk.cookies.get({ name: 'lumaFixture' })).length, 0);
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
-      await click('[aria-label="Закладки VK"] .settings-actions button:first-child');
-      await waitFor('settings points to Home bookmarks; session cleanup keeps both links', () => run(`JSON.parse(localStorage.getItem('luma-player:vk-playlists:v1')).playlists.length === 2 && !!document.querySelector('.hub-bookmarks')`));
-      await click('.hub-tabs button:nth-child(4)');
-      await select('.hub-radio-settings select', 'all');
-      const previous = (await preferences()).queue;
-      await click('.hub-station-rail button[aria-label="Джаз"]');
-      await waitFor('station prepared from catalog, with attribution', () => run(`!!document.querySelector('.hub-radio-result .online-credit')`));
-      assert.deepEqual((await preferences()).queue, previous, 'preparing radio does not replace playback');
-      await click('.hub-radio-result button');
-      await waitFor('radio queue holds both tracks with online references', async () => {
+      assert.equal(await run(`JSON.parse(localStorage.getItem('luma-player:vk-playlists:v1')).playlists.length`), 2);
+      await settings('Интеграции');
+      assert.equal(await run(`!!document.querySelector('.settings-page [aria-label="Закладки VK"]')`), false);
+      await closeSettings();
+
+      await click('.hub-tabs button:nth-child(3)');
+      await waitFor('Browse genres', () => run(`!!document.querySelector('[aria-label="Жанры"] .hub-tile[aria-label="Джаз"]')`));
+      await click('[aria-label="Жанры"] .hub-tile[aria-label="Джаз"]');
+      await run(`[...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Найти в Jamendo').click()`);
+      await waitFor('Jamendo recordings show up with attribution', () => run(`document.querySelector('.topic-detail .online-credit')?.textContent.includes('Jamendo')`));
+      const prior = (await preferences()).queue;
+      await run(`[...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Сохранить как плейлист').click()`);
+      await waitFor('playlist includes Jamendo reference without downloading a track', async () => (await preferences()).playlists[0]?.trackIds.includes(`ov-${jamendoRecording.id}`));
+      assert.deepEqual((await preferences()).queue, prior);
+      await click('.hub-tabs button:nth-child(2)');
+      await click('[aria-label="Мои плейлисты"] .hub-tile[aria-label="Джаз"]');
+      await run(`[...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Слушать плейлист').click()`);
+      await waitFor('playing a playlist replaces the queue with its ordered contents', async () => {
         const prefs = await preferences();
-        return prefs.queue.order.length === 2 && prefs.onlineRefs.some(({ id }) => id === `ov-${commonsRecording.id}`);
+        return prefs.queue.order.join() === prefs.playlists[0].trackIds.join();
       });
-      await withArt('All About Jazz');
+
+      await click('.hub-tabs button:nth-child(4)');
+      await waitFor('radio shows curated stations with decoded logos', () => run(`document.querySelectorAll('${stationSection} .station-tile').length === ${STATIONS.length}
+        && document.querySelector('${stationSection} .station-logo img')?.naturalWidth > 0`));
+      assert.equal(radioCalls.length, 0);
+      await click(`${stationSection} [aria-label="Добавить станцию Record"]`);
+      await waitFor('saved station appears without starting playback', () => run(`!!document.querySelector('${savedStations} .station-tile')`));
+      assert.deepEqual((await preferences()).stationIds, [recordStation.id]);
+      const beforeRadio = await preferences();
+      const beforeRadioLyrics = lyricQueries.length;
+      await click(`${savedStations} ${recordPlay}`);
+      await waitFor('station decodes audio bytes and switches to live controls', () => run(`document.querySelector('${onlineAudio}').currentTime > .12
+        && !!document.querySelector('.player-bar .live-timeline') && !document.querySelector('.player-bar .timeline')`));
+      assert.ok(radioCalls.includes(recordStation.stream));
+      assert.equal(await run(`navigator.mediaSession.metadata.title`), recordStation.name);
+      await run(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight' }));`);
+      assert.ok(await run(`document.querySelector('${onlineAudio}').currentTime < 4`), 'keyboard seek does not seek the stream even if its fixture is seekable');
+      assert.deepEqual((await preferences()).onlineTracks, beforeRadio.onlineTracks);
+      assert.ok(!(await preferences()).recent.includes(recordStation.id));
+      assert.equal(lyricQueries.length, beforeRadioLyrics);
+      assert.equal(await run(`window.luma.streamCache.save(${JSON.stringify(stationTracks[0])}).catch(() => false)`), false);
+      assert.equal(await run(`window.luma.exportMp3(${JSON.stringify(stationTracks[0])}, true).then(({ saved }) => saved, () => false)`), false);
+      await click('.hub-tabs button:first-child');
+      await waitFor('Home omits lyrics and karaoke for a station', () => run(`document.querySelector('.hero h2')?.textContent === 'Record'
+        && !document.querySelector('.hero-karaoke, .home-now .lyrics-scroll')`));
+      await click('.player-bar .play-button');
+      await waitFor('stopping radio unloads the network source', () => run(`document.querySelector('${onlineAudio}').paused && !document.querySelector('${onlineAudio}').hasAttribute('src')`));
+      await click('.hub-tabs button:nth-child(4)');
+      await run(`Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }); window.dispatchEvent(new Event('offline'));`);
+      await waitFor('offline playback is unavailable without hiding saved stations', () => run(`document.querySelector('${savedStations} ${recordPlay}')?.disabled`));
+      await run(`delete navigator.onLine; window.dispatchEvent(new Event('online'));`);
     } finally { shell.openExternal = openExternal; }
     await go('Поиск');
     await waitFor('MP3 catalog query', () => run(`!!document.querySelector('main input[type="search"]')`));
@@ -700,6 +761,10 @@ async function smoke() {
     assert.equal(palettes.size, 5);
     assert.equal(await run(`document.querySelector('.app-shell').dataset.layout === 'glass' && !document.querySelector('.sidebar')
       && !!document.querySelector('.glass-navigation') && getComputedStyle(document.querySelector('.app-shell')).colorScheme === 'light'`), true);
+    assert.equal(await run(`document.querySelectorAll('.glass-dock-icon').length`), 6);
+    await click('.glass-sound');
+    await waitFor('the glass Dock opens the same EQ', () => run(`!!document.querySelector('.equalizer-dialog[open] .eq-response-path')`));
+    await click('.equalizer-content .dialog-footer .primary-button');
     await select('label:has(select option[value="en"]) select', 'en');
     await waitFor('English switches Luma controls, not track metadata', () => run(`document.documentElement.lang === 'en'
       && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.settings-page h1')?.textContent === 'Appearance'`));
@@ -713,6 +778,8 @@ async function smoke() {
     await reloaded;
     await waitFor('English and MacOS survive a renderer restart', () => run(`document.documentElement.lang === 'en' && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.app-shell').dataset.theme === 'macos'`));
     assert.deepEqual((await preferences()).equalizer, editedEq, 'parametric filters restore after a renderer restart');
+    assert.deepEqual((await preferences()).stationIds, [recordStation.id], 'saved radio restores after a renderer restart');
+    assert.ok((await preferences()).playlists.some(({ title }) => title === 'Джаз'), 'playlist restores after a renderer restart');
     await click('.title-settings');
     await waitFor('English settings index', () => run(`!!document.querySelector('.settings-page [aria-label="Appearance"]')`));
     await click('.settings-page [aria-label="Appearance"]');
@@ -750,6 +817,39 @@ async function smoke() {
     await legacyVk.clearStorageData();
   }
   console.log('Desktop smoke: monitor fullscreen; compact widget restores bounds; Apple/WASM; metered MP3; lyrics export; merged Home, catalogs, external VK bookmarks and isolated legacy reset.');
+  if (liveRadio) {
+    const webRequest = session.defaultSession.webRequest;
+    const statuses = new Map();
+    webRequest.onResponseStarted({ urls: STATIONS.flatMap(({ stream, logo }) => [stream, logo]) }, ({ url, statusCode }) => statuses.set(url, statusCode));
+    const failures = [];
+    try {
+      // Use the shipped renderer CSP and decoder. Probe short bursts only; never save audio.
+      for (let i = 0; i < STATIONS.length; i += 3) {
+        const rows = await run(`Promise.all(${JSON.stringify(STATIONS.slice(i, i + 3))}.map(async ({ name, stream, logo }) => {
+          const audio = new Audio(); audio.muted = true;
+          const image = new Image(); image.src = logo;
+          const timerId = setTimeout(() => { audio.removeAttribute('src'); audio.load(); image.removeAttribute('src'); }, 10500);
+          try {
+            const decoded = new Promise(resolve => {
+              audio.addEventListener('timeupdate', () => { if (audio.currentTime > .18) resolve('decoded'); });
+              audio.addEventListener('error', () => resolve('media error ' + (audio.error?.code ?? 0)), { once: true });
+              audio.addEventListener('emptied', () => resolve('timeout'), { once: true });
+              audio.src = stream;
+              void audio.play().catch(error => resolve(error.name));
+            });
+            const [media, artwork] = await Promise.all([decoded, image.decode().then(() => image.naturalWidth, () => 0)]);
+            return { name, stream, logo, media, artwork };
+          } finally { clearTimeout(timerId); audio.removeAttribute('src'); audio.load(); }
+        }))`);
+        for (const { name, stream, logo, media, artwork } of rows) {
+          const line = `${name}: stream HTTP ${statuses.get(stream) ?? 'unknown'}, ${media}; logo HTTP ${statuses.get(logo) ?? 'unknown'}, ${artwork}px`;
+          console.log(`::notice title=Live radio::${line}`);
+          if (media !== 'decoded' || !(artwork > 0)) failures.push(name);
+        }
+      }
+    } finally { webRequest.onResponseStarted(null); }
+    assert.deepEqual(failures, [], 'live stations that failed to play or load artwork from this network');
+  }
   if (liveServices) {
     const suggestions = await run(`window.luma.recognition.search('Madam Broshkina', 'ru-RU')`);
     assert.ok(suggestions.some(({ title }) => title === 'Мадам Брошкина'), 'live Apple Music transliteration lookup');

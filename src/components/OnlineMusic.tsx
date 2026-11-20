@@ -7,15 +7,15 @@ import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { findOnlineTracks, importOnlineTrack } from '../data/online';
 import { formatTime } from '../shared/media';
 import { commonsMp3Export, ONLINE_FILTERS, ONLINE_SOURCES } from '../shared/online';
-import type { OnlineFilter, OnlineTrack } from '../shared/online';
+import type { OnlineCreditData, OnlineFilter, OnlineTrack } from '../shared/online';
 import { Artwork } from './Artwork';
 
 export type OnlineAction = 'play' | 'queue' | 'save' | 'export' | 'cache';
 
-function SourceLink({ url, children }: { url: string; children: ReactNode }) {
+export function SourceLink({ url, children, className, label }: { url: string; children: ReactNode; className?: string; label?: string }) {
   const t = useText();
   const [failed, setFailed] = useState(false);
-  return <><a href={url} target="_blank" rel="noopener noreferrer" onClick={(event) => {
+  return <><a href={url} className={className} aria-label={label} title={label} target="_blank" rel="noopener noreferrer" onClick={(event) => {
     if (!window.luma) return;
     event.preventDefault();
     setFailed(false);
@@ -23,8 +23,10 @@ function SourceLink({ url, children }: { url: string; children: ReactNode }) {
   }}>{children}</a>{failed && <span role="status">{t("Не удалось открыть ссылку.")}</span>}</>;
 }
 
-export function OnlineCredit({ track, compact }: { track: { online: OnlineTrack['online'] }; compact?: boolean }) {
+export function OnlineCredit({ track, compact }: { track: { online: OnlineCreditData }; compact?: boolean }) {
+  const t = useText();
   const { source, page, license, licenseUrl } = track.online;
+  if (source === 'broadcast') return <span className="online-credit"><SourceLink url={page}>{t('Сайт станции')} <ArrowUpRight size={12} /></SourceLink></span>;
   return <span className="online-credit"><SourceLink url={page}>{ONLINE_SOURCES[source]} <ArrowUpRight size={12} /></SourceLink>
     {!compact && <> · <SourceLink url={licenseUrl}>{license}</SourceLink></>}</span>;
 }
@@ -64,7 +66,7 @@ export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabl
 
   return <section className="online-panel" aria-labelledby="online-title" aria-busy={busy}>
     <header><div className="online-mark"><Globe2 size={20} /></div><div>
-      <p className="overline">{t("Слушать в Luma")}</p><h2 id="online-title">{t("Найти в музыкальных сервисах")}</h2>
+      <p className="overline">{t("Слушать в Luma")}</p><h2 id="online-title">{t("Открытые музыкальные каталоги")}</h2>
       <p>{hasLocal ? t("Хотите больше вариантов? Нажмите «Искать онлайн», чтобы отправить запрос в выбранный каталог.")
         : t("Отправьте запрос в выбранный каталог кнопкой «Искать онлайн» или клавишей Enter.")}</p>
     </div></header>

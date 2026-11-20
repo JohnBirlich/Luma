@@ -7,6 +7,7 @@ export type LibraryGroup = 'artist' | 'album' | 'genre';
 export interface GroupFilter { kind: LibraryGroup; id: string }
 
 function labels(track: Track, kind: LibraryGroup): { id: string; label: string }[] {
+  if (track.online?.source === 'broadcast') return [];
   if (kind === 'genre') return (track.genres ?? []).map((label) => ({ id: musicSearchKey(label), label }));
   if (kind === 'artist') return track.artist === 'Неизвестный исполнитель' ? [] : [{ id: musicSearchKey(track.artist), label: track.artist }];
   if (track.album === 'Без альбома' || (track.online && track.album === ONLINE_SOURCES[track.online.source])) return [];

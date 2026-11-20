@@ -99,7 +99,7 @@ class AudioGraph {
 }
 
 const unavailable = 'Не удалось воспроизвести трек. Проверьте, не перемещён ли файл и поддерживается ли его формат.';
-const length = (audio: HTMLAudioElement, track: Track) => Number.isFinite(audio.duration) ? audio.duration : track.duration;
+const length = (audio: HTMLAudioElement, track: Track) => track.online?.source === 'broadcast' ? 0 : Number.isFinite(audio.duration) ? audio.duration : track.duration;
 function unload(audio: HTMLAudioElement) {
   audio.pause();
   if (audio.getAttribute('src')) { audio.removeAttribute('src'); audio.load(); }
@@ -123,7 +123,8 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
   const [floatStatus, setFloatStatus] = useState<FloatStatus>('system');
   const [snapshot, setSnapshot] = useState<Snapshot>(stopped);
   const settings = useRef({ volume, eq, quality });
-  const errorText = useCallback(() => active.current?.track.online
+  const errorText = useCallback(() => active.current?.track.online?.source === 'broadcast'
+    ? 'Не удалось подключиться к эфиру. Повторите попытку или откройте сайт станции.' : active.current?.track.online
     ? 'Источник не воспроизводит этот трек. Проверьте сеть или откройте страницу записи.' : unavailable, []);
 
   useEffect(() => {
@@ -216,12 +217,18 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     const cleanups = [ref.current, blendRef.current, streamRef.current].flatMap((audio) => {
       if (!audio) return [];
       const listeners: Record<string, (deck: Deck) => void> = {
-        play: () => {
-          if (audio.paused) return;
+        play: ({ track }) => {
+          if (audio.paused || track.online?.source === 'broadcast') return;
           recordDiagnostic('audio.play');
           setSnapshot((previous) => ({ ...previous, playing: true, loading: false }));
         },
-        playing: (deck) => { if (!audio.paused) { trackStarted(deck.track.id); markListening(deck); } },
+        playing: (deck) => {
+          if (audio.paused) return;
+          if (deck.track.online?.source === 'broadcast') {
+            recordDiagnostic('audio.play');
+            setSnapshot((previous) => ({ ...previous, playing: true, loading: false }));
+          } else { trackStarted(deck.track.id); markListening(deck); }
+        },
         seeking: (deck) => deck.listening?.interrupt(),
         waiting: (deck) => deck.listening?.interrupt(),
         ratechange: (deck) => deck.listening?.interrupt(),
@@ -234,6 +241,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
         },
         loadedmetadata: () => recordDiagnostic('audio.ready', { ms: performance.now() - loadStarted.current }),
         timeupdate: (deck) => {
+          if (deck.track.online?.source === 'broadcast') return;
           setSnapshot((previous) => ({ ...previous, elapsed: audio.currentTime }));
           if (!audio.paused && !audio.seeking && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
             const event = deck.listening?.sample(audio.currentTime, performance.now() / 1000, length(audio, deck.track), audio.playbackRate);
@@ -246,7 +254,8 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
           deck.listening = undefined;
           cancelTransitions();
           setSnapshot((previous) => ({ ...previous, playing: false, loading: false }));
-          ended.current();
+          if (deck.track.online?.source !== 'broadcast') ended.current();
+          else unload(audio);
         },
         error: () => {
           if (!audio.error) return;
@@ -326,10 +335,10 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     setSnapshot((previous) => ({ ...previous, error: '' }));
     const version = token.current;
     const deadline = track.online ? window.setTimeout(() => {
-      if (intent !== playIntent.current || version !== token.current || audio.paused || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
+      if (intent !== playIntent.current || version !== token.current || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
       unload(audio);
       recordDiagnostic('audio.error', { code: 0 });
-      setSnapshot({ ...stopped, duration: track.duration, error: 'Источник не ответил вовремя. Повторите попытку или откройте страницу записи.' });
+      setSnapshot({ ...stopped, duration: track.duration, error: track.online?.source === 'broadcast' ? errorText() : 'Источник не ответил вовремя. Повторите попытку или откройте страницу записи.' });
     }, 15_000) : undefined;
     void audio.play().catch((error: unknown) => {
       if (intent !== playIntent.current || version !== token.current || (error instanceof DOMException && error.name === 'AbortError')) return;
@@ -370,21 +379,25 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     playIntent.current++;
     pendingOnline.current = null;
     cancelTransitions();
-    active.current?.audio.pause();
+    const deck = active.current;
+    if (deck?.track.online?.source === 'broadcast') {
+      unload(deck.audio);
+      setSnapshot(stopped);
+    } else deck?.audio.pause();
     setSnapshot((previous) => previous.loading ? { ...previous, loading: false } : previous);
     void native.current?.set(false);
   }, [cancelTransitions]);
   const toggle = useCallback(() => {
-    if (active.current?.audio.paused && !pendingOnline.current) play();
+    if (active.current?.audio.paused && !pendingOnline.current && !snapshot.loading) play();
     else pause();
-  }, [play, pause]);
+  }, [play, pause, snapshot.loading]);
   const isPlaying = useCallback(() => {
     const audio = active.current?.audio;
     return Boolean(audio && !audio.paused && !audio.ended);
   }, []);
   const seek = useCallback((seconds: number, relative = false) => {
     const deck = active.current;
-    if (!deck || !Number.isFinite(seconds)) return;
+    if (!deck || !Number.isFinite(seconds) || deck.track.online?.source === 'broadcast') return;
     cancelTransitions();
     const duration = length(deck.audio, deck.track);
     if (duration <= 0) return;
@@ -392,7 +405,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     deck.audio.currentTime = time;
     setSnapshot((previous) => ({ ...previous, elapsed: time }));
   }, [cancelTransitions]);
-  const position = useCallback(() => active.current?.audio.currentTime ?? 0, []);
+  const position = useCallback(() => active.current?.track.online?.source === 'broadcast' ? 0 : active.current?.audio.currentTime ?? 0, []);
   const readSpectrum = useCallback<ReadSpectrum>((buffer) => {
     const engine = graph.current;
     if (!active.current || active.current.track.online || active.current.audio.paused || !engine || engine.context.state !== 'running') return false;

@@ -32,7 +32,7 @@ import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
 import type { TrackDetails } from './data/track-details';
 import { useMediaSession } from './player/mediaSession';
-import { activeOnlineRefs, radioQueueRefs, readPreferences, rememberTrack, savePreferences } from './player/preferences';
+import { activeOnlineRefs, catalogQueueRefs, readPreferences, rememberTrack, savePreferences } from './player/preferences';
 import { useAudio } from './player/useAudio';
 import { usePresentation } from './player/usePresentation';
 import { useTrackLyrics } from './player/useTrackLyrics';
@@ -45,7 +45,9 @@ import { clamp } from './shared/equalizer';
 import { defaultAudioQuality, isMetered } from './shared/audio-quality';
 import { dataLocale } from './shared/app-info';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
-import { MAX_ONLINE_TRACKS } from './shared/online';
+import { stationTracks, STATION_IDS } from './shared/radio';
+import { MAX_PLAYLISTS, playlistTitle, playlistTrackIds } from './shared/luma-playlists';
+import { MAX_ONLINE_TRACKS, readOnlineTrack } from './shared/online';
 import type { OnlineTrack } from './shared/online';
 import type { ImportResult, Track } from './shared/media';
 import { adjacentId, appendToQueue, moveUpcoming, reconcileQueue, removeFromQueue, startQueue, toggleShuffle, upcomingIds } from './shared/queue';
@@ -141,19 +143,21 @@ export default function App() {
     const override = details.get(track.id);
     return withCover(override ? { ...track, ...override } : track, covers.get(trackCoverKey(track.id)));
   }), [originals, covers, details]);
+  const stationIds = useMemo(() => new Set(preferences.stationIds), [preferences.stationIds]);
   const collection = useMemo(() => tracks.filter(({ online, id }) => !online || savedOnline.has(id)), [tracks, savedOnline]);
-  const byId = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
+  const byId = useMemo(() => new Map([...tracks, ...stationTracks].map((track) => [track.id, track])), [tracks]);
   const favoriteIds = useMemo(() => new Set(preferences.favorites), [preferences.favorites]);
   const dislikedIds = useMemo(() => new Set(preferences.disliked), [preferences.disliked]);
   const favorites = useMemo(() => tracks.filter(({ id }) => favoriteIds.has(id)), [tracks, favoriteIds]);
   const recent = useMemo(() => preferences.recent.flatMap((id) => byId.get(id) ?? []), [byId, preferences.recent]);
   const current = byId.get(queue.currentId ?? '') ?? null;
+  const live = current?.online?.source === 'broadcast';
   const detailsTrack = detailsId ? byId.get(detailsId) : undefined;
   const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance);
   const { kind: presentationKind, show: showStage, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
   const presentationOpen = presentationKind !== null;
   const showPresentation = useCallback(() => showStage('player'), [showStage]);
-  const showKaraoke = useCallback(() => showStage('karaoke'), [showStage]);
+  const showKaraoke = useCallback(() => { if (!live) showStage('karaoke'); }, [showStage, live]);
   const trackStarted = useCallback((id: string) => setPreferences((data) => {
     if (!data.playback.rememberRecent) return data;
     const recent = rememberTrack(data.recent, id);
@@ -161,7 +165,7 @@ export default function App() {
   }), []);
   const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
-  const lyrics = useTrackLyrics(current, { enabled: !widget && (presentationKind === 'karaoke' || (!presentationOpen && page === 'player' && homeTab === 'home' && !homeQuery.trim())),
+  const lyrics = useTrackLyrics(live ? null : current, { enabled: !widget && (presentationKind === 'karaoke' || (!presentationOpen && page === 'player' && homeTab === 'home' && !homeQuery.trim())),
     auto: preferences.autoLyrics, connected, playing: player.playing, duration: player.duration });
   const changeWidget = useCallback(async (enabled: boolean) => {
     if (!window.luma || switchingWidget.current || presentationOpen) return;
@@ -174,6 +178,14 @@ export default function App() {
   useEffect(() => window.luma?.window.onWidgetShortcut(() => {
     if (!modalOpen) void changeWidget(!widget);
   }), [changeWidget, modalOpen, widget]);
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1080px)');
+    const resized = () => {
+      if (!desktop.matches && !widget && !switchingWidget.current && !presentationOpen) setQueueOpen(false);
+    };
+    desktop.addEventListener('change', resized);
+    return () => desktop.removeEventListener('change', resized);
+  }, [widget, presentationOpen]);
   const sampledTone = usePalette(current);
   const tint = appearance.coverColors ? sampledTone : theme['--accent'];
   const transportPlaying = player.playing || !!player.loading;
@@ -192,7 +204,7 @@ export default function App() {
       recordDiagnostic('library.opened', { tracks: allLocal.length, ms: performance.now() - start });
       setLocalTracks(allLocal);
       const ids = [...allLocal.map(({ id }) => id), ...(boot.showDemos ? demoIds : []), ...boot.onlineTracks.map(({ id }) => id)];
-      const available = new Set([...ids, ...boot.onlineRefs.map(({ id }) => id)]);
+      const available = new Set([...ids, ...STATION_IDS, ...boot.onlineRefs.map(({ id }) => id)]);
       const state = queueRef.current;
       const restored = reconcileQueue(state, available);
       const initial = (!boot.queue && ids.length && !isPlaying()) || (!restored.order.length && state.order.length)
@@ -271,10 +283,12 @@ export default function App() {
   const mediaActions = useMemo(() => ({
     play, pause, nexttrack: () => next(), previoustrack: previous,
     stop: () => { pause(); seek(0); },
-    seekto: ({ seekTime }: MediaSessionActionDetails) => { if (seekTime !== undefined) seek(seekTime); },
-    seekforward: ({ seekOffset }: MediaSessionActionDetails) => seek(seekOffset ?? playback.seekStep, true),
-    seekbackward: ({ seekOffset }: MediaSessionActionDetails) => seek(-(seekOffset ?? playback.seekStep), true),
-  }), [next, previous, play, pause, seek, playback.seekStep]);
+    ...(!live && {
+      seekto: ({ seekTime }: MediaSessionActionDetails) => { if (seekTime !== undefined) seek(seekTime); },
+      seekforward: ({ seekOffset }: MediaSessionActionDetails) => seek(seekOffset ?? playback.seekStep, true),
+      seekbackward: ({ seekOffset }: MediaSessionActionDetails) => seek(-(seekOffset ?? playback.seekStep), true),
+    }),
+  }), [next, previous, play, pause, seek, live, playback.seekStep]);
   useMediaSession(current, player.playing, player.elapsed, player.duration, mediaActions, playback.publishTrack);
 
   const setVolume = useCallback((value: number) => {
@@ -536,14 +550,18 @@ export default function App() {
     commit(beforeShuffle ? toggleShuffle(initial) : initial);
     load(first, true);
   }, [commit, load]);
-  const startRadio = useCallback((items: OnlineTrack[]) => {
-    if (!ready || !connected || busy.current) return false;
-    const first = items[0];
+  const playCatalog = useCallback((items: Track[], start?: string) => {
+    if (!ready || busy.current) return false;
+    const playable = items.filter((item) => connected || !item.online);
+    const first = playable.find(({ id }) => id === start) ?? playable[0];
     if (!first) return false;
     const { repeat, beforeShuffle } = queueRef.current;
-    const initial = startQueue(items.map(({ id }) => id), first.id, repeat);
+    const initial = startQueue(playable.map(({ id }) => id), first.id, repeat);
     const next = beforeShuffle ? toggleShuffle(initial) : initial;
-    const onlineRefs = radioQueueRefs(preferences, next, items);
+    const onlineRefs = catalogQueueRefs(preferences, next, playable.flatMap((item) => {
+      const online = !byId.has(item.id) && item.online && readOnlineTrack(item);
+      return online ? [online] : [];
+    }));
     if (onlineRefs.length > MAX_ONLINE_TRACKS) {
       setNotice({ message: 'Слишком много онлайн-треков в очереди и истории', detail: 'Удалите часть ссылок или очистите историю.', error: true });
       return false;
@@ -553,6 +571,28 @@ export default function App() {
     load(byId.get(first.id) ?? first, true);
     return true;
   }, [ready, connected, preferences, byId, commit, load]);
+  function savePlaylist(title: string, items: readonly Track[], existingId?: string) {
+    const name = playlistTitle(title);
+    if (!ready || !name || !items.length || (!existingId && preferences.playlists.length >= MAX_PLAYLISTS)) return false;
+    if (existingId && !preferences.playlists.some(({ id }) => id === existingId)) return false;
+    const trackIds = playlistTrackIds(items.map(({ id }) => id));
+    const playlist = { id: existingId ?? `list-${crypto.randomUUID()}`, title: name, trackIds };
+    const playlists = existingId ? preferences.playlists.map((item) => item.id === existingId ? playlist : item) : [playlist, ...preferences.playlists];
+    const keep = new Set(trackIds);
+    const onlineRefs = catalogQueueRefs({ ...preferences, playlists }, queueRef.current, items.flatMap((item) => {
+      const record = keep.has(item.id) && item.online && readOnlineTrack(item);
+      return record ? [record] : [];
+    }));
+    if (onlineRefs.length > MAX_ONLINE_TRACKS) return false;
+    setPreferences((data) => ({ ...data, playlists, onlineRefs }));
+    return true;
+  }
+  function removePlaylist(id: string) {
+    setPreferences((data) => {
+      const next = { ...data, playlists: data.playlists.filter((item) => item.id !== id) };
+      return { ...next, onlineRefs: activeOnlineRefs({ ...next, queue: queueRef.current }) };
+    });
+  }
   function queueMix(items: Track[]) {
     const state = queueRef.current;
     const updated = appendToQueue(state, items.map(({ id }) => id));
@@ -571,16 +611,23 @@ export default function App() {
     setHomeTab(tab); setHomeQuery('');
     scrollArea.current?.scrollTo({ top: 0 });
   }, []);
-  const openVkBookmarks = useCallback(() => { navigate('player'); selectHomeTab('mine'); }, [navigate, selectHomeTab]);
   const discardCover = useCallback((key: string) => { void updateCover(key); }, [updateCover]);
   const openEqualizer = () => setShowEqualizer(true);
   const toggleQueue = () => setQueueOpen((open) => !open);
   const changeAppearance = (appearance: Appearance) => setPreferences((data) => ({ ...data, appearance }));
   const toggleCompact = () => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, compactSidebar: !data.appearance.compactSidebar } }));
-  const toggleFavorite = useCallback((id: string) => setPreferences((data) => ({
-    ...data, favorites: data.favorites.includes(id) ? data.favorites.filter((favorite) => favorite !== id) : [...data.favorites, id],
-    disliked: data.disliked.filter((item) => item !== id),
-  })), []);
+  const saveStation = useCallback((id: string) => {
+    if (STATION_IDS.has(id)) setPreferences((data) => ({ ...data,
+      stationIds: data.stationIds.includes(id) ? data.stationIds.filter((key) => key !== id) : [id, ...data.stationIds],
+    }));
+  }, []);
+  const toggleFavorite = useCallback((id: string) => {
+    if (STATION_IDS.has(id)) { saveStation(id); return; }
+    setPreferences((data) => ({
+      ...data, favorites: data.favorites.includes(id) ? data.favorites.filter((favorite) => favorite !== id) : [...data.favorites, id],
+      disliked: data.disliked.filter((item) => item !== id),
+    }));
+  }, [saveStation]);
   const toggleDislike = useCallback((id: string) => setPreferences((data) => ({
     ...data, disliked: data.disliked.includes(id) ? data.disliked.filter((item) => item !== id) : [...data.disliked, id],
     favorites: data.favorites.filter((item) => item !== id),
@@ -589,7 +636,7 @@ export default function App() {
   const changeLibraryLayout = (libraryLayout: LibraryLayout) => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, libraryLayout } }));
   const closeQueue = () => setQueueOpen(false);
   const localControls: PlaybackProps = {
-    hasTrack: Boolean(current), playing: transportPlaying, elapsed: player.elapsed, duration: player.duration,
+    hasTrack: Boolean(current), live, playing: transportPlaying, elapsed: player.elapsed, duration: player.duration,
     shuffle: queue.beforeShuffle !== null, repeat: queue.repeat, hasNext: Boolean(adjacentId(queue, 1)), volume: preferences.volume,
     togglePlay: toggle, toggleShuffle: () => commit(toggleShuffle(queueRef.current)), toggleRepeat: () => {
       const state = queueRef.current;
@@ -628,15 +675,16 @@ export default function App() {
           <HomePage tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
             tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={page === 'player' && !widget && !modalOpen && !presentationOpen}
-            busy={working || !ready} play={playTrack} playMix={playAll} startRadio={startRadio} chooseOnline={chooseOnline}
+            busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} loading={!!player.loading}
+            playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist}
             covers={covers} editCover={setCoverTarget} discardCover={discardCover} openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose}
             nowPlaying={<NowPlayingCard track={current} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
               playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
-              count={queue.order.length} eqEnabled={preferences.equalizer.enabled} toggle={toggle}
-              favorite={Boolean(current && favoriteIds.has(current.id))} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)}
+              count={queue.order.length} toggle={toggle}
+              favorite={!!current && (live ? stationIds : favoriteIds).has(current.id)} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)}
               openPresentation={showPresentation} openKaraoke={showKaraoke} sceneVisible={page === 'player' && !widget && !presentationOpen && !modalOpen}
-              readSpectrum={player.readSpectrum} openEqualizer={openEqualizer} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} />}
-            lyrics={current && !presentationOpen && page === 'player' && (!current.demo || lyrics.attached)
+              readSpectrum={player.readSpectrum} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} />}
+            lyrics={current && !live && !presentationOpen && page === 'player' && (!current.demo || lyrics.attached)
               ? <LyricsPanel key={current.id} state={lyrics} elapsed={player.elapsed} clock={player.playing ? position : undefined} demo={current.demo} /> : undefined} />
           </Suspense> :
           basePage === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :
@@ -663,7 +711,7 @@ export default function App() {
             toggleEffects={() => setPreferences((data) => ({ ...data, equalizer: { ...data.equalizer, enabled: !data.equalizer.enabled } }))}
             openLocalLibrary={() => navigate('library', 'offline')} widgetTint={sampledTone} openWidget={() => { void changeWidget(true); }}
             openTrackInfo={current && !current.demo && !current.online ? () => editTrackDetails(current.id) : undefined}
-            openVkBookmarks={openVkBookmarks} reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
+            reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
         </div>}
       </main>
       {!widget && queueOpen && <>
@@ -675,8 +723,8 @@ export default function App() {
       : <PlayerBar {...localControls} track={current} classic={!glass && appearance.classicDock}
         goToPlayer={() => { navigate('player'); scrollArea.current?.scrollTo({ top: 0 }); }} openPresentation={showPresentation} openKaraoke={showKaraoke} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
       {presentationKind && current && !widget && <FullscreenPlayer {...localControls} karaoke={presentationKind === 'karaoke'} lyrics={lyrics} clock={player.playing ? position : undefined}
-        toggleKaraoke={presentationKind === 'karaoke' ? showPresentation : showKaraoke} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={appearance}
-        favorite={favoriteIds.has(current.id)} disliked={dislikedIds.has(current.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
+        toggleKaraoke={presentationKind === 'karaoke' ? showPresentation : showKaraoke} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={effectiveAppearance}
+        favorite={(live ? stationIds : favoriteIds).has(current.id)} disliked={dislikedIds.has(current.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
         toggleQueue={() => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, fullscreenQueue: !data.appearance.fullscreenQueue } }))}
         openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} />}
       <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />

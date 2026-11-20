@@ -131,10 +131,10 @@ export function GlassNavigation({ page, navigate, openEqualizer, eqEnabled }: Pi
   return <div className="glass-dock">
     <nav className="glass-navigation" aria-label={t('Разделы плеера')}>
       {GLASS_NAVIGATION.map(({ id, icon: Icon, label }) => <button key={id} type="button" aria-current={active === id ? 'page' : undefined}
-        onClick={() => navigate(id)} aria-label={t(label)} title={t(label)}><Icon size={19} strokeWidth={2} /><span>{t(label)}</span></button>)}
-    </nav>
+        onClick={() => navigate(id)} aria-label={t(label)} title={t(label)} data-dock-item={id}>
+        <i className="glass-dock-icon" aria-hidden="true"><Icon size={21} strokeWidth={2.15} /></i><span>{t(label)}</span></button>)}
     <button type="button" className="glass-sound" aria-label={t('Эквалайзер')} title={t('Эквалайзер')} aria-haspopup="dialog" onClick={openEqualizer}>
-      <SlidersHorizontal size={21} />{eqEnabled && <i className="enabled-dot" />}
-    </button>
+      <i className="glass-dock-icon" aria-hidden="true"><SlidersHorizontal size={21} /></i><span>EQ</span>{eqEnabled && <i className="enabled-dot" />}
+    </button></nav>
   </div>;
 }

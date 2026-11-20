@@ -1,11 +1,12 @@
 import { useText } from '../i18n/context';
-import { Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX, Volume1 } from 'lucide-react';
+import { Pause, Play, Radio, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX, Volume1 } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { formatTime } from '../shared/media';
 import type { Repeat as RepeatMode } from '../shared/queue';
 
 export interface TransportProps {
   hasTrack: boolean;
+  live?: boolean;
   playing: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
@@ -17,18 +18,19 @@ export interface TransportProps {
   next(): void;
 }
 
-export interface TimelineProps { elapsed: number; duration: number; seek(seconds: number): void }
+export interface TimelineProps { live?: boolean; elapsed: number; duration: number; seek(seconds: number): void }
 export interface VolumeProps { volume: number; toggleMute(): void; setVolume(volume: number): void }
 export type PlaybackProps = TransportProps & TimelineProps & VolumeProps;
 
-export function TransportControls({ hasTrack, playing, shuffle, repeat, hasNext, togglePlay, toggleShuffle, toggleRepeat, previous, next }: TransportProps) {
+export function TransportControls({ hasTrack, live, playing, shuffle, repeat, hasNext, togglePlay, toggleShuffle, toggleRepeat, previous, next }: TransportProps) {
   const t = useText();
+  const playLabel = live ? t(playing ? "Остановить эфир" : "Слушать эфир") : t(playing ? "Пауза" : "Воспроизвести");
   const repeatLabel = repeat === 'one' ? t("Повтор: один трек") : repeat === 'all' ? t("Повтор: вся очередь") : t("Повтор выключен");
   return <div className="transport-controls">
     <button type="button" className="icon-button mode-button" onClick={toggleShuffle} aria-pressed={shuffle}
       title={t("Перемешать очередь")} aria-label={t("Перемешать очередь")} disabled={!hasTrack}><Shuffle size={17} /></button>
     <button type="button" className="icon-button step-button" onClick={previous} title={t("Предыдущий трек")} aria-label={t("Предыдущий трек")} disabled={!hasTrack}><SkipBack size={19} fill="currentColor" /></button>
-    <button type="button" className="play-button" onClick={togglePlay} title={playing ? t("Пауза (Пробел)") : t("Воспроизвести (Пробел)")} aria-label={playing ? t("Пауза") : t("Воспроизвести")} disabled={!hasTrack}>
+    <button type="button" className="play-button" onClick={togglePlay} title={live ? playLabel : t(playing ? "Пауза (Пробел)" : "Воспроизвести (Пробел)")} aria-label={playLabel} disabled={!hasTrack}>
       {playing ? <Pause size={18} fill="currentColor" /> : <Play className="play-icon" size={18} fill="currentColor" />}
     </button>
     <button type="button" className="icon-button step-button" onClick={next} title={t("Следующий трек")} aria-label={t("Следующий трек")} disabled={!hasNext}><SkipForward size={19} fill="currentColor" /></button>
@@ -37,8 +39,9 @@ export function TransportControls({ hasTrack, playing, shuffle, repeat, hasNext,
   </div>;
 }
 
-export function SeekTimeline({ elapsed, duration, seek }: TimelineProps) {
+export function SeekTimeline({ elapsed, duration, seek, live }: TimelineProps) {
   const t = useText();
+  if (live) return <div className="live-timeline" title={t('Прямой эфир без перемотки')}><Radio size={14} aria-hidden="true" />{t('Прямой эфир')}</div>;
   return <div className="timeline">
     <span>{formatTime(elapsed)}</span>
     <input type="range" className="range" aria-label={t("Позиция воспроизведения")}

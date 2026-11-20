@@ -22,6 +22,8 @@ import { createMetadataService, validAcoustidClient } from '../src/shared/metada
 import { isMetadataPage } from '../src/shared/recognition.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
+import { isMusicSiteUrl } from '../src/shared/music-sites.js';
+import { isStationPage } from '../src/shared/radio.js';
 import { isVkExternalUrl, LEGACY_VK_SESSION } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { DesktopFloatOutput } from './float-output.js';
@@ -162,7 +164,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   });
   ipcMain.handle('online:open-link', (event, url: unknown) => {
     appWindow(event);
-    if (!isOnlineExternalUrl(url)) throw new Error('Unsupported catalog link');
+    if (!(isOnlineExternalUrl(url) || isMusicSiteUrl(url) || isStationPage(url))) throw new Error('Unsupported catalog link');
     return shell.openExternal(url);
   });
   ipcMain.handle('app:releases', (event) => { appWindow(event); return shell.openExternal(RELEASES_URL); });

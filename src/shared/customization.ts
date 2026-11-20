@@ -15,14 +15,14 @@ export const ACCENTS = [
 ] as const;
 
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
-export const BACKGROUND_EFFECTS = ['off', 'cover', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors'] as const;
+export const BACKGROUND_EFFECTS = ['off', 'cover', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors', 'notes', 'liquid'] as const;
 export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
 export const START_PAGES = ['player', 'library', 'local', 'search'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
 export const CROSSFADE_TIMES = [0, 2, 4, 6, 8] as const;
 export const DATA_LANGUAGES = { system: 'Системный', 'ru-RU': 'Русский', 'en-US': 'English', 'de-DE': 'Deutsch' } as const;
 export const WIDGET_BACKGROUNDS = {
-  blur: 'Размытый', album: 'Обложка альбома', cover: 'Цвет обложки', glass: 'Матовое стекло',
+  blur: 'Размытый', album: 'Обложка альбома', cover: 'Цвет обложки', glass: 'Матовое стекло', liquid: 'Жидкое стекло',
   aurora: 'Северное сияние', paper: 'Тёплый свет', white: 'Белый', dark: 'Тёмный', black: 'Чёрный',
 } as const;
 export const WIDGET_SHORTCUT = { label: 'Ctrl + Shift + R', code: 'KeyR', key: 'r', aria: 'Control+Shift+R' } as const;
