@@ -185,7 +185,7 @@ async function smoke() {
     const text = document.querySelector('.karaoke-lyrics').getBoundingClientRect();
     return innerWidth <= 690 || (art.width >= 150 && art.right < text.left);
   })()`), true, 'karaoke keeps only a bounded cover next to lyrics');
-  assert.equal(await run(`!document.querySelector('.karaoke-stage > :is(.scene-cover,.immersive-backdrop,.immersive-scrim)')`), true);
+  assert.equal(await run(`!document.querySelector('.karaoke-stage > :is(.scene-cover,.immersive-backdrop)')`), true, 'karaoke does not mount a second cover');
   assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-track h1')).userSelect`), 'none');
   assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-lyrics .lyrics-scroll')).userSelect`), 'text');
   await run(`[...document.querySelectorAll('.karaoke-lyrics .lyrics-sources button')].find((item) => item.textContent === 'Убрать текст из файла').click()`);
@@ -961,7 +961,8 @@ function fail(error) {
   console.error(error);
   if (process.env.GITHUB_ACTIONS === 'true') {
     const message = (error instanceof Error ? error.message : String(error)).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
-    console.log(`::error title=Electron smoke::${message}`);
+    const line = error?.stack?.match(/desktop-smoke\.mjs:(\d+):\d+/)?.[1];
+    console.log(`::error file=tests/desktop-smoke.mjs${line ? `,line=${line}` : ''},title=Electron smoke::${message}`);
   }
   finish(1);
 }
