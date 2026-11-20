@@ -12,7 +12,7 @@ test('customization reads old profiles without altering queue, volume or equaliz
   };
   const { equalizer, ...rest } = decodePreferences(JSON.stringify(previous));
   const { equalizer: oldEqualizer, ...old } = previous;
-  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [] });
+  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, autoCatalogSearch: true, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [] });
   assert.equal(equalizer.enabled, oldEqualizer.enabled);
   assert.equal(equalizer.preset, oldEqualizer.preset);
   assert.equal(equalizer.preamp, oldEqualizer.preamp);

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import { ArrowUpRight, Copy, Globe2 } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, Copy, Globe2 } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { MUSIC_SITES, musicSites, musicSiteUrl } from '../shared/music-sites';
 import { SourceLink } from './OnlineMusic';
@@ -9,10 +9,10 @@ export function MusicSites({ query }: { query: string }) {
   const t = useText();
   const text = query.trim();
   const [clipboard, setClipboard] = useState<{ text: string; ok: boolean }>();
-  return <section className="hub-shelf music-sites" aria-labelledby="music-sites-title">
-    <header className="hub-shelf-head"><h2 id="music-sites-title"><Globe2 size={18} />{t('Поиск на сайтах')}</h2>
-      <span className="hub-badge">{t('В браузере')}</span></header>
-    <p>{t('Эти сервисы откроются в браузере. Luma не читает ваш аккаунт VK, не получает треки с этих сайтов и не воспроизводит их внутри приложения.')}</p>
+  return <details className="hub-shelf music-sites">
+    <summary><Globe2 size={17} aria-hidden="true" /><strong>{t('Открыть на музыкальных сайтах')}</strong>
+      <span className="hub-badge">{t('В браузере')}</span><ChevronDown className="music-sites-arrow" size={16} aria-hidden="true" /></summary>
+    <p className="hub-note">{t('Из этих сервисов Luma не получает результаты. Ссылки откроются только по вашему нажатию.')}</p>
     <ul className="music-site-grid">{musicSites.map((id) => {
       const site = MUSIC_SITES[id], target = musicSiteUrl(id, text);
       return <li key={id}>
@@ -31,5 +31,5 @@ export function MusicSites({ query }: { query: string }) {
       }}><Copy size={14} />{t('Скопировать запрос')}</button>
       {clipboard?.text === text && <small role="status">{t(clipboard.ok ? 'Запрос скопирован.' : 'Не удалось скопировать запрос.')}</small>}
     </div>}
-  </section>;
+  </details>;
 }

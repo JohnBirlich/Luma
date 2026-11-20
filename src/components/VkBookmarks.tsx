@@ -63,7 +63,7 @@ export function VkBookmarks({ covers, editCover, discardCover }: BookmarkProps) 
   }
   return <section className="hub-shelf hub-bookmarks" aria-labelledby="vk-bookmarks-title">
     <header className="hub-shelf-head"><h2 id="vk-bookmarks-title"><Bookmark size={17} />{t('Закладки VK')}</h2>
-      <button type="button" className="text-button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="vk-bookmark-form"><Plus size={16} />{t('Импорт VK')}</button>
+      <button type="button" className="text-button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="vk-bookmark-form"><Plus size={16} />{t('Добавить закладку')}</button>
     </header>
     <p>{t('Плейлисты — это закладки. Вход VK ID не даёт доступ к аудиотеке: прямое воспроизведение требует отдельного разрешения VK.')}</p>
     {open && <form id="vk-bookmark-form" className="hub-bookmark-form" onSubmit={add}>

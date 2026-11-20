@@ -221,3 +221,47 @@
   .hub-credit-row { grid-template-columns: minmax(0,1fr); }
   .hub-credit-row > .online-credit { padding: 0 6px 5px 48px; max-width: 100%; }
 }
+
+/* Native results are primary; optional browser destinations stay closed by default. */
+.home-page .catalog-search { margin: 0; }
+.catalog-controls, .vk-track-actions, .vk-track-pages {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+}
+.catalog-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 670; }
+.catalog-toggle input { margin: 0; accent-color: var(--accent); }
+.catalog-privacy { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.catalog-search .online-offline { margin: 10px 0 0; }
+.catalog-sources { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 10px 0 0; list-style: none; }
+.catalog-sources > li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 7px; max-width: 100%;
+  min-width: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
+.catalog-sources strong { font-weight: 720; color: var(--text); }
+.catalog-sources > li[data-state='done'] { border-color: var(--accent-border); }
+.catalog-sources > li[data-state='loading'] { color: var(--accent-light); }
+.catalog-sources > li[data-state='error'] { border-style: dashed; }
+.catalog-sources small { flex-basis: 100%; font-size: 11px; }
+.music-sites > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.music-sites > summary::-webkit-details-marker { display: none; }
+.music-sites > summary strong { flex: 1; font: 740 13px/1.3 var(--display); }
+.music-sites > summary :is(svg,.hub-badge) { flex: none; }
+.music-sites[open] .music-sites-arrow { transform: rotate(180deg); }
+.music-sites > p { margin-top: 12px; }
+
+.vk-track-shelf .hub-shelf-head { flex-wrap: wrap; }
+.vk-track-shelf .hub-shelf-head svg { flex: none; }
+.vk-track-actions, .vk-track-format, .vk-track-filter { margin-top: 10px; }
+.vk-track-actions .button { white-space: normal; text-align: start; }
+.vk-track-shelf [role='status'] { margin-top: 5px; }
+.vk-track-format { font-size: 12px; }
+.vk-track-format summary { cursor: pointer; color: var(--accent-light); }
+.vk-track-format p { margin: 5px 0 0; }
+.vk-track-filter { max-width: 360px; }
+.vk-track-list { padding: 0; margin: 10px 0 0; list-style: none; }
+.vk-track-list > li { display: flex; min-height: 47px; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.vk-track-copy { display: grid; flex: 1; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.vk-track-copy strong { font-size: 13px; }
+.vk-track-copy small { font-size: 11px; color: var(--muted); }
+.vk-track-mark { display: grid; flex: none; place-items: center; width: 32px; aspect-ratio: 1; border-radius: 8px; color: var(--accent-light); background: var(--accent-fill); }
+.vk-track-confirm { margin-top: 10px; padding: 9px; border: 1px solid var(--line); border-radius: 10px; }
+.vk-track-pages { justify-content: flex-end; margin-top: 5px; }
+.vk-track-matches { margin-top: 10px; }
+.vk-track-list .vk-file-play { color: var(--accent-light); background: var(--accent-fill); border-color: var(--accent-border); }

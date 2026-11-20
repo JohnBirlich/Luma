@@ -10,9 +10,8 @@ export const ONLINE_ORIGINS = {
 };
 export const ONLINE_SOURCES = { jamendo: 'Jamendo', wikimedia_audio: 'Wikimedia Commons', netlabels: 'Internet Archive · Netlabels' } as const;
 export type OnlineSource = keyof typeof ONLINE_SOURCES;
-export const ONLINE_FILTERS = { ...ONLINE_SOURCES, southern_city: 'Southern City’s Lab · Россия' } as const;
 export type CommunitySource = 'netlabels' | 'southern_city';
-export type OnlineFilter = keyof typeof ONLINE_FILTERS | 'all';
+export type OnlineFilter = OnlineSource | CommunitySource | 'all';
 export const MAX_ONLINE_TRACKS = 180;
 export interface OnlineCreditData { source: OnlineSource | 'broadcast'; page: string; license: string; licenseUrl: string }
 export interface OnlineTrack extends Track { online: OnlineCreditData & { source: OnlineSource } }
@@ -160,6 +159,11 @@ export function openverseLinkId(value: string): string | undefined {
     : url.origin === ONLINE_ORIGINS.connect ? /^\/v1\/audio\/([^/]+)\/?$/ : null;
   const id = path?.exec(url.pathname)?.[1];
   return id && uuid.test(id) ? id.toLowerCase() : undefined;
+}
+
+export function catalogRetryDelay(value: string | null, now = Date.now()) {
+  const delay = value && /^\d+$/.test(value) ? Number(value) * 1000 : value ? Date.parse(value) - now : NaN;
+  return Number.isFinite(delay) ? Math.max(1000, delay) : 60_000;
 }
 
 export function onlineSearchUrl(text: string, filter: OnlineFilter): URL {

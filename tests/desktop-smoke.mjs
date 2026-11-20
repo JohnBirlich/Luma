@@ -447,6 +447,10 @@ async function smoke() {
 
 
   const catalogCalls = [];
+  const archiveCalls = [];
+  const archiveRelease = { metadata: { identifier: 'SCL108', mediatype: 'audio', collection: ['netlabels', 'southern-citys-lab'],
+    licenseurl: 'https://creativecommons.org/licenses/by/4.0/', creator: 'Fixture label', title: 'Jazz release' },
+    files: [{ name: 'Jazz archive.mp3', source: 'original', format: 'VBR MP3', title: 'Jazz archive', length: '32' }] };
   const streamCalls = [];
   const radioCalls = [];
   const recordStation = STATIONS[0];
@@ -495,6 +499,15 @@ async function smoke() {
         : url.searchParams.get('source') === 'jamendo' ? [jamendoRecording] : [jamendoRecording, commonsRecording];
       return Response.json(url.pathname === '/v1/audio/' ? { results: rows } : [...rows, synced, plain].find((item) => url.pathname.endsWith(`/${item.id}/`)), { headers: fixtureHeaders });
     }
+    if (url.origin === 'https://archive.org' && url.pathname === '/advancedsearch.php') {
+      const query = url.searchParams.get('q');
+      archiveCalls.push(query);
+      // Give the two IPC searches time to overlap, and exercise a partial failure on Home.
+      await delay(250);
+      if (query.startsWith('collection:southern-citys-lab ') && query.includes('"Ты"')) return new Response(null, { status: 503 });
+      return Response.json({ response: { docs: query.includes('"jazz"') ? [{ identifier: 'SCL108' }] : [] } });
+    }
+    if (url.href === 'https://archive.org/metadata/SCL108') return Response.json(archiveRelease);
     if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
     if (url.href === recordStation.stream || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url].includes(url.href)) {
       // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
@@ -574,15 +587,22 @@ async function smoke() {
 
     await go('Поиск');
     await waitFor('collection search', () => run(`!!document.querySelector('main input[type="search"]')`));
-    await fill('main input[type="search"]', 'jazz');
-    await waitFor('online fallback prompt', () => run(`!!document.querySelector('.online-search-form button')`));
-    assert.equal(catalogCalls.length, 0, 'typing stays local until the user opts in');
-    assert.equal(await run(`document.querySelectorAll('.music-site-grid a').length`), 6);
-    assert.deepEqual(await run(`[...document.querySelector('.online-search-form select').options].map(option => option.value)`), ['all', 'jamendo', 'wikimedia_audio', 'netlabels', 'southern_city']);
-    await click('.online-search-form button');
-    await waitFor('both online sources', () => run(`document.querySelectorAll('.online-results li').length === 2`));
+    await run(`(async () => {
+      const input = document.querySelector('main input[type="search"]');
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      for (const value of ['ja', 'jazz']) {
+        set.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true }));
+        if (value === 'ja') await new Promise(resolve => setTimeout(resolve, 90));
+      }
+    })()`);
+    await waitFor('automatic results from all four desktop catalogs', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 3
+      && document.querySelectorAll('.online-results li').length === 3`));
+    assert.equal(await run(`!!document.querySelector('.catalog-search select') || document.querySelector('.music-sites').open`), false);
     assert.equal(catalogCalls.length, 1);
     assert.equal(catalogCalls[0].searchParams.get('q'), 'jazz');
+    assert.equal(catalogCalls[0].searchParams.get('source'), 'jamendo,wikimedia_audio');
+    assert.deepEqual(archiveCalls.map((q) => q.split(' ')[0]).sort(), ['collection:netlabels', 'collection:southern-citys-lab']);
+    assert.equal(await run(`document.querySelectorAll('.online-results [data-source="netlabels"]').length`), 1, 'overlapping Archive results deduplicate');
     await click(queueOnline);
     await waitFor('an online reference queued', async () => (await preferences()).onlineRefs.length === 1);
     assert.deepEqual(streamCalls, [], 'queueing does not fetch audio');
@@ -617,15 +637,39 @@ async function smoke() {
       assert.equal(opened.length, 0);
       await fill('.hub-search input', 'Ты здесь');
       await waitFor('native search finds a local track', () => run(`document.querySelector('.hub-track strong')?.textContent === 'Ты здесь'`));
-      assert.equal(catalogCalls.length, 1, 'native search does not send typed metadata');
+      await waitFor('Home finds local and online matches despite a failed catalog', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 2
+        && document.querySelector('[data-catalog="southern_city"]').dataset.state === 'error'
+        && document.querySelectorAll('.online-results li').length === 2`));
+      assert.equal(catalogCalls.length, 2);
+      assert.equal(catalogCalls[1].searchParams.get('q'), 'Ты здесь');
+      assert.equal(opened.length, 0, 'no browser tab from automatic searches');
+      assert.equal(await run(`document.querySelector('.music-sites').open`), false);
+      await click('.music-sites > summary');
       assert.equal(await run(`document.querySelectorAll('.music-site-grid a').length`), 6);
       await click('.music-site-grid a[href^="https://vk.ru/audio?"]');
       await waitFor('an explicit query goes to the system browser', () => opened.length === 1);
       assert.equal(new URL(opened.pop()).searchParams.get('q'), 'Ты здесь');
-      assert.equal(catalogCalls.length, 1, 'a browser destination is not a native search request');
+      assert.equal(catalogCalls.length, 2, 'a browser destination is not a native search request');
       assert.equal(await run(`window.luma.openOnlineLink('https://example.invalid/').then(() => false, () => true)`), true);
       await click('.hub-tabs button:nth-child(2)');
       await waitFor('existing VK bookmark migrated', () => run(`document.querySelector('.hub-bookmarks a[href="https://vk.ru/music/playlist/-31_4"]') !== null`));
+      const vkFile = '.vk-track-shelf input[type="file"]';
+      await waitFor('VK list ready to import', () => run(`document.querySelector('.vk-track-actions .outline-button')?.disabled === false`));
+      const importVk = (name, body) => run(`(() => {
+        const input = document.querySelector(${JSON.stringify(vkFile)});
+        const data = new DataTransfer();
+        data.items.add(new File([${JSON.stringify(body)}], ${JSON.stringify(name)}));
+        input.files = data.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await importVk('tracks.csv', 'title,artist,album,ignored_url\nТы здесь,Ария,Живой звук,https://example.invalid/\nСписок VK,Тест,,');
+      await waitFor('VK metadata present as a local list, independently of bookmarks', () => run(`document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length === 2
+        && document.querySelectorAll('.vk-track-shelf .vk-file-play').length === 1`));
+      await importVk('not-a-playlist.txt', 'invalid');
+      await waitFor('invalid import keeps the previous list', () => run(`!!document.querySelector('.vk-track-shelf [role="alert"]')
+        && document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length === 2`));
+      assert.equal(opened.length, 0);
+      assert.equal(catalogCalls.length, 2, 'file import does not send metadata to external catalogs');
       await click('.hub-bookmarks header button');
       await fill('.hub-bookmark-form textarea', 'https://vk.com/audios-42?z=audio_playlist-42_7/Share-Key');
       await click('.hub-bookmark-form button[type="submit"]');
@@ -695,8 +739,6 @@ async function smoke() {
     await go('Поиск');
     await waitFor('MP3 catalog query', () => run(`!!document.querySelector('main input[type="search"]')`));
     await fill('main input[type="search"]', 'fixture-mp3');
-    await waitFor('downloadable sources form', () => run(`!!document.querySelector('.online-search-form button')`));
-    await click('.online-search-form button');
     await waitFor('only the two permitted MP3 downloads', () => run(`document.querySelectorAll('.online-result-actions [aria-label^="Скачать MP3"]').length === 2`));
     const choosePath = dialog.showSaveDialog;
     try {
@@ -780,6 +822,10 @@ async function smoke() {
     assert.deepEqual((await preferences()).equalizer, editedEq, 'parametric filters restore after a renderer restart');
     assert.deepEqual((await preferences()).stationIds, [recordStation.id], 'saved radio restores after a renderer restart');
     assert.ok((await preferences()).playlists.some(({ title }) => title === 'Джаз'), 'playlist restores after a renderer restart');
+    await go('Home');
+    await click('.hub-tabs button:nth-child(2)');
+    await waitFor('VK track list persisted in the same profile', () => run(`document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length === 2
+      && document.querySelector('#vk-tracks-title')?.textContent === 'My VK tracks'`));
     await click('.title-settings');
     await waitFor('English settings index', () => run(`!!document.querySelector('.settings-page [aria-label="Appearance"]')`));
     await click('.settings-page [aria-label="Appearance"]');
@@ -816,7 +862,8 @@ async function smoke() {
     session.defaultSession.protocol.unhandle('https');
     await legacyVk.clearStorageData();
   }
-  console.log('Desktop smoke: monitor fullscreen; compact widget restores bounds; Apple/WASM; metered MP3; lyrics export; merged Home, catalogs, external VK bookmarks and isolated legacy reset.');
+  console.log('::notice title=Catalogs and VK lists::Debounced parallel catalog search, a partial failure on Home, local VK file import and profile persistence verified.');
+  console.log('Desktop smoke: monitor fullscreen; compact widget restores bounds; Apple/WASM; metered MP3; lyrics export; browser VK bookmarks and isolated legacy reset.');
   if (liveRadio) {
     const webRequest = session.defaultSession.webRequest;
     const statuses = new Map();
@@ -916,17 +963,15 @@ async function smoke() {
         await go('Поиск');
         await waitFor('live search field', () => run(`!!document.querySelector('main input[type="search"]')`));
         await fill('main input[type="search"]', ({ jamendo: 'jazz', wikimedia_audio: 'Bach chaconne', netlabels: 'Anatoly Nikulin', southern_city: 'Газ' })[source]);
-        await waitFor('live catalog form', () => run(`!!document.querySelector('.online-search-form select')`));
-        await run(`(() => {
-          const choice = document.querySelector('.online-search-form select');
-          choice.value = ${JSON.stringify(source)};
-          choice.dispatchEvent(new Event('change', { bubbles: true }));
-        })()`);
-        await click('.online-search-form button');
+        const target = source === 'jamendo' || source === 'wikimedia_audio' ? 'openverse' : source;
+        const resultSource = source === 'southern_city' ? 'netlabels' : source;
         const options = await waitFor(`${source} live results`, async () => {
           const outcome = await run(`(() => {
-            const problem = document.querySelector('.online-panel .error');
-            return problem ? { error: problem.textContent } : [...document.querySelectorAll('.online-results li .online-result-actions button:first-child')].map((button) => button.getAttribute('aria-label'));
+            const status = document.querySelector('[data-catalog="${target}"]');
+            if (status?.dataset.state === 'error') return { error: status.textContent };
+            if (status?.dataset.state !== 'done') return null;
+            return [...document.querySelectorAll('.online-results li[data-source="${resultSource}"] .online-result-actions button:first-child')]
+              .map((button) => button.getAttribute('aria-label'));
           })()`);
           if (outcome?.error) throw new Error(outcome.error);
           return outcome?.length ? outcome : undefined;

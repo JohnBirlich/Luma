@@ -1,7 +1,11 @@
-import { decodeOpenverse, onlineSearchUrl, OPENVERSE_API, openverseLinkId } from '../shared/online';
+import { catalogRetryDelay, decodeOpenverse, onlineSearchUrl, OPENVERSE_API, openverseLinkId } from '../shared/online';
 import type { CommunitySource, OnlineFilter, OnlineTrack } from '../shared/online';
 
 const MAX_JSON = 512 * 1024;
+
+export class CatalogRateLimit extends Error {
+  constructor(readonly retryMs: number) { super('Openverse временно ограничил поиск. Попробуйте чуть позже.'); }
+}
 
 async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
   const options = { signal: AbortSignal.any([signal, AbortSignal.timeout(11_000)]), redirect: 'error', credentials: 'omit',
@@ -14,7 +18,10 @@ async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
     options.signal.throwIfAborted();
     response = await fetch(url, options);
   }
-  if (response.status === 429) throw new Error('Openverse временно ограничил поиск. Попробуйте чуть позже.');
+  if (response.status === 429) {
+    void response.body?.cancel().catch(() => {});
+    throw new CatalogRateLimit(catalogRetryDelay(response.headers.get('Retry-After')));
+  }
   if (response.status === 404) throw new Error('Запись не найдена. Возможно, её убрали из каталога.');
   if (!response.ok || !response.body) {
     void response.body?.cancel().catch(() => undefined);

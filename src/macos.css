@@ -151,9 +151,11 @@
 [data-layout='glass'] .settings-preview-hero { color: var(--text); }
 [data-layout='glass'] .settings-preview-controls > i { background-color: var(--glass-rim); }
 [data-layout='glass'] :is(.setting-card,.menu-page,.library-page,.diagnostics-page,.hub-shelf) :is(select,input:not([type='range'],[type='checkbox'],[type='color']),textarea) { border-color: var(--glass-rim); }
-[data-layout='glass'] :is(.setting-row select,.lastfm-form input,.hub-bookmark-form input,.hub-bookmark-form textarea,.search-field,.online-search-field,.online-panel select,.journal-filter select) {
+[data-layout='glass'] :is(.setting-row select,.lastfm-form input,.hub-bookmark-form input,.hub-bookmark-form textarea,.search-field,.library-search,.online-search-field,.journal-filter select) {
   background: #ffffffac; border-color: var(--glass-rim); border-radius: 12px;
 }
+[data-layout='glass'] .library-search:focus-within { border-color: var(--accent); }
+[data-layout='glass'] .library-search input::placeholder { color: var(--muted); }
 [data-layout='glass'] .settings-switch i, [data-layout='glass'] .eq-switch i { border-color: var(--glass-rim); background: #a0b5d678; }
 [data-layout='glass'] .settings-switch[aria-checked='true'] i, [data-layout='glass'] .eq-switch[aria-checked='true'] i { background: var(--accent); }
 [data-layout='glass'] .settings-switch i::after, [data-layout='glass'] .eq-switch i::after { background: #fcfeff; }

@@ -1,4 +1,4 @@
-import { archiveId, catalogLicense, catalogObject as object, readOnlineTrack } from './online.js';
+import { archiveId, catalogLicense, catalogRetryDelay, catalogObject as object, readOnlineTrack } from './online.js';
 import type { CommunitySource, OnlineTrack } from './online.js';
 import { musicSearchKey } from './russian.js';
 import { readLimitedBody } from './metadata-service.js';
@@ -34,8 +34,11 @@ export function communitySearchUrl(query: string, source: CommunitySource) {
   return url;
 }
 
-export async function searchCommunity(fetcher: (url: string, init?: RequestInit) => Promise<Response>, value: unknown, source: CommunitySource, signal: AbortSignal) {
-  if (typeof value !== 'string' || value.length > 140 || !/[\p{L}\p{N}]/u.test(value) || value.trim().length < 2) return [];
+type FetchCatalog = (url: string, init?: RequestInit) => Promise<Response>;
+const validQuery = (value: unknown): value is string => typeof value === 'string' && value.length <= 140 && value.trim().length >= 2 && /[\p{L}\p{N}]/u.test(value);
+
+export async function searchCommunity(fetcher: FetchCatalog, value: unknown, source: CommunitySource, signal: AbortSignal) {
+  if (!validQuery(value)) return [];
   async function get(url: URL, limit: number) {
     const response = await fetcher(url.href, { signal, credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', headers: { Accept: 'application/json' } });
     if (!response.ok || !response.body) {
@@ -49,7 +52,39 @@ export async function searchCommunity(fetcher: (url: string, init?: RequestInit)
   if (!Array.isArray(response.docs)) throw new Error('Каталог вернул неожиданный ответ.');
   const items = [...new Set(list(response.docs, 4).map((row) => object(row).identifier).filter(archiveId))];
   const metadata = await Promise.allSettled(items.map(async (id) => archiveTracks(id, await get(new URL(`https://archive.org/metadata/${id}`), 2 * 1024 * 1024), source)));
+  signal.throwIfAborted();
   if (metadata.length && metadata.every((entry) => entry.status === 'rejected')) throw new Error('Каталог сейчас недоступен.');
   const scores = (track: OnlineTrack) => musicSearchKey(`${track.title} ${track.artist} ${track.album}`).includes(musicSearchKey(value)) ? 1 : 0;
   return metadata.flatMap((entry) => entry.status === 'fulfilled' ? entry.value : []).sort((a, b) => scores(b) - scores(a)).slice(0, 18);
+}
+
+/** A new query replaces only its own scope. Archive's quota is shared between scopes. */
+export function createCommunitySearch(fetcher: FetchCatalog, now = Date.now) {
+  const active = new Map<CommunitySource, { id: number; controller: AbortController }>();
+  let retryAt = 0;
+  const fetchCatalog: FetchCatalog = async (url, init) => {
+    init?.signal?.throwIfAborted();
+    if (retryAt > now()) throw new Error('Каталог сейчас недоступен.');
+    const response = await fetcher(url, init);
+    if (response.status === 429) {
+      const time = now();
+      retryAt = Math.max(retryAt, time + catalogRetryDelay(response.headers.get('Retry-After'), time));
+    }
+    return response;
+  };
+  return {
+    async search(id: unknown, query: unknown, source: unknown) {
+      if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || !validQuery(query)
+        || (source !== 'netlabels' && source !== 'southern_city')) return [];
+      active.get(source)?.controller.abort();
+      const controller = new AbortController();
+      active.set(source, { id, controller });
+      try {
+        return await searchCommunity(fetchCatalog, query, source, AbortSignal.any([controller.signal, AbortSignal.timeout(11_000)]));
+      } finally { if (active.get(source)?.controller === controller) active.delete(source); }
+    },
+    cancel(id: unknown) {
+      for (const request of active.values()) if (request.id === id) request.controller.abort();
+    },
+  };
 }

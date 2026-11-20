@@ -30,6 +30,7 @@ import { demoTracks } from './data/demos';
 import { connectionState, recordDiagnostic, subscribeConnection } from './data/diagnostics';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
+import { useVkTracks } from './data/vk-tracks';
 import type { TrackDetails } from './data/track-details';
 import { useMediaSession } from './player/mediaSession';
 import { activeOnlineRefs, catalogQueueRefs, readPreferences, rememberTrack, savePreferences } from './player/preferences';
@@ -101,6 +102,7 @@ export default function App() {
   const { urls: covers, update: updateCover } = useCoverArt();
   const [detailsId, setDetailsId] = useState<string>();
   const { details, update: updateDetails } = useTrackDetails();
+  const vkTracks = useVkTracks();
   const [queueOpen, setQueueOpen] = useState(() => window.matchMedia('(min-width: 1080px)').matches);
   const [dropActive, setDropActive] = useState(false);
   const [notice, setNotice] = useState<Notice>();
@@ -611,6 +613,7 @@ export default function App() {
     setHomeTab(tab); setHomeQuery('');
     scrollArea.current?.scrollTo({ top: 0 });
   }, []);
+  const openVkTracks = useCallback(() => { navigate('player'); selectHomeTab('mine'); }, [navigate, selectHomeTab]);
   const discardCover = useCallback((key: string) => { void updateCover(key); }, [updateCover]);
   const openEqualizer = () => setShowEqualizer(true);
   const toggleQueue = () => setQueueOpen((open) => !open);
@@ -633,6 +636,7 @@ export default function App() {
     favorites: data.favorites.filter((item) => item !== id),
   })), []);
   const backToMenu = useCallback(() => setPage('menu'), []);
+  const changeAutoCatalogSearch = useCallback((autoCatalogSearch: boolean) => setPreferences((data) => ({ ...data, autoCatalogSearch })), []);
   const changeLibraryLayout = (libraryLayout: LibraryLayout) => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, libraryLayout } }));
   const closeQueue = () => setQueueOpen(false);
   const localControls: PlaybackProps = {
@@ -673,7 +677,8 @@ export default function App() {
         <div key={basePage} className="page-body" hidden={widget || page === 'settings'}>
         {basePage === 'player' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
           <HomePage tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
-            tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab}
+            tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab} vkTracks={vkTracks}
+            autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={page === 'player' && !widget && !modalOpen && !presentationOpen}
             busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist}
@@ -693,6 +698,8 @@ export default function App() {
           basePage === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} disliked={dislikedIds} recent={recent} fullNumbers={appearance.fullNumbers}
             playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :
           <LibraryPage key={`${basePage}:${libraryScope}`} initialScope={basePage === 'library' ? libraryScope : 'all'} fullNumbers={appearance.fullNumbers} tracks={basePage === 'favorites' ? favorites : basePage === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
+            visible={page === basePage && !widget && !modalOpen && !presentationOpen} vkTracks={vkTracks.items} openVkTracks={openVkTracks}
+            autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             mode={basePage === 'favorites' || basePage === 'search' || basePage === 'recent' ? basePage : 'library'} favorites={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
             chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openHome={() => navigate('player')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
         </div>

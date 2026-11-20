@@ -11,7 +11,7 @@ import { textFor } from '../src/i18n/text.js';
 import { desktopAppInfo } from './app-info.js';
 import { diagnosticsReport, reportFilename } from '../src/shared/diagnostics.js';
 import { DesktopDiagnostics } from './diagnostics.js';
-import { searchCommunity } from '../src/shared/community-catalogs.js';
+import { createCommunitySearch } from '../src/shared/community-catalogs.js';
 import { isOnlineExternalUrl } from '../src/shared/online.js';
 import { isLyricEditionPage } from '../src/shared/lyric-editions.js';
 import { createLyricsService } from '../src/shared/lyrics-service.js';
@@ -147,20 +147,14 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     if (!isMetadataPage(url)) throw new Error('Unsupported recording link');
     return shell.openExternal(url);
   });
-  let catalogSearch: { id: number; controller: AbortController } | undefined;
-  ipcMain.handle('online:search-community', async (event, id: unknown, query: unknown, filter: unknown) => {
+  const community = createCommunitySearch(net.fetch);
+  ipcMain.handle('online:search-community', (event, id: unknown, query: unknown, filter: unknown) => {
     appWindow(event);
-    if (typeof id !== 'number' || !Number.isSafeInteger(id) || (filter !== 'southern_city' && filter !== 'netlabels')) return [];
-    catalogSearch?.controller.abort();
-    const controller = new AbortController();
-    catalogSearch = { id, controller };
-    try {
-      return await searchCommunity(net.fetch, query, filter, AbortSignal.any([controller.signal, AbortSignal.timeout(11_000)]));
-    } finally { if (catalogSearch?.controller === controller) catalogSearch = undefined; }
+    return community.search(id, query, filter);
   });
   ipcMain.handle('online:cancel-search', (event, id: unknown) => {
     appWindow(event);
-    if (catalogSearch && catalogSearch.id === id) catalogSearch.controller.abort();
+    community.cancel(id);
   });
   ipcMain.handle('online:open-link', (event, url: unknown) => {
     appWindow(event);

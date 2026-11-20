@@ -25,6 +25,7 @@ export interface Preferences {
   playback: PlaybackPreferences;
   audioQuality: AudioQuality;
   autoLyrics: boolean;
+  autoCatalogSearch: boolean;
   exportLyrics: boolean;
   queue?: QueueState;
   resumeRepeat: Repeat;
@@ -42,7 +43,7 @@ const KEY = 'luma-player:v1';
 export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
-  playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false,
+  playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, autoCatalogSearch: true, exportLyrics: false,
   resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
 };
 const readRepeat = (value: unknown): Repeat => value === 'all' || value === 'one' ? value : 'off';
@@ -83,6 +84,7 @@ export function decodePreferences(value: string | null): Preferences {
       playback,
       audioQuality: readAudioQuality(data.audioQuality),
       autoLyrics: data.autoLyrics === true,
+      autoCatalogSearch: data.autoCatalogSearch !== false,
       exportLyrics: data.exportLyrics === true,
       resumeRepeat, resumeShuffle,
       equalizer: readEqualizer(data.equalizer),

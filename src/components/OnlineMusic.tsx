@@ -1,13 +1,15 @@
 import type { Text } from '../i18n/text';
 import { useText } from '../i18n/context';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { ArrowUpRight, BookmarkPlus, Check, HardDriveDownload, Cloud, CloudOff, Download, Globe2, Link2, ListPlus, Play, Search } from 'lucide-react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
-import { findOnlineTracks, importOnlineTrack } from '../data/online';
+import { CATALOG_DEBOUNCE_MS, catalogQuery, catalogTargets, mergeCatalogResults, searchCatalogs } from '../data/catalog-search';
+import type { CatalogId, CatalogResult } from '../data/catalog-search';
+import { importOnlineTrack } from '../data/online';
 import { formatTime } from '../shared/media';
-import { commonsMp3Export, ONLINE_FILTERS, ONLINE_SOURCES } from '../shared/online';
-import type { OnlineCreditData, OnlineFilter, OnlineTrack } from '../shared/online';
+import { commonsMp3Export, ONLINE_SOURCES } from '../shared/online';
+import type { OnlineCreditData, OnlineTrack } from '../shared/online';
 import { Artwork } from './Artwork';
 
 export type OnlineAction = 'play' | 'queue' | 'save' | 'export' | 'cache';
@@ -38,52 +40,84 @@ function message(error: unknown, t: Text) {
     ? t(error.message) : t("Не удалось связаться с каталогом. Проверьте подключение и повторите попытку.");
 }
 
-export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabled, choose }: {
-  query: string; hasLocal: boolean; filter: OnlineFilter; setFilter(value: OnlineFilter): void; saved: ReadonlySet<string>; disabled: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
+export interface CatalogSearchPreferences { autoCatalogSearch: boolean; changeAutoCatalogSearch(value: boolean): void }
+
+const visibleDocument = () => document.visibilityState !== 'hidden';
+function subscribeVisibility(listener: () => void) {
+  document.addEventListener('visibilitychange', listener);
+  return () => document.removeEventListener('visibilitychange', listener);
+}
+
+type SearchSnapshot = { term: string; attempt: number; results: Partial<Record<CatalogId, CatalogResult>> };
+
+/** Both search surfaces share one policy and show each supported catalog as it finishes. */
+export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCatalogSearch, saved, disabled, choose }: CatalogSearchPreferences & {
+  query: string; visible: boolean; saved: ReadonlySet<string>; disabled: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
 }) {
   const t = useText();
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
-  const [tracks, setTracks] = useState<OnlineTrack[] | undefined>();
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<{ cause: unknown }>();
-  const pending = useRef<AbortController | null>(null);
-  const platformOnly = (id: string) => !window.luma && (id === 'netlabels' || id === 'southern_city');
-  useEffect(() => () => pending.current?.abort(), []);
+  const foreground = useSyncExternalStore(subscribeVisibility, visibleDocument);
+  const desktop = !!window.luma?.searchCommunity;
+  const targets = useMemo(() => catalogTargets(desktop), [desktop]);
+  const term = catalogQuery(query);
+  const [attempt, setAttempt] = useState(0);
+  const [snapshot, setSnapshot] = useState<SearchSnapshot>();
+  const active = !!term && connected && visible && foreground && (autoCatalogSearch || attempt > 0);
+  const results = active && snapshot?.term === term && snapshot.attempt === attempt ? snapshot.results : undefined;
+  const settled = targets.flatMap(({ id }) => results?.[id] ?? []);
+  const searching = active && settled.length < targets.length;
+  const tracks = mergeCatalogResults(settled);
+  const failures = settled.filter((result) => 'error' in result);
 
-  async function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy || !connected || platformOnly(filter) || query.trim().length < 2) return;
-    const request = pending.current = new AbortController();
-    setBusy(true);
-    setTracks(undefined);
-    setFailure(undefined);
-    try {
-      const items = await findOnlineTracks(query, filter, request.signal);
-      if (!request.signal.aborted) setTracks(items);
-    } catch (error) { if (!request.signal.aborted) setFailure({ cause: error }); }
-    finally { if (!request.signal.aborted) setBusy(false); }
-  }
+  useEffect(() => {
+    if (!active) return;
+    const request = new AbortController();
+    const timeout = window.setTimeout(() => {
+      setSnapshot({ term, attempt, results: {} });
+      void searchCatalogs(term, targets, request.signal, (result) => {
+        setSnapshot((state) => state?.term === term && state.attempt === attempt
+          ? { ...state, results: { ...state.results, [result.id]: result } } : state);
+      });
+    }, attempt > 0 ? 0 : CATALOG_DEBOUNCE_MS);
+    return () => { window.clearTimeout(timeout); request.abort(); };
+  }, [active, term, attempt, targets]);
 
-  return <section className="online-panel" aria-labelledby="online-title" aria-busy={busy}>
+  const canRequest = !!term && connected && visible && foreground && !searching;
+  return <section className="online-panel catalog-search" aria-labelledby="online-title">
     <header><div className="online-mark"><Globe2 size={20} /></div><div>
-      <p className="overline">{t("Слушать в Luma")}</p><h2 id="online-title">{t("Открытые музыкальные каталоги")}</h2>
-      <p>{hasLocal ? t("Хотите больше вариантов? Нажмите «Искать онлайн», чтобы отправить запрос в выбранный каталог.")
-        : t("Отправьте запрос в выбранный каталог кнопкой «Искать онлайн» или клавишей Enter.")}</p>
+      <p className="overline">{t('Слушать в Luma')}</p><h2 id="online-title">{t('Поиск по каталогам')}</h2>
+      <p>{t('Один запрос ищет во всех доступных каталогах. Результаты появляются по мере загрузки.')}</p>
     </div></header>
-    {!connected && <p className="online-offline" role="status"><CloudOff size={17} />{" "}{t("Устройство вне сети. Онлайн-поиск пока недоступен.")}</p>}
-    <form id="online-search-form" className="online-search-form" onSubmit={search}>
-      <select value={filter} aria-label={t("Источник онлайн-поиска")} onChange={(event) => {
-        pending.current?.abort(); setBusy(false); setTracks(undefined); setFailure(undefined); setFilter(event.currentTarget.value as OnlineFilter);
-      }}>
-        <option value="all">Jamendo + Wikimedia Commons</option>
-        {Object.entries(ONLINE_FILTERS).map(([id, name]) => <option key={id} value={id} disabled={platformOnly(id)}>{t(name)}{platformOnly(id) ? ' · Windows' : ''}</option>)}
-      </select>
-      <button className="button primary-button" type="submit" disabled={busy || !connected || query.trim().length < 2}><Search size={16} /> {busy ? t("Ищем…") : t("Искать онлайн")}</button>
-    </form>
-    {failure && <p className="online-message error" role="alert">{message(failure.cause, t)}</p>}
-    {tracks && <p className="online-message" role="status">{tracks.length ? t("Доступно записей: {0}", tracks.length) : t("Подходящих записей нет. Попробуйте другой запрос или источник.")}</p>}
-    {tracks && tracks.length > 0 && <ul className="online-results">
-      {tracks.map((track) => <li key={track.id}>
+    <div className="catalog-controls">
+      <label className="catalog-toggle"><input type="checkbox" checked={autoCatalogSearch} onChange={(event) => {
+        setSnapshot(undefined); setAttempt(0); changeAutoCatalogSearch(event.currentTarget.checked);
+      }} />{t('Автоматический онлайн-поиск')}</label>
+      {(!autoCatalogSearch || failures.length > 0) && <button className="button outline-button" type="button" disabled={!canRequest} onClick={() => setAttempt((value) => value + 1)}>
+        <Search size={15} />{t(autoCatalogSearch ? 'Повторить поиск' : 'Искать во всех каталогах')}
+      </button>}
+    </div>
+    <p className="catalog-privacy">{t(desktop ? 'Каталогам Openverse и Internet Archive передаётся только текущий запрос.'
+      : 'Openverse получает только текущий запрос. Каталоги Internet Archive доступны в Windows.')}</p>
+    {!connected && <p className="online-offline" role="status"><CloudOff size={17} />{' '}{t('Устройство вне сети. Онлайн-поиск пока недоступен.')}</p>}
+    <ul className="catalog-sources" aria-label={t('Статус каталогов')}>
+      {targets.map(({ id, name }) => {
+        const row = results?.[id];
+        const error = row && 'error' in row;
+        const status = error ? t('Не ответил') : row && 'tracks' in row ? t('Записей: {0}', row.tracks.length)
+          : searching ? t('Ищем…') : t('Нет запроса');
+        return <li key={id} data-catalog={id} data-state={error ? 'error' : row ? 'done' : searching ? 'loading' : 'idle'}>
+          <strong>{t(name)}</strong><span>{status}</span>
+          {error && <small>{message(row.error, t)}</small>}
+        </li>;
+      })}
+    </ul>
+    {!term && <p className="online-message">{t('Введите не менее двух символов, чтобы искать треки.')}</p>}
+    {searching && !settled.length && <p className="online-message" role="status">{t('Ищем записи в каталогах…')}</p>}
+    {!!settled.length && <p className="online-message" role="status">{tracks.length ? t('Доступно записей: {0}', tracks.length)
+      : searching ? t('Ждём ответы других каталогов…') : failures.length === targets.length ? t('Ни один каталог не ответил.')
+        : t('В ответивших каталогах нет подходящих записей.')}</p>}
+    {tracks.length > 0 && <ul className="online-results">
+      {tracks.map((track) => <li key={track.id} data-source={track.online.source}>
         <Artwork track={track} />
         <div className="online-result-copy"><strong title={track.title}>{track.title}</strong><span>{track.artist}{track.duration > 0 ? ` · ${formatTime(track.duration)}` : ''}</span>
           <OnlineCredit track={track} /></div>
@@ -98,7 +132,7 @@ export function OnlineSearch({ query, hasLocal, filter, setFilter, saved, disabl
         </div>
       </li>)}
     </ul>}
-    <p className="online-footnote">{t("Закладка сохраняет ссылку. Загрузить файл можно отдельно, если источник разрешает. Без сети играют файлы и доступные копии в кэше. Эквалайзер и реакция фона на звук работают с файлами.")}</p>
+    {tracks.length > 0 && <p className="online-footnote">{t("Закладка сохраняет ссылку. Загрузить файл можно отдельно, если источник разрешает. Без сети играют файлы и доступные копии в кэше. Эквалайзер и реакция фона на звук работают с файлами.")}</p>}
   </section>;
 }
 

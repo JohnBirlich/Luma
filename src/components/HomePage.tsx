@@ -6,9 +6,12 @@ import type { Track } from '../shared/media';
 import { makeMix } from '../shared/mix';
 import type { MixType } from '../shared/mix';
 import { HUB_QUEUE_LIMIT, hubMusic } from '../shared/music-hub';
-import type { OnlineFilter, OnlineTrack } from '../shared/online';
+import type { OnlineTrack } from '../shared/online';
 import { musicSearchKey } from '../shared/russian';
 import { OnlineSearch } from './OnlineMusic';
+import type { CatalogSearchPreferences } from './OnlineMusic';
+import { catalogQuery } from '../data/catalog-search';
+import type { VkTracksState } from '../data/vk-tracks';
 import type { OnlineAction } from './OnlineMusic';
 import { ReleaseLink, useInstalledBuild } from './About';
 import { MusicSites } from './MusicSites';
@@ -18,12 +21,14 @@ import { Discovery, DiscoveryPreview } from './Discovery';
 import { MyPlaylists } from './MyPlaylists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
 import { VkBookmarks } from './VkBookmarks';
+import { VkTrackMatches, VkTracksShelf } from './VkTracks';
 import type { BookmarkProps } from './VkBookmarks';
 import { useVisualMotion } from '../player/useVisualMotion';
 
 const TABS = { home: 'Для вас', mine: 'Моя музыка', browse: 'Обзор', radio: 'Радио', updates: 'Обновления' } as const;
 export type HomeTab = keyof typeof TABS;
-interface HomeProps extends BookmarkProps {
+interface HomeProps extends BookmarkProps, CatalogSearchPreferences {
+  vkTracks: VkTracksState;
   tab: HomeTab;
   query: string;
   selectTab(tab: HomeTab): void;
@@ -75,7 +80,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
   const t = useText();
   const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary } = props;
   const { tab, query, setQuery, selectTab } = props;
-  const [filter, setFilter] = useState<OnlineFilter>('all');
+  const [composing, setComposing] = useState(false);
   const [tune, setTune] = useState(false);
   const [mixType, setMixType] = useState<MixType>('library');
   const [justFiles, setJustFiles] = useState(false);
@@ -88,6 +93,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
   const searchIndex = useMemo(() => tracks.map((track) => ({ track,
     text: musicSearchKey([track.title, track.artist, track.album, ...(track.genres ?? [])].join(' ')) })), [tracks]);
   const term = musicSearchKey(query);
+  const catalogTerm = catalogQuery(query);
   const found = useMemo(() => {
     if (!term) return [];
     const result: Track[] = [];
@@ -111,12 +117,8 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         <p className="overline page-kicker"><span />{t('Ваша коллекция')}</p>
         <h1>{t('Главная')}</h1>
       </div><div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
-        onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.nativeEvent.isComposing && term && !found.length) {
-            const form = document.getElementById('online-search-form');
-            if (form instanceof HTMLFormElement) { event.preventDefault(); form.requestSubmit(); }
-          }
-        }} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div></div>
+        onChange={(event) => setQuery(event.currentTarget.value)} onCompositionStart={() => setComposing(true)}
+        onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div></div>
       <div className="hub-topline"><nav aria-label={t('Разделы на главной')} className="hub-tabs">
         {(Object.keys(TABS) as HomeTab[]).map((id) => <button type="button" key={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => { if (id === 'browse') setTopic(undefined); selectTab(id); }}>{t(TABS[id])}</button>)}
       </nav><div className="hub-top-actions">
@@ -128,8 +130,10 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       <Shelf title={t('В вашей медиатеке')}>
         {found.length ? <TrackRows {...rows} tracks={found} /> : <p className="hub-note">{t('В медиатеке нет совпадений.')}</p>}
       </Shelf>
-      <OnlineSearch key={term} query={query} hasLocal={!!found.length} filter={filter} setFilter={setFilter} saved={saved} disabled={props.busy} choose={props.chooseOnline} />
-      <MusicSites query={query} />
+      <VkTrackMatches query={query} items={props.vkTracks.items} library={tracks} play={play} disabled={props.busy} open={() => selectTab('mine')} />
+      <OnlineSearch key={catalogTerm} query={query} visible={visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
+        autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />
+      {catalogTerm && <MusicSites key={`sites:${catalogTerm}`} query={catalogTerm} />}
     </> : <>
       {tab === 'home' && <>
         <div className="hub-lead">{props.nowPlaying}<section className="hub-hero" aria-labelledby="hub-mix-title">
@@ -173,6 +177,10 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       {tab === 'mine' && <>
         <MyPlaylists items={props.playlists} byId={props.playlistTracks} collection={tracks} {...rows} busy={props.busy}
           connected={connected} playAll={props.playCatalog} save={props.savePlaylist} remove={props.removePlaylist} />
+        <VkTracksShelf state={props.vkTracks} library={tracks} play={play} disabled={props.busy} lookup={(item) => {
+          setQuery([item.artist, item.title].filter(Boolean).join(' ').slice(0, 140));
+          formInput.current?.focus();
+        }} />
         <Shelf title={t('Мои треки')} action={<button type="button" className="text-button" onClick={openLibrary}>{t('Медиатека')}<ChevronRight size={15} /></button>}>
           {mine.length ? <TrackRows {...rows} tracks={mine.slice(0, 24)} /> : <p className="hub-note">{t('Добавьте аудиофайлы, чтобы начать.')}</p>}
         </Shelf>
