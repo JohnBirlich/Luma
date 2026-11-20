@@ -6,24 +6,27 @@ import type { ReadSpectrum } from '../player/useAudio';
 import { useVisualMotion } from '../player/useVisualMotion';
 import oceanUrl from '../assets/scenes/ocean.webm?url';
 import oceanPoster from '../assets/scenes/ocean.webp?url';
+import type { Track } from '../shared/media';
+import { Artwork } from './Artwork';
 import { SceneCanvas } from './SceneCanvas';
 
 interface SceneProps {
   effect: BackgroundEffect;
+  track?: Track | null;
   strength?: number;
   animate?: boolean;
   tempo?: EffectTempo;
   sample?: ReadSpectrum;
 }
 const stillBars = [22, 44, 36, 54, 62, 52, 82, 89, 65, 77, 57, 50, 58, 41, 35, 46, 26];
-const haloEffects = new Set<BackgroundEffect>(['aurora', 'nebula', 'prism', 'orbits', 'stars', 'solar']);
+const haloEffects = new Set<BackgroundEffect>(['aurora', 'nebula', 'prism', 'orbits', 'stars']);
 
-export const SceneBackground = memo(function SceneBackground({ effect, strength = 0.75, animate = false, tempo = 'normal', sample }: SceneProps) {
+export const SceneBackground = memo(function SceneBackground({ effect, track, strength = 0.75, animate = false, tempo = 'normal', sample }: SceneProps) {
   const element = useRef<HTMLDivElement>(null);
   const halo = useRef<HTMLDivElement>(null);
   const ocean = useRef<HTMLVideoElement>(null);
   const [inView, setInView] = useState(typeof IntersectionObserver === 'undefined');
-  const allowed = useVisualMotion(animate && strength > 0 && effect !== 'off');
+  const allowed = useVisualMotion(animate && strength > 0 && effect !== 'off' && effect !== 'cover');
   const moving = allowed && inView;
   const factor = EFFECT_TEMPOS[tempo].factor;
 
@@ -62,6 +65,7 @@ export const SceneBackground = memo(function SceneBackground({ effect, strength 
   if (effect === 'off') return null;
   return <div className={`scene-background scene-${effect}${moving ? ' scene-moving' : ''}`} ref={element}
     style={{ '--strength': strength, '--scene-tempo': factor } as CSSProperties} aria-hidden="true">
+    {effect === 'cover' && (track?.backdropUrl || track?.artworkUrl) && <Artwork track={track} imageUrl={track.backdropUrl} className="scene-cover-art" />}
     {effect === 'aurora' && <div className="aurora-curtain"><i /><i /></div>}
     {effect === 'waves' && moving && <video ref={ocean} className="scene-ocean-film" poster={oceanPoster} loop muted playsInline disablePictureInPicture preload="none" />}
     {effect === 'stars' && <><i className="star-field" /><svg className="scene-constellations" viewBox="0 0 840 430" preserveAspectRatio="xMidYMid slice" fill="none">
@@ -69,7 +73,7 @@ export const SceneBackground = memo(function SceneBackground({ effect, strength 
       <circle cx="398" cy="119" r="4"/><circle cx="607" cy="82" r="3"/><circle cx="219" cy="209" r="2.5" />
     </svg></>}
     {effect === 'spectrum' && !moving && <div className="scene-bars">{stillBars.map((height, index) => <i key={index} style={{ '--bar': height / 100 } as CSSProperties} />)}</div>}
-    {moving && (effect === 'spectrum' || effect === 'fireworks' || effect === 'pulse' || effect === 'rain' || effect === 'meteors') && <SceneCanvas effect={effect} tempo={factor} sample={sample} />}
+    {moving && (effect === 'spectrum' || effect === 'fireworks' || effect === 'pulse' || effect === 'rain' || effect === 'meteors' || effect === 'solar') && <SceneCanvas effect={effect} tempo={factor} sample={sample} />}
     {effect === 'pulse' && !moving && <div className="scene-pulse-still" />}
     {effect === 'nebula' && <><i className="nebula-plate" /><i className="nebula-stars" /></>}
     {effect === 'orbits' && <><i className="orbit-planet" /><div className="orbit-lines"><i /><i /></div></>}
@@ -77,7 +81,7 @@ export const SceneBackground = memo(function SceneBackground({ effect, strength 
     {effect === 'kaleidoscope' && <div className="scene-chromatic"><i /><i /></div>}
     {effect === 'rain' && <i className="rain-glass-beads" />}
     {effect === 'prism' && <div className="scene-prism-optics" />}
-    {effect === 'solar' && <div className="scene-solar-filaments"><i /><i /></div>}
+    {effect === 'solar' && !moving && <i className="solar-filaments-still" />}
     {moving && sample && haloEffects.has(effect) && <div className="scene-audio-halo" ref={halo} />}
   </div>;
 });

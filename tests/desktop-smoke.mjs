@@ -22,6 +22,8 @@ app.setAppPath(root);
 app.setPath('appData', profile);
 app.disableHardwareAcceleration();
 delete process.env.LUMA_DEV_SERVER_URL;
+delete process.env.LUMA_LASTFM_API_KEY;
+delete process.env.LUMA_LASTFM_SECRET;
 process.env.LUMA_ACOUSTID_CLIENT = 'fixture-only';
 
 async function waitFor(label, check) {
@@ -99,6 +101,15 @@ async function smoke() {
     await click(`.settings-page [aria-label="${label}"]`);
   };
 
+  const closeSettings = async () => {
+    if (!await run(`!!document.querySelector('.settings-reset')`)) {
+      await click('.settings-back');
+      await waitFor('left arrow returns to settings index', () => run(`!!document.querySelector('.settings-reset')`));
+    }
+    await click('.settings-back');
+  };
+  const clickLastFm = (label) => run(`[...document.querySelectorAll('[aria-label="Last.fm"] button')].find((item) => item.textContent.trim() === ${JSON.stringify(label)}).click()`);
+
   const withArt = (title) => waitFor(`metadata and artwork for ${title}`, async () => {
     const data = await readMetadata();
     return data?.title === title && data.picture ? data : undefined;
@@ -161,6 +172,13 @@ async function smoke() {
   await waitFor('karaoke reuses current lyrics and album art', () => run(`document.querySelector('.karaoke-track h1')?.textContent === 'Ты здесь'
     && document.querySelector('.karaoke-track .artwork img')?.complete && document.querySelector('.karaoke-lyrics .lyrics-plain')?.textContent === 'Прикреплённый текст'`));
   assert.equal(await run(`document.querySelector('.karaoke-lyrics').textContent.includes('Без синхронизации')`), true);
+  assert.equal(await run(`(() => {
+    const art = document.querySelector('.karaoke-track .artwork').getBoundingClientRect();
+    const text = document.querySelector('.karaoke-lyrics').getBoundingClientRect();
+    return innerWidth <= 690 || (art.width >= 150 && art.right < text.left);
+  })()`), true, 'karaoke keeps a large cover to the left of lyrics');
+  assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-track h1')).userSelect`), 'none');
+  assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-lyrics .lyrics-scroll')).userSelect`), 'text');
   await run(`[...document.querySelectorAll('.karaoke-lyrics .lyrics-sources button')].find((item) => item.textContent === 'Убрать текст из файла').click()`);
   await waitFor('karaoke highlights the sidecar from current playback position', () => run(`document.querySelector('.karaoke-lyrics [aria-current="true"]')?.textContent === 'Следующая строка'`));
   await run(`(() => {
@@ -267,6 +285,8 @@ async function smoke() {
       return canvas && canvas.width * canvas.height > 0 && canvas.width * canvas.height <= 368640;
     })()`));
   }
+  await run(`[...document.querySelectorAll('.scene-layouts button')].find((item) => item.textContent === 'Обложка').click()`);
+  await waitFor('cover style replaces the previous effect', async () => (await preferences()).appearance.effect === 'cover' && await run(`!!document.querySelector('.scene-dialog-preview .scene-cover') && !document.querySelector('.scene-dialog-preview canvas, .scene-dialog-preview video')`));
   await click('.scene-dialog .primary-button');
   await run(`document.querySelector('.title-settings').click()`);
   await waitFor('settings page', () => run(`!!document.querySelector('.settings-page [aria-label="Обновления приложения"]')`));
@@ -285,17 +305,69 @@ async function smoke() {
   await click('.settings-back');
   await click('.settings-page [aria-label="Интеграции"]');
   await waitFor('widget setting', () => run(`!!document.querySelector('[aria-label="Виджеты рабочего стола"] select')`));
-  await select('[aria-label="Виджеты рабочего стола"] select', 'white');
+  await select('[aria-label="Виджеты рабочего стола"] select', 'glass');
+  await waitFor('widget material updates in place', () => run(`document.querySelector('.widget-sample')?.dataset.widgetBackground === 'glass'`));
+  assert.equal(await run(`document.querySelectorAll('[aria-label="Виджеты рабочего стола"] select option').length`), 9);
   const widgetBounds = window.getBounds();
   const widgetTime = await run('document.querySelector("audio").currentTime');
   await click('[aria-label="Виджеты рабочего стола"] button');
   await waitFor('floating widget opens without replacing the renderer', async () => window.isAlwaysOnTop() && window.getBounds().width < widgetBounds.width
-    && await run(`document.querySelector('.widget-mode > .desktop-widget')?.dataset.widgetBackground === 'white' && window.testAudio === document.querySelector('audio')`));
+    && await run(`document.querySelector('.widget-mode > .desktop-widget')?.dataset.widgetBackground === 'glass' && window.testAudio === document.querySelector('audio')`));
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   await click('.widget-window-buttons [aria-label="Вернуться в плеер"]');
   await waitFor('widget restores the old window', async () => !window.isAlwaysOnTop() && !await run(`!!document.querySelector('.widget-mode > .desktop-widget')`));
   assert.deepEqual(window.getBounds(), widgetBounds);
   assert.equal(await run('document.querySelector("audio").currentTime'), widgetTime);
+  window.focus();
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'M', modifiers: ['control', 'shift'] });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'M', modifiers: ['control', 'shift'] });
+  await waitFor('Ctrl+Shift+M opens the widget', async () => window.isAlwaysOnTop() && await run(`!!document.querySelector('.widget-mode')`));
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+  await waitFor('Esc restores the widget window', async () => !window.isAlwaysOnTop() && !await run(`!!document.querySelector('.widget-mode')`));
+  assert.deepEqual(window.getBounds(), widgetBounds);
+  assert.equal(await run('document.querySelector("audio").currentTime'), widgetTime);
+  assert.equal(await run(`!!document.querySelector('.settings-return')`), false);
+
+  // Use the real Last.fm UI, IPC and isolated main-process client, never a real account.
+  const fakeToken = 'token-'.repeat(5), fakeSession = 'session-'.repeat(4);
+  const authPages = [];
+  let apiStatus = 11;
+  const originalOpen = shell.openExternal;
+  const cacheSession = session.defaultSession;
+  shell.openExternal = async (url) => { authPages.push(url); };
+  cacheSession.protocol.handle('https', async (request) => {
+    const url = new URL(request.url);
+    if (url.origin !== 'https://ws.audioscrobbler.com') return new Response(null, { status: 404 });
+    if (url.searchParams.get('method') === 'auth.getToken') return apiStatus
+      ? Response.json({ error: apiStatus }, { status: 503 }) : Response.json({ token: fakeToken });
+    if (url.searchParams.get('method') === 'auth.getSession' && url.searchParams.get('token') === fakeToken)
+      return Response.json({ session: { name: 'Smoke Listener', key: fakeSession } });
+    return Response.json({ error: 3 }, { status: 400 });
+  });
+  try {
+    await waitFor('credential form needs no launch environment', () => run(`!!document.querySelector('.lastfm-form')`));
+    await fill('.lastfm-form input[name="api-key"]', 'a'.repeat(32));
+    await fill('.lastfm-form input[name="shared-secret"]', 'f'.repeat(32));
+    await click('.lastfm-form button[type="submit"]');
+    await waitFor('credentials accepted locally', () => run(`window.luma.lastfm.status().then((s) => s.configuration === 'local' && !document.querySelector('.lastfm-form'))`));
+    await clickLastFm('Подключить Last.fm');
+    await waitFor('Last.fm outage gets a distinct code and retry hint', () => run(`document.querySelector('.lastfm-issue')?.textContent.includes('Код Last.fm: 11') && document.querySelector('.lastfm-issue').textContent.includes('временно недоступен')`));
+    assert.equal(authPages.length, 0);
+    apiStatus = 0;
+    await clickLastFm('Подключить Last.fm');
+    await waitFor('authorized browser handoff', () => run(`window.luma.lastfm.status().then((s) => s.waiting && !s.issue)`));
+    assert.equal(authPages.length, 1);
+    assert.equal(new URL(authPages[0]).origin, 'https://www.last.fm');
+    await clickLastFm('Завершить подключение');
+    await waitFor('account is connected with scrobbling disabled', () => run(`document.querySelector('[aria-label="Last.fm"] .setting-status')?.textContent === 'Smoke Listener' && document.querySelector('[aria-label="Отправлять прослушивания в Last.fm"]')?.getAttribute('aria-checked') === 'false'`));
+    await clickLastFm('Удалить ключи и отключить');
+    await waitFor('credentials and session are cleared', () => run(`window.luma.lastfm.status().then((s) => !s.configured && !s.user && !s.enabled)`));
+  } finally {
+    cacheSession.protocol.unhandle('https');
+    shell.openExternal = originalOpen;
+  }
+  console.log('::notice title=Widget and Last.fm::Widget shortcut and restore; key setup UI, API error 11 and retry with a fixture verified.');
   await click('[aria-label="Сохранять текст с новым MP3"]');
   await waitFor('opt-in to MP3 lyric tagging', async () => (await preferences()).exportLyrics);
   await click('.settings-back');
@@ -420,7 +492,7 @@ async function smoke() {
       const systemLabel = hasSystemSink ? 'Системный вывод' : 'Системный выход не найден. Подключите устройство и попробуйте снова.';
       await waitFor('system output fallback or explicit missing device', () => run(`document.querySelector(${JSON.stringify(statusSelector)})?.textContent === ${JSON.stringify(systemLabel)}`));
       await click('.player-bar .play-button');
-      await click('.settings-return');
+      await closeSettings();
       console.log(`::notice title=Float output in playback::${status}`);
     }
 
@@ -485,7 +557,7 @@ async function smoke() {
       await waitFor('old session cleanup acknowledged', () => run(`document.querySelector('[aria-label="Закладки VK"] [role="status"]')?.textContent.includes('удалены')`));
       assert.equal((await legacyVk.cookies.get({ name: 'lumaFixture' })).length, 0);
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
-      await click('.settings-return');
+      await closeSettings();
       await waitFor('session cleanup keeps both links', () => run(`JSON.parse(localStorage.getItem('luma-player:vk-playlists:v1')).playlists.length === 2 && !!document.querySelector('.hub-bookmarks')`));
       await click('.hub-tabs button:nth-child(4)');
       await select('.hub-radio-settings select', 'all');
@@ -554,24 +626,26 @@ async function smoke() {
     await click('.player-bar .play-button');
 
     await settings('Внешний вид');
+    await run(`[...document.querySelectorAll('.theme-option')].find((item) => item.textContent === 'MacOS').click()`);
+    await waitFor('MacOS applies the light glass theme', () => run(`document.querySelector('.app-shell').dataset.theme === 'macos' && getComputedStyle(document.querySelector('.app-shell')).colorScheme === 'light'`));
     await select('label:has(select option[value="en"]) select', 'en');
     await waitFor('English switches Luma controls, not track metadata', () => run(`document.documentElement.lang === 'en'
       && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.settings-page h1')?.textContent === 'Appearance'`));
-    await click('.settings-return');
+    await closeSettings();
     await waitFor('settings returns to the same page with search input intact', () => run(`document.querySelector('main input[type="search"]')?.value === 'fixture-mp3'`));
     await click('.title-settings');
-    await waitFor('most recent settings section reopens', () => run(`document.querySelector('.settings-page h1')?.textContent === 'Appearance'`));
-    await click('.settings-return');
+    await waitFor('settings index reopens after using the back arrow', () => run(`!!document.querySelector('.settings-reset') && !!document.querySelector('.settings-page [aria-label="Appearance"]')`));
+    await closeSettings();
     const reloaded = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
     window.webContents.reload();
     await reloaded;
-    await waitFor('English preference survives a renderer restart', () => run(`document.documentElement.lang === 'en' && !!document.querySelector('[aria-label="Home"]')`));
+    await waitFor('English and MacOS survive a renderer restart', () => run(`document.documentElement.lang === 'en' && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.app-shell').dataset.theme === 'macos'`));
     await click('.title-settings');
     await waitFor('English settings index', () => run(`!!document.querySelector('.settings-page [aria-label="Appearance"]')`));
     await click('.settings-page [aria-label="Appearance"]');
     await select('label:has(select option[value="en"]) select', 'ru');
     await waitFor('Russian interface restored', () => run(`document.documentElement.lang === 'ru'`));
-    await click('.settings-return');
+    await closeSettings();
 
     offlineFixture = true;
     await run(`Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });

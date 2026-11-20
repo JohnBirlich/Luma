@@ -1,5 +1,6 @@
 export const APP_NAME = 'Luma Player';
-export const APP_USER_MODEL_ID = 'app.lumaplayer.desktop';
+// Keep the Windows media/launcher ID resolvable by both AppsFolder and executable-name readers.
+export const APP_USER_MODEL_ID = 'LumaPlayer.exe';
 
 export interface AppInfo {
   version: string;

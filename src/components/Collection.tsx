@@ -109,7 +109,7 @@ export function PlayerPage(props: PlayerPageProps) {
   const source = track?.backdropUrl ?? track?.artworkUrl;
   const fallback = !source || source === failedPicture;
   const artwork = fallback ? DEFAULT_ARTWORK_URL : source;
-  const showPicture = !!track && (hero === 'cover' || hero === 'blur');
+  const showPicture = !!track && effect !== 'cover' && (hero === 'cover' || hero === 'blur');
   const centered = hero === 'center';
   const picks = useMemo(() => homeRecommendations(tracks, props.recent, props.favoriteIds, !props.connected, props.disliked), [tracks, props.recent, props.favoriteIds, props.connected, props.disliked]);
   const homeSections = [
@@ -134,10 +134,10 @@ export function PlayerPage(props: PlayerPageProps) {
         </div>
       </header>
       <section aria-label={t("Текущий трек")} data-effect={effect} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
-        <SceneBackground effect={effect} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
+        <SceneBackground effect={effect} track={track} strength={effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
         {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
           onError={() => { if (!fallback) setFailedPicture(source); }} />}
-        {!showPicture && !centered && hero !== 'blur' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
+        {hero === 'vinyl' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
         <div className="hero-scrim" aria-hidden="true" />
         {centered && <Artwork track={track} className="hero-center-art" />}
         <div className="hero-content">

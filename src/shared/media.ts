@@ -90,6 +90,8 @@ export interface DesktopBridge {
   };
   lastfm: {
     status(): Promise<LastFmStatus>;
+    configure(key: string, secret: string): Promise<LastFmStatus>;
+    forgetCredentials(): Promise<LastFmStatus>;
     begin(): Promise<LastFmStatus>;
     finish(): Promise<LastFmStatus>;
     enable(enabled: boolean): Promise<LastFmStatus>;

@@ -37,7 +37,7 @@ import { useTrackLyrics } from './player/useTrackLyrics';
 import { usePalette } from './player/usePalette';
 import { trackCoverKey, withCover } from './shared/artwork';
 import type { CoverTarget } from './shared/artwork';
-import { defaultAppearance, defaultPlayback, scheduledTheme, shouldAdvanceAfterEnd, themeVariables } from './shared/customization';
+import { defaultAppearance, defaultPlayback, scheduledTheme, shouldAdvanceAfterEnd, themeVariables, WIDGET_SHORTCUT } from './shared/customization';
 import type { Appearance, LibraryLayout } from './shared/customization';
 import { clamp } from './shared/equalizer';
 import { defaultAudioQuality, isMetered } from './shared/audio-quality';
@@ -88,6 +88,7 @@ export default function App() {
   const [libraryScope, setLibraryScope] = useState<'all' | 'offline'>(boot.playback.startPage === 'local' ? 'offline' : 'all');
   const [widget, setWidget] = useState(false);
   const [widgetPending, setWidgetPending] = useState(false);
+  const switchingWidget = useRef(false);
   const [showEqualizer, setShowEqualizer] = useState(false);
   const [showAppearance, setShowAppearance] = useState(false);
   const [coverTarget, setCoverTarget] = useState<CoverTarget>();
@@ -158,13 +159,14 @@ export default function App() {
   const lyrics = useTrackLyrics(current, { enabled: !widget && (presentationKind === 'karaoke' || (!presentationOpen && page === 'player')),
     auto: preferences.autoLyrics, connected, playing: player.playing, duration: player.duration });
   const changeWidget = useCallback(async (enabled: boolean) => {
-    if (!window.luma || widgetPending || presentationOpen) return;
+    if (!window.luma || switchingWidget.current || presentationOpen) return;
+    switchingWidget.current = true;
     setWidgetPending(true);
     try { setWidget(await window.luma.window.setWidget(enabled)); }
     catch { setNotice({ message: "Не удалось переключить режим виджета.", error: true }); }
-    finally { setWidgetPending(false); }
-  }, [presentationOpen, widgetPending]);
-  const sampledTone = usePalette(appearance.coverColors ? current : null);
+    finally { switchingWidget.current = false; setWidgetPending(false); }
+  }, [presentationOpen]);
+  const sampledTone = usePalette(current);
   const tint = appearance.coverColors ? sampledTone : theme['--accent'];
   const transportPlaying = player.playing || !!player.loading;
   const playbackError = player.error;
@@ -335,6 +337,11 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || modalOpen) return;
+      if (!presentationOpen && window.luma && (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.code === WIDGET_SHORTCUT.code) {
+        event.preventDefault();
+        if (!event.repeat) void changeWidget(!widget);
+        return;
+      }
       if (widget && event.key === 'Escape') { event.preventDefault(); if (!event.repeat) void changeWidget(false); return; }
       if (widget && !event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'KeyF') return;
       if (widget && (event.ctrlKey || event.metaKey)) return;
@@ -583,7 +590,7 @@ export default function App() {
   };
 
   return (
-    <UiText.Provider value={t}><div data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${widget ? ' widget-mode' : queueOpen ? ' queue-visible' : ''}${appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
+    <UiText.Provider value={t}><div data-theme={effectiveAppearance.theme} data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={appearance.compactSidebar ? 'compact' : 'expanded'} className={`app-shell${widget ? ' widget-mode' : queueOpen ? ' queue-visible' : ''}${appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
       onDragEnter={(event) => {
         if (modalOpen || presentationOpen || widget || !filesDragged(event)) return;
         event.preventDefault();
@@ -611,7 +618,7 @@ export default function App() {
         <div key={basePage} className="page-body" hidden={widget || page === 'settings'}>
         {basePage === 'music' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
           <MusicHub tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
-            currentId={queue.currentId} playing={transportPlaying} connected={connected} visible={page === 'music' && !widget && !modalOpen && !presentationOpen}
+            currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={page === 'music' && !widget && !modalOpen && !presentationOpen}
             busy={working || !ready} play={playTrack} playMix={playAll} startRadio={startRadio} chooseOnline={chooseOnline}
             covers={covers} editCover={setCoverTarget} discardCover={discardCover} openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose} />
           </Suspense> :
@@ -642,7 +649,7 @@ export default function App() {
             changeQuality={(audioQuality) => setPreferences((data) => ({ ...data, audioQuality }))}
             toggleLyrics={(option) => setPreferences((data) => ({ ...data, [option]: !data[option] }))}
             toggleEffects={() => setPreferences((data) => ({ ...data, equalizer: { ...data.equalizer, enabled: !data.equalizer.enabled } }))}
-            openLocalLibrary={() => navigate('library', 'offline')} openWidget={() => { void changeWidget(true); }}
+            openLocalLibrary={() => navigate('library', 'offline')} widgetTint={sampledTone} openWidget={() => { void changeWidget(true); }}
             openTrackInfo={current && !current.demo && !current.online ? () => editTrackDetails(current.id) : undefined}
             openMusic={openMusic} reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
         </div>}

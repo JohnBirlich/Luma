@@ -45,6 +45,8 @@ const bridge: DesktopBridge = {
   },
   lastfm: {
     status: () => ipcRenderer.invoke('lastfm:status'),
+    configure: (key, secret) => ipcRenderer.invoke('lastfm:configure', key, secret),
+    forgetCredentials: () => ipcRenderer.invoke('lastfm:forget'),
     begin: () => ipcRenderer.invoke('lastfm:begin'),
     finish: () => ipcRenderer.invoke('lastfm:finish'),
     enable: (enabled) => ipcRenderer.invoke('lastfm:enable', enabled),

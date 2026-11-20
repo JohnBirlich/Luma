@@ -64,7 +64,7 @@ export function VkBookmarks({ covers, editCover, discardCover }: BookmarkProps) 
     <header className="hub-shelf-head"><h2 id="vk-bookmarks-title"><Bookmark size={17} />{t('Закладки VK')}</h2>
       <button type="button" className="text-button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="vk-bookmark-form"><Plus size={16} />{t('Импорт VK')}</button>
     </header>
-    <p>{t('Плейлисты сохранены как ссылки. Они открываются в обычном браузере, только по нажатию.')}</p>
+    <p>{t('Плейлисты — это закладки. Вход VK ID не даёт доступ к аудиотеке: прямое воспроизведение требует отдельного разрешения VK.')}</p>
     {open && <form id="vk-bookmark-form" className="hub-bookmark-form" onSubmit={add}>
       <label>{t('Название')}<input value={name} maxLength={70} onChange={(event) => setName(event.currentTarget.value)} placeholder={t('Например, Вечерний микс')} /></label>
       <label>{t('Ссылка на плейлист или код виджета')}<textarea rows={2} required maxLength={8192} value={value} onChange={(event) => { setValue(event.currentTarget.value); setError(''); }} placeholder="https://vk.ru/music/playlist/…" /></label>
@@ -76,7 +76,7 @@ export function VkBookmarks({ covers, editCover, discardCover }: BookmarkProps) 
       const cover = playlistCoverKey(key);
       return <li key={key}>
         <Artwork imageUrl={covers.get(cover)} lazy />
-        <span className="hub-bookmark-name" data-selectable>{key === editorialKey ? t('Пример плейлиста VK') : playlist.name}</span>
+        <span className="hub-bookmark-name">{key === editorialKey ? t('Пример плейлиста VK') : playlist.name}</span>
         <VkExternalLink href={vkShelfUrl(playlist)}>{t('Открыть в VK')}</VkExternalLink>
         <button type="button" className="icon-button" aria-label={t('Редактировать обложку плейлиста')} onClick={() => editCover({ key: cover, title: playlist.name, kind: 'playlist' })}><ImagePlus size={16} /></button>
         {key !== editorialKey && <button type="button" className="icon-button" aria-label={t('Убрать {0} из списка', playlist.name)} onClick={() => remove(key)}><Trash2 size={16} /></button>}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { accentFor, artworkTone, contrastRatio, defaultAppearance, defaultPlayback, formatCount, scheduledTheme, shouldAdvanceAfterEnd, THEMES, themeVariables } from '../src/shared/customization.js';
+import { accentFor, artworkTone, contrastRatio, defaultAppearance, defaultPlayback, formatCount, scheduledTheme, shouldAdvanceAfterEnd, THEMES, themeVariables, WIDGET_BACKGROUNDS } from '../src/shared/customization.js';
 import { defaultAudioQuality } from '../src/shared/audio-quality.js';
 import { decodePreferences, encodePreferences, RECENT_LIMIT, rememberTrack } from '../src/player/preferences.js';
 
@@ -57,7 +57,7 @@ test('legacy layouts remain unchanged; effect intensity and favorite IDs are val
 });
 
 test('new audio-reactive scenes persist without replacing old settings', () => {
-  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'off']) {
+  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'cover', 'off']) {
     const prefs = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl', effect, effectStrength: 0.6, motion: false }, volume: 0.17 }));
     assert.equal(prefs.appearance.effect, effect);
     assert.equal(prefs.appearance.hero, 'vinyl');
@@ -110,4 +110,15 @@ test('scheduled themes change at local day/night boundaries and compact counts a
   assert.equal(formatCount(1234), '1.2к');
   assert.equal(formatCount(1234, true), '1234');
   assert.equal(formatCount(999), '999');
+});
+
+
+test('MacOS and every widget material round-trip while preserving artwork and motion preferences', () => {
+  for (const widgetBackground of Object.keys(WIDGET_BACKGROUNDS)) {
+    const { appearance } = decodePreferences(JSON.stringify({ appearance: { theme: 'macos', dayTheme: 'macos', widgetBackground, motion: false } }));
+    assert.equal(appearance.theme, 'macos');
+    assert.equal(appearance.dayTheme, 'macos');
+    assert.equal(appearance.widgetBackground, widgetBackground);
+    assert.equal(appearance.motion, false);
+  }
 });

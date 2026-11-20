@@ -25,6 +25,7 @@ export function TitleBar({ openSettings, settingsActive, addMusic, busy }: Title
   }, [api]);
   return (
     <header className={`title-bar${api ? ' native-title-bar' : ''}`}>
+      {!api && <span className="mac-lights" aria-hidden="true"><i /><i /><i /></span>}
       <div className="wordmark" aria-label="Luma Player">
         <div className="brand-mark" aria-hidden="true"><AudioLines size={20} strokeWidth={2.05} /></div>
         <strong>Luma<span> Player</span></strong>

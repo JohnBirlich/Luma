@@ -2,7 +2,7 @@ import { useText } from '../i18n/context';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { ArrowLeft, ArrowUpCircle, AudioLines, Bell, Bug, Check, HardDrive, Headphones, Keyboard, Monitor, Music2, Palette, Play, Plug, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
-import { ACCENTS, accentFor, CROSSFADE_TIMES, DATA_LANGUAGES, EFFECT_TEMPOS, formatCount, SEEK_STEPS, THEMES, WIDGET_BACKGROUNDS } from '../shared/customization';
+import { ACCENTS, accentFor, CROSSFADE_TIMES, DATA_LANGUAGES, EFFECT_TEMPOS, formatCount, SEEK_STEPS, THEMES, WIDGET_BACKGROUNDS, WIDGET_SHORTCUT } from '../shared/customization';
 import type { Appearance, CrossfadeTime, DataLanguage, EffectTempo, LibraryLayout, PlaybackPreferences, SeekStep, StartPage, ThemeName, WidgetBackground } from '../shared/customization';
 import { describeAudioFormat, describeStream, NETWORK_MODES, STREAM_QUALITIES } from '../shared/audio-quality';
 import type { AudioQuality, NetworkMode, StreamQuality } from '../shared/audio-quality';
@@ -10,12 +10,13 @@ import { UI_LANGUAGES } from '../shared/ui-language';
 import type { UiLanguage } from '../shared/ui-language';
 import type { Track } from '../shared/media';
 import type { FloatStatus } from '../shared/float-output';
-import type { LastFmStatus } from '../shared/lastfm';
+import type { LastFmIssue, LastFmStatus } from '../shared/lastfm';
 import type { StreamCacheInfo } from '../shared/stream-cache';
 import { localLibrary } from '../data/library';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { ReleaseLink, useInstalledBuild } from './About';
 import { Artwork } from './Artwork';
+import { WidgetSurface } from './DesktopWidget';
 import { MenuGroup, MenuItem } from './Menu';
 import { VolumeControl } from './PlaybackControls';
 import type { VolumeProps } from './PlaybackControls';
@@ -78,8 +79,8 @@ function ThemePreview({ appearance, track, tint }: { appearance: Appearance; tra
       <div className="settings-preview-window" aria-hidden="true">
         <div className="settings-preview-chrome"><AudioLines size={13} /><span>Luma Player</span><i /><i /><i /></div>
         <div className={`settings-preview-hero settings-preview-${appearance.hero}${appearance.effect !== 'off' ? ' settings-preview-has-effect' : ''}`} style={{ '--sample-tone': tint, '--scene-tone': tint } as CSSProperties}>
-          <SceneBackground effect={appearance.effect} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} />
-          {picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
+          <SceneBackground effect={appearance.effect} track={track} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} />
+          {appearance.effect !== 'cover' && picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
           {appearance.hero === 'center' && <Artwork track={track} className="settings-preview-center-art" />}
           {appearance.hero === 'vinyl' && <VinylRecord className="settings-preview-record" track={track} animate={appearance.motion} />}
           <div><small>{t("СЕЙЧАС ИГРАЕТ")}</small><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
@@ -119,6 +120,7 @@ interface SettingsProps {
   toggleEffects(): void;
   openLocalLibrary(): void;
   openWidget(): void;
+  widgetTint: string;
   openTrackInfo?: () => void;
   changeQuality(quality: AudioQuality): void;
   toggleLyrics(option: 'autoLyrics' | 'exportLyrics'): void;
@@ -156,6 +158,7 @@ const shortcuts = [
   ['Пробел / K', 'Воспроизведение и пауза'], ['← / →', 'Перемотка'], ['F / Esc', 'Развернуть трек / выйти из большого плеера'],
   ['L / Esc', 'Караоке / выйти из большого плеера'], ['M', 'Выключить или вернуть звук'], ['Q', 'Очередь в обычном плеере'], ['Ctrl + O', 'Добавить музыку'],
   ['Ctrl + ,', 'Настройки'], ['Ctrl + Shift + L', 'Диагностика'],
+  [WIDGET_SHORTCUT.label, 'Открыть или закрыть виджет (в фокусе Luma, Windows)'],
 ];
 
 export function SettingsPage(props: SettingsProps) {
@@ -187,7 +190,6 @@ export function SettingsPage(props: SettingsProps) {
       <header className="page-header settings-header">
         <button type="button" className="icon-button settings-back" aria-label={section ? t("Назад к настройкам") : t("Вернуться на вкладку")} title={t("Назад")} onClick={back}><ArrowLeft size={19} /></button>
         <div><p className="overline page-kicker"><span />{section ? t("Настройки") : t("Ваш плеер")}</p><h1>{t(section?.label ?? "Настройки")}</h1></div>
-        {section && <button type="button" className="button outline-button settings-return" onClick={props.returnToTab}><ArrowLeft size={15} />{" "}{t("К прежней вкладке")}</button>}
         {!section && <button type="button" className="button outline-button settings-reset" aria-label={t("Сбросить настройки")} onClick={props.reset} disabled={!props.libraryReady} title={t("Вернуть настройки по умолчанию")}><RotateCcw size={16} /> <span>{t("Сбросить настройки")}</span></button>}
       </header>
       <p className="settings-intro">{t(section?.detail ?? "Выберите раздел, чтобы настроить Luma под себя.")}</p>
@@ -244,11 +246,11 @@ export function SettingsPage(props: SettingsProps) {
           </>}
           {section?.id === 'now' && <>
             <SettingCard title={t("Экран «Сейчас играет»")}>
-              <NowPlayingOptions appearance={appearance} change={changeAppearance} />
+              <NowPlayingOptions appearance={appearance} change={changeAppearance} track={props.previewTrack} />
               <ToggleRow title={t("Цвет фона из обложки")} detail={t("Если выключено, фон использует акцент темы.")} enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
               <ToggleRow title={t("Реакция на музыку")} detail={t("Спектр и свет в некоторых фонах откликаются на локальный трек. При отключении остаётся обычная анимация.")} enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
               <label className="setting-row select-row"><span><strong>{t("Темп фона")}</strong><small>{t("Скорость анимации, не скорость песни.")}</small></span>
-                <select value={appearance.effectTempo} disabled={appearance.effect === 'off'} onChange={(event) => changeAppearance({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
+                <select value={appearance.effectTempo} disabled={appearance.effect === 'off' || appearance.effect === 'cover'} onChange={(event) => changeAppearance({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
                   {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select>
               </label>
@@ -319,12 +321,11 @@ export function SettingsPage(props: SettingsProps) {
                 <select value={appearance.widgetBackground} onChange={(event) => changeAppearance({ ...appearance, widgetBackground: event.currentTarget.value as WidgetBackground })}>
                   {Object.entries(WIDGET_BACKGROUNDS).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select></label>
-              <div className="desktop-widget widget-sample" aria-label={t("Предпросмотр фона виджета")} data-widget-background={appearance.widgetBackground} style={{ '--widget-tint': props.tint } as CSSProperties}>
-                {appearance.widgetBackground === 'blur' && <Artwork track={props.previewTrack} className="widget-backdrop" />}
+              <WidgetSurface track={props.previewTrack} tint={props.widgetTint} background={appearance.widgetBackground} label={t("Предпросмотр фона виджета")} preview>
                 <div className="widget-track"><Artwork track={props.previewTrack} /><div><strong>{props.previewTrack?.title ?? t("Ваша музыка")}</strong><small>{t("Предпросмотр виджета Luma")}</small></div><Play size={16} /></div>
-              </div>
+              </WidgetSurface>
               <div className="settings-actions">
-                {window.luma ? <button className="button outline-button" type="button" onClick={props.openWidget}><Monitor size={16} />{" "}{t("Открыть виджет Luma")}</button> : <span className="setting-status">{t("В приложении Windows")}</span>}
+                {window.luma ? <button className="button outline-button" type="button" onClick={props.openWidget} title={WIDGET_SHORTCUT.label} aria-keyshortcuts="Control+Shift+M"><Monitor size={16} />{" "}{t("Открыть виджет Luma")}</button> : <span className="setting-status">{t("В приложении Windows")}</span>}
               </div>
             </SettingCard>
             <SettingCard title={t("Системная медиапанель")}>
@@ -412,10 +413,28 @@ function FloatSettings({ requested, status, change }: { requested: boolean; stat
   </SettingCard>;
 }
 
+const LASTFM_ISSUES: Record<LastFmIssue, string> = {
+  authorize: 'Подтвердите доступ в браузере, затем завершите подключение.',
+  offline: 'Нет связи с API Last.fm. Проверьте сеть и попробуйте ещё раз.',
+  service: 'API Last.fm временно недоступен. Ключи менять не нужно — попробуйте позже.',
+  rate: 'Last.fm ограничил частоту запросов. Подождите и попробуйте снова.',
+  rejected: 'Last.fm не принял запрос. Попробуйте снова или сообщите код в поддержку.',
+  ignored: 'Last.fm получил запрос, но не засчитал это прослушивание.',
+  expired: 'Сессия Last.fm отозвана. Подключите аккаунт снова.',
+  tokenExpired: 'Ссылка для входа устарела. Откройте новую и снова разрешите доступ.',
+  credentials: 'Введите API Key и Shared Secret: по 32 шестнадцатеричных символа из одной записи Last.fm.',
+  key: 'Last.fm не принял API Key. Сверьте его со страницей API Accounts.',
+  signature: 'Last.fm не принял подпись. Сверьте Shared Secret и API Key из одной записи.',
+  suspended: 'Last.fm приостановил этот ключ. Проверьте статус в Last.fm API Accounts.',
+  storage: 'Не удалось обновить защищённое хранилище Last.fm.',
+  browser: 'Не удалось открыть Last.fm в браузере. Проверьте браузер по умолчанию.',
+};
+
 function LastFmSettings({ connected }: { connected: boolean }) {
   const t = useText();
   const bridge = window.luma?.lastfm;
   const [status, setStatus] = useState<LastFmStatus>();
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!bridge) return;
@@ -424,29 +443,54 @@ function LastFmSettings({ connected }: { connected: boolean }) {
     const unsubscribe = bridge.onChange(setStatus);
     return () => { current = false; unsubscribe(); };
   }, [bridge]);
-  function run(action: () => Promise<LastFmStatus>) {
+  function run(action: () => Promise<LastFmStatus>, success?: () => void) {
     setBusy(true);
-    void action().then(setStatus, () => setStatus((value) => value && { ...value, issue: 'offline' })).finally(() => setBusy(false));
+    void action().then((value) => {
+      setStatus(value);
+      if (!value.issue) success?.();
+    }, () => setStatus((value) => value && { ...value, issue: 'offline', apiCode: undefined })).finally(() => setBusy(false));
   }
-  const issues = { authorize: t("Подтвердите доступ в браузере, затем завершите подключение."), offline: t("Last.fm не ответил. Проверьте сеть."),
-    rejected: t("Last.fm не принял запрос. Проверьте настройки приложения и аккаунта."), expired: t("Сессия Last.fm отозвана. Подключите аккаунт снова.") };
-  return <Service title="Last.fm" status={status?.user ?? (bridge ? t("Не подключён") : t("В приложении Windows"))}>
-    <p>{t("Скробблинг выключен до вашего согласия. При включении Last.fm получит название, исполнителя, альбом, длительность и время начала трека. Демотреки не отправляются.")}</p>
-    {status && !status.configured && <p>{t("Создайте API-аккаунт и запустите Luma с переменными LUMA_LASTFM_API_KEY и LUMA_LASTFM_SECRET. Пошаговая инструкция — в репозитории.")}</p>}
+  const showFields = status && (!status.configured || editing);
+  return <Service title="Last.fm" status={status?.user ?? (bridge ? t('Не подключён') : t('В приложении Windows'))}>
+    <p>{t('Скробблинг выключен до вашего согласия. При включении Last.fm получит название, исполнителя, альбом, длительность и время начала трека. Демотреки не отправляются.')}</p>
+    {bridge && showFields && <form className="lastfm-form" autoComplete="off" onSubmit={(event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = new FormData(form);
+      const key = String(data.get('api-key') ?? ''), secret = String(data.get('shared-secret') ?? '');
+      form.reset();
+      run(() => bridge.configure(key, secret), () => setEditing(false));
+    }}>
+      <p>{t('Вставьте ключ и секрет своего API-аккаунта. Пароль Last.fm и Callback URL не нужны.')}</p>
+      <div className="lastfm-fields">
+        <label>API Key<input name="api-key" type="password" required maxLength={128} autoComplete="new-password" spellCheck={false} disabled={busy} /></label>
+        <label>Shared Secret<input name="shared-secret" type="password" required maxLength={128} autoComplete="new-password" spellCheck={false} disabled={busy} /></label>
+      </div>
+      <div className="settings-actions">
+        <button type="submit" className="button primary-button" disabled={busy}>{t(status.persistent ? 'Сохранить ключи' : 'Применить до закрытия Luma')}</button>
+        {!status.configured && <button className="button outline-button" type="button" disabled={busy || !connected} onClick={() => run(bridge.begin)}>{t('Создать API-аккаунт')}</button>}
+        {editing && <button className="text-button" type="button" disabled={busy} onClick={() => setEditing(false)}>{t('Отмена')}</button>}
+      </div>
+    </form>}
+    {status?.configuration === 'local' && <p>{t(status.persistent ? 'Ключи сохранены в защищённом хранилище этого устройства.' : 'Защищённое хранилище недоступно. Ключи и сессия останутся только до закрытия Luma.')}</p>}
+    {status?.configuration === 'environment' && <p>{t('Ключи получены из переменных запуска. Их можно сохранить прямо в Luma.')}</p>}
     {status?.user && <>
-      {!status.persistent && <p>{t("Системное хранилище недоступно. Сессия останется только до закрытия Luma.")}</p>}
-      <ToggleRow title={t("Отправлять прослушивания в Last.fm")} detail={t("Не менее половины трека или 4 минут. Перемотка не считается.")} enabled={status.enabled} disabled={busy} change={() => bridge && run(() => bridge.enable(!status.enabled))} />
+      {!status.persistent && status.configuration !== 'local' && <p>{t('Системное хранилище недоступно. Сессия останется только до закрытия Luma.')}</p>}
+      <ToggleRow title={t('Отправлять прослушивания в Last.fm')} detail={t('Не менее половины трека или 4 минут. Перемотка не считается.')} enabled={status.enabled} disabled={busy} change={() => bridge && run(() => bridge.enable(!status.enabled))} />
     </>}
-    {bridge && <div className="settings-actions">
-      {status?.user ? <button className="button outline-button" type="button" disabled={busy} onClick={() => run(bridge.disconnect)}>{t("Отключить Last.fm")}</button> : <>
-        <button className="button outline-button" type="button" disabled={busy || !connected || !status} onClick={() => run(bridge.begin)}>
-          {status?.configured ? status.waiting ? t("Открыть вход заново") : t("Подключить Last.fm") : t("Создать API-аккаунт")}
+    {bridge && status?.configured && !editing && <div className="settings-actions">
+      {status.user ? <button className="button outline-button" type="button" disabled={busy} onClick={() => run(bridge.disconnect)}>{t('Отключить Last.fm')}</button> : <>
+        <button className="button outline-button" type="button" disabled={busy || !connected} onClick={() => run(bridge.begin)}>
+          {t(status.waiting ? 'Открыть вход заново' : 'Подключить Last.fm')}
         </button>
-        {status?.waiting && <button className="button primary-button" type="button" disabled={busy || !connected} onClick={() => run(bridge.finish)}>{t("Завершить подключение")}</button>}
+        {status.waiting && <button className="button primary-button" type="button" disabled={busy || !connected} onClick={() => run(bridge.finish)}>{t('Завершить подключение')}</button>}
       </>}
+      <button className="text-button" type="button" disabled={busy} onClick={() => setEditing(true)}>{t('Изменить ключи')}</button>
+      {status.configuration === 'local' && <button className="text-button" type="button" disabled={busy} onClick={() => run(bridge.forgetCredentials)}>{t('Удалить ключи и отключить')}</button>}
     </div>}
-    {status?.waiting && !status.issue && <p role="status">{t("Разрешите Luma доступ на сайте Last.fm и вернитесь сюда.")}</p>}
-    {status?.issue && <p role="status">{issues[status.issue]}</p>}
+    {!connected && bridge && <p>{t('Для подключения и отправки прослушиваний нужна сеть.')}</p>}
+    {status?.waiting && !status.issue && <p role="status">{t('Разрешите Luma доступ на сайте Last.fm и вернитесь сюда.')}</p>}
+    {status?.issue && <p className="lastfm-issue" role="status">{t(LASTFM_ISSUES[status.issue])}{status.apiCode && <> <b>{t('Код Last.fm: {0}', status.apiCode)}</b></>}</p>}
   </Service>;
 }
 

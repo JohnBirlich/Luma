@@ -45,6 +45,8 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   const t = useText();
   const { track, tint, appearance, playing, favorite, close, karaoke } = props;
   const { hero, effect, effectStrength, motion } = appearance;
+  const backdropEffect = karaoke ? 'cover' : effect;
+  const artworkBackdrop = track.backdropUrl ?? track.artworkUrl;
   const ref = useRef<HTMLDialogElement>(null);
   const [karaokeQueue, setKaraokeQueue] = useState(false);
   const queueVisible = karaoke ? karaokeQueue : appearance.fullscreenQueue;
@@ -60,9 +62,11 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   }, []);
 
   return <dialog ref={ref} className="immersive-player" aria-labelledby="immersive-title" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <div ref={props.stage} data-effect={effect} className={`immersive-stage ${karaoke ? 'karaoke-stage' : `immersive-${hero}`}`} style={{ '--immersive-tone': tint } as CSSProperties}>
-      {appearance.coverColors && !karaoke && effect === 'off' && <Artwork track={track} className={`immersive-backdrop${hero === 'cover' ? ' immersive-cover-backdrop' : ''}`} imageUrl={track.backdropUrl} />}
-      <SceneBackground effect={effect} strength={karaoke ? effectStrength * .45 : effectStrength} tempo={appearance.effectTempo} animate={motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
+    <div ref={props.stage} data-effect={backdropEffect} className={`immersive-stage ${karaoke ? 'karaoke-stage' : `immersive-${hero}`}`} style={{ '--immersive-tone': tint } as CSSProperties}>
+      {!karaoke && effect !== 'cover' && artworkBackdrop && (hero === 'cover' || (appearance.coverColors && effect === 'off')) &&
+        <Artwork track={track} className="immersive-backdrop" imageUrl={artworkBackdrop} />}
+      <SceneBackground effect={backdropEffect} track={track} strength={karaoke ? .28 : effectStrength} tempo={appearance.effectTempo}
+        animate={!karaoke && motion && playing && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
       <div aria-hidden="true" className="immersive-scrim" />
       <header className="immersive-header">
         <button type="button" className="icon-button immersive-collapse" onClick={close} title={t("Свернуть (Esc)")} aria-label={t("Свернуть полноэкранный плеер")}><ChevronDown size={24} /></button>
@@ -78,24 +82,26 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
       </header>
       <div className="immersive-scroll">{karaoke ? <div className={`karaoke-grid${queueVisible ? ' karaoke-with-queue' : ''}`}>
         <div className="karaoke-card">
-          <div className="karaoke-track"><Artwork track={track} />
-            <div className="karaoke-meta"><h1 id="immersive-title" title={track.title}>{track.title}</h1><p title={track.artist}>{track.artist}</p>
-              {track.online && <OnlineCredit track={{ online: track.online }} />}</div>
-          </div>
-          <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} clock={props.clock} karaoke demo={track.demo} />
-          <div className="immersive-content karaoke-controls"><SeekTimeline {...props} /><TransportControls {...props} />
-            <div className="immersive-tools karaoke-tools">
-              <button type="button" className="icon-button" onClick={props.openEqualizer} aria-label={t('Эквалайзер')} title={t('Эквалайзер')} aria-haspopup="dialog"><SlidersHorizontal size={19} /></button>
-              <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />
-              {queueVisible && <button type="button" className="icon-button immersive-queue-jump" aria-label={t('Перейти к следующим трекам')} onClick={jumpToQueue}><ListMusic size={20} /></button>}
-              <VolumeControl {...props} />
+          <div className="karaoke-deck">
+            <div className="karaoke-track"><Artwork track={track} />
+              <div className="karaoke-meta"><h1 id="immersive-title" title={track.title}>{track.title}</h1><p title={track.artist}>{track.artist}</p>
+                {track.online && <OnlineCredit track={{ online: track.online }} />}</div>
+            </div>
+            <div className="immersive-content karaoke-controls"><SeekTimeline {...props} /><TransportControls {...props} />
+              <div className="immersive-tools karaoke-tools">
+                <button type="button" className="icon-button" onClick={props.openEqualizer} aria-label={t('Эквалайзер')} title={t('Эквалайзер')} aria-haspopup="dialog"><SlidersHorizontal size={19} /></button>
+                <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />
+                {queueVisible && <button type="button" className="icon-button immersive-queue-jump" aria-label={t('Перейти к следующим трекам')} onClick={jumpToQueue}><ListMusic size={20} /></button>}
+                <VolumeControl {...props} />
+              </div>
             </div>
           </div>
+          <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} clock={props.clock} karaoke demo={track.demo} />
         </div>
         {queueVisible && <UpcomingTracks tracks={props.upcoming} repeat={props.repeat} autoNext={props.autoNext} fullNumbers={appearance.fullNumbers} play={props.playUpcoming} />}
       </div> : <div className={`immersive-main${queueVisible ? ' immersive-with-queue' : ''}`}>
         <div className="immersive-art">
-          {hero === 'vinyl' ? <VinylRecord track={track} animate={motion && playing && props.sceneVisible} /> : <Artwork track={track} imageUrl={hero === 'cover' ? track.backdropUrl : undefined} />}
+          {hero === 'vinyl' ? <VinylRecord track={track} animate={motion && playing && props.sceneVisible} /> : <Artwork track={track} />}
         </div>
         <div className="immersive-content">
           <div className="immersive-meta">

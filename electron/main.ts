@@ -89,6 +89,8 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('lastfm:changed', status);
   };
   ipcMain.handle('lastfm:status', (event) => { appWindow(event); return lastfm.status(); });
+  ipcMain.handle('lastfm:configure', (event, key: unknown, secret: unknown) => { appWindow(event); return lastfm.configure(key, secret); });
+  ipcMain.handle('lastfm:forget', (event) => { appWindow(event); return lastfm.forgetCredentials(); });
   ipcMain.handle('lastfm:begin', (event) => { appWindow(event); return lastfm.begin((url) => shell.openExternal(url)); });
   ipcMain.handle('lastfm:finish', (event) => { appWindow(event); return lastfm.finish(); });
   ipcMain.handle('lastfm:enable', (event, enabled: unknown) => {
@@ -248,8 +250,9 @@ async function createWindow() {
   if (process.platform === 'win32' && app.isPackaged) {
     // Windows taskbar and native media clients can resolve the AppUserModelID to this name.
     // Keep the app origin unchanged so existing IndexedDB and localStorage survive updates.
-    owner.setAppDetails({ appId: APP_USER_MODEL_ID, relaunchDisplayName: APP_NAME, appIconPath: process.execPath,
-      relaunchCommand: `"${process.env.PORTABLE_EXECUTABLE_FILE || process.execPath}"` });
+    const launcher = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+    owner.setAppDetails({ appId: APP_USER_MODEL_ID, relaunchDisplayName: APP_NAME, appIconPath: launcher,
+      relaunchCommand: `"${launcher}"` });
   }
   owner.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   owner.webContents.on('will-frame-navigate', (event) => {

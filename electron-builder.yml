@@ -1,5 +1,6 @@
-appId: app.lumaplayer.desktop
+appId: LumaPlayer.exe
 productName: Luma Player
+executableName: LumaPlayer
 asar: true
 electronLanguages:
   - ru
@@ -24,6 +25,9 @@ win:
     - nsis
     - portable
 nsis:
+  # Preserve the upgrade/uninstall identity of app.lumaplayer.desktop.
+  guid: 05d31eca-e044-513b-8c10-678775f8445d
+  shortcutName: Luma Player
   installerLanguages:
     - ru_RU
   language: '1049'

@@ -17,6 +17,7 @@ import type { OnlineAction } from './OnlineMusic';
 import { ReleaseLink, useInstalledBuild } from './About';
 import { VkBookmarks } from './VkBookmarks';
 import type { BookmarkProps } from './VkBookmarks';
+import { useVisualMotion } from '../player/useVisualMotion';
 import './music-hub.css';
 
 const TABS = { home: 'Главная', mine: 'Моя музыка', browse: 'Обзор', radio: 'Радио', updates: 'Обновления' } as const;
@@ -49,6 +50,7 @@ interface HubProps extends BookmarkProps {
   playing: boolean;
   connected: boolean;
   visible: boolean;
+  motion: boolean;
   busy: boolean;
   play(id: string, toggleCurrent?: boolean): void;
   playMix(tracks: Track[]): void;
@@ -103,6 +105,7 @@ function Updates({ tracks, play, currentId, playing }: Pick<HubProps, 'tracks' |
 }
 
 export const MusicHub = memo(function MusicHub(props: HubProps) {
+  const liquid = useVisualMotion(props.visible && props.motion);
   const t = useText();
   const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary } = props;
   const [tab, setTab] = useState<Tab>('home');
@@ -196,7 +199,7 @@ export const MusicHub = memo(function MusicHub(props: HubProps) {
     </> : <>
       {tab === 'home' && <>
         <section className="hub-hero" aria-labelledby="hub-mix-title">
-          <div className="hub-gels" aria-hidden="true"><i /><i /><i /><i /></div>
+          <div className={`hub-liquid${liquid ? ' hub-liquid-moving' : ''}`} aria-hidden="true" />
           <div className="hub-hero-inner"><p className="overline hub-hero-kicker"><AudioLines size={14} /> {t('Музыка Luma')} <span /> {demoMix ? t('Демоколлекция') : t('На этом устройстве')}</p>
             <button type="button" className="hub-hero-play" onClick={() => mix(mixType)} disabled={!mixReady || props.busy} aria-label={t('Слушать микс Luma')}><Play size={24} fill="currentColor" /></button>
             <h1 id="hub-mix-title">{t('Слушать микс Luma')}</h1>

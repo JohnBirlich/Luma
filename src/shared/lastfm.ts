@@ -2,13 +2,17 @@ import type { Track } from './media.js';
 import { cleanTrackText } from './russian.js';
 
 export const LASTFM_GUIDE = 'https://www.last.fm/api/account/create';
+export type LastFmIssue = 'authorize' | 'offline' | 'rejected' | 'expired' | 'tokenExpired' | 'credentials' | 'storage'
+  | 'key' | 'signature' | 'suspended' | 'service' | 'rate' | 'browser' | 'ignored';
 export interface LastFmStatus {
   configured: boolean;
   persistent: boolean;
+  configuration?: 'local' | 'environment';
   user?: string;
   enabled: boolean;
   waiting?: boolean;
-  issue?: 'authorize' | 'offline' | 'rejected' | 'expired';
+  issue?: LastFmIssue;
+  apiCode?: number;
 }
 export interface ListeningEvent {
   kind: 'now' | 'scrobble';

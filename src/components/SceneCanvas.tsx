@@ -113,6 +113,51 @@ function drawMeteors(ctx: CanvasRenderingContext2D, w: number, h: number, t: num
   ctx.globalAlpha = 1;
 }
 
+const solarSparks = Array.from({ length: 56 }, () => ({
+  progress: scatter(), speed: .11 + scatter() * .12, glow: .4 + scatter() * .6,
+}));
+
+function solarPoint(a: number, b: number, c: number, d: number, u: number) {
+  const v = 1 - u;
+  return v ** 3 * a + 3 * v * v * u * b + 3 * v * u * u * c + u ** 3 * d;
+}
+
+/** Directional plasma, from the corona at right to the cooling tail at left. */
+function drawSolar(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, glow: number, filament: CanvasGradient) {
+  const start = .92 * w;
+  const end = -.07 * w;
+  ctx.lineCap = 'round';
+  for (let band = 0; band < 14; band++) {
+    const i = (band - 6.5) / 6.5;
+    const wave = Math.sin(t * .65 + i * 2.6);
+    const head = h * (.34 + i * .098);
+    const curl = h * (.03 + i * .2 + .11 * wave);
+    const tail = h * (1.18 + i * .36 + .16 * Math.sin(t * .49 + i * 2.8));
+    const bend = h * (1.01 + .55 * i - .20 * wave);
+    ctx.beginPath();
+    ctx.moveTo(start, head);
+    ctx.bezierCurveTo(w * .70, curl, w * .33, bend, end, tail);
+    ctx.strokeStyle = filament;
+    ctx.globalAlpha = (.15 + .10 * (1 - Math.abs(i))) * (1 + glow * .30);
+    ctx.lineWidth = Math.max(2, h * .010) * (band % 3 ? 1 : 1.75);
+    ctx.stroke();
+    ctx.globalAlpha = (.37 + .16 * (1 - Math.abs(i))) * (1 + glow * .32);
+    ctx.lineWidth = Math.max(.65, h * .0026);
+    ctx.stroke();
+    ctx.fillStyle = band % 3 ? '#ffcb86' : '#fff0c9';
+    for (let index = band; index < solarSparks.length; index += 14) {
+      const spark = solarSparks[index];
+      const age = fraction(spark.progress + t * spark.speed);
+      const x = solarPoint(start, w * .70, w * .33, end, age);
+      const y = solarPoint(head, curl, bend, tail, age);
+      ctx.globalAlpha = spark.glow * Math.sin(Math.PI * age) * (1 - .62 * age);
+      const size = Math.max(1.1, h * (.003 + .004 * spark.glow));
+      ctx.fillRect(x, y, size * (1.9 + glow), size);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawPulse(ctx: CanvasRenderingContext2D, w: number, h: number, onsets: number[], now: number, kick: number, halo: CanvasGradient) {
   const radius = Math.min(h, w) * .13;
   const cx = w * .65, cy = h * .49;
@@ -133,7 +178,7 @@ function drawPulse(ctx: CanvasRenderingContext2D, w: number, h: number, onsets: 
 }
 
 /** A single bounded surface for scenes whose geometry changes each frame. */
-export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'fireworks' | 'pulse' | 'rain' | 'meteors'; tempo: number; sample?: ReadSpectrum }) {
+export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'fireworks' | 'pulse' | 'rain' | 'meteors' | 'solar'; tempo: number; sample?: ReadSpectrum }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const speed = useRef(tempo);
   speed.current = tempo;
@@ -151,6 +196,7 @@ export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'f
     let raf = 0, last = 0, previous = 0, t = 0;
     let palettes: CanvasGradient[] = [];
     let pulseHalo: CanvasGradient | undefined;
+    let solarFilament: CanvasGradient | undefined;
     const resize = new ResizeObserver(([{ contentRect }]) => {
       period = 1000 / sceneFps(compactScene(contentRect.width, contentRect.height), reactive);
       const { width, height } = sceneBufferSize(contentRect.width, contentRect.height, devicePixelRatio);
@@ -160,6 +206,11 @@ export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'f
       if (effect === 'pulse') {
         pulseHalo = ctx.createRadialGradient(width * .65, height * .49, 0, width * .65, height * .49, .43 * Math.min(width, height));
         pulseHalo.addColorStop(0, '#f1c9face'); pulseHalo.addColorStop(.28, '#b883e371'); pulseHalo.addColorStop(1, '#853ae500');
+      }
+      if (effect === 'solar') {
+        solarFilament = ctx.createLinearGradient(0, 0, width, height * .36);
+        solarFilament.addColorStop(0, '#71267c00'); solarFilament.addColorStop(.27, '#c95dba38');
+        solarFilament.addColorStop(.63, '#f97c71ad'); solarFilament.addColorStop(.86, '#ffab63f4'); solarFilament.addColorStop(1, '#fff2bfe8');
       }
       if (effect === 'spectrum') palettes = ['#ab9dff', '#6ad9f7', '#e09abf'].map((color) => {
         const gradient = ctx.createLinearGradient(0, height, 0, height * .09);
@@ -183,6 +234,12 @@ export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'f
         if (effect === 'fireworks') fireworks(ctx, width, height, t + 1.05);
         else if (effect === 'rain') drawRain(ctx, width, height, t);
         else if (effect === 'meteors') drawMeteors(ctx, width, height, t);
+        else if (effect === 'solar' && solarFilament) {
+          const live = sample?.(bins);
+          if (live) sampleBeat(beat, bins, now / 1000);
+          else beat.kick *= .88;
+          drawSolar(ctx, width, height, t, beat.kick, solarFilament);
+        }
         else if (effect === 'pulse' && pulseHalo) {
           const seconds = now / 1000;
           const live = sample?.(bins);

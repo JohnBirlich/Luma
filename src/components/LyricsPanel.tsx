@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useId, useLayoutEffect, useRef, useState } from 'react';
 import { AlignLeft, FileUp, Music2 } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { TrackLyrics } from '../player/useTrackLyrics';
@@ -14,7 +14,7 @@ const TimedText = memo(function TimedText({ lines, elapsed, clock, follow }: {
   const scroll = useRef<HTMLDivElement>(null);
   const line = useRef<HTMLParagraphElement>(null);
   const [liveIndex, setLiveIndex] = useState(() => activeLyricLine(lines, elapsed));
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!clock) return;
     const update = () => { if (!document.hidden) setLiveIndex(activeLyricLine(lines, clock())); };
     update();
@@ -29,7 +29,8 @@ const TimedText = memo(function TimedText({ lines, elapsed, clock, follow }: {
     // Do not fight a user's text selection; the next line can resume following.
     const selection = window.getSelection();
     if (selection && !selection.isCollapsed && pane.contains(selection.anchorNode)) return;
-    pane.scrollTop = item ? item.offsetTop - pane.clientHeight * .36 + item.offsetHeight / 2 : 0;
+    pane.scrollTop = item ? pane.scrollTop + item.getBoundingClientRect().top - pane.getBoundingClientRect().top
+      - pane.clientHeight * .36 + item.offsetHeight / 2 : 0;
   }, [current, lines, follow]);
   return <div className="lyrics-scroll lyrics-timed" ref={scroll} tabIndex={0} role="region" aria-label={t('Строки песни')}>
     {lines.map(({ time, text }, index) => <p key={`${time}-${index}`} ref={index === current ? line : undefined}

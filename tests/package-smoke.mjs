@@ -22,11 +22,13 @@ try {
   const config = await readFile(join(root, 'electron-builder.yml'), 'utf8');
   assert.ok(config.split(/\r?\n/).includes(`appId: ${APP_USER_MODEL_ID}`), 'runtime and installer app IDs agree');
   assert.ok(config.split(/\r?\n/).includes(`productName: ${APP_NAME}`), 'runtime and installer product names agree');
+  assert.ok(config.split(/\r?\n/).includes(`executableName: ${APP_USER_MODEL_ID.slice(0, -4)}`), 'media source identifies the running executable');
+  assert.match(config, /guid: 05d31eca-e044-513b-8c10-678775f8445d/, 'the installer updates 0.13 in place');
   if (process.platform === 'win32') {
     assert.ok((await stat(join(directory, 'win-unpacked', 'resources', 'audio', 'LumaFloat.exe'))).isFile());
     const metadata = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
       '(Get-Item -LiteralPath $env:LUMA_TEST_EXE).VersionInfo | Select-Object ProductName,FileDescription | ConvertTo-Json -Compress'], {
-      env: { ...process.env, LUMA_TEST_EXE: join(directory, 'win-unpacked', `${APP_NAME}.exe`) }, encoding: 'utf8', windowsHide: true, timeout: 15_000,
+      env: { ...process.env, LUMA_TEST_EXE: join(directory, 'win-unpacked', APP_USER_MODEL_ID) }, encoding: 'utf8', windowsHide: true, timeout: 15_000,
     });
     assert.deepEqual(JSON.parse(metadata), { ProductName: APP_NAME, FileDescription: APP_NAME });
   }

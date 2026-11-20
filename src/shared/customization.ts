@@ -5,6 +5,7 @@ export const THEMES = {
   ocean: { name: 'Океан', accent: '#8ecffc', chrome: '#101620', side: '#121a27', panel: '#162233', raised: '#1c2c41', glow: '#22354d', stage: '#121c2a' },
   violet: { name: 'Сирень', accent: '#ceb1fb', chrome: '#17111f', side: '#1a1424', panel: '#221a30', raised: '#2f233f', glow: '#362744', stage: '#1e172a' },
   pine: { name: 'Хвоя', accent: '#a4dfb4', chrome: '#111a17', side: '#131f1b', panel: '#182823', raised: '#20352e', glow: '#274237', stage: '#16241f' },
+  macos: { name: 'MacOS', accent: '#b52252', chrome: '#eff4fa', side: '#e9edf7', panel: '#fafbff', raised: '#f6f8fc', glow: '#dde4fc', stage: '#eef2f9' },
 } as const;
 
 export const ACCENTS = [
@@ -14,13 +15,17 @@ export const ACCENTS = [
 ] as const;
 
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
-export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors'] as const;
+export const BACKGROUND_EFFECTS = ['off', 'cover', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors'] as const;
 export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
 export const START_PAGES = ['player', 'library', 'local', 'search', 'music'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
 export const CROSSFADE_TIMES = [0, 2, 4, 6, 8] as const;
 export const DATA_LANGUAGES = { system: 'Системный', 'ru-RU': 'Русский', 'en-US': 'English', 'de-DE': 'Deutsch' } as const;
-export const WIDGET_BACKGROUNDS = { blur: 'Размытый', cover: 'Цвет обложки', white: 'Белый', dark: 'Тёмный', black: 'Чёрный' } as const;
+export const WIDGET_BACKGROUNDS = {
+  blur: 'Размытый', album: 'Обложка альбома', cover: 'Цвет обложки', glass: 'Матовое стекло',
+  aurora: 'Северное сияние', paper: 'Тёплый свет', white: 'Белый', dark: 'Тёмный', black: 'Чёрный',
+} as const;
+export const WIDGET_SHORTCUT = { label: 'Ctrl + Shift + M', code: 'KeyM' } as const;
 export type CrossfadeTime = typeof CROSSFADE_TIMES[number];
 export type DataLanguage = keyof typeof DATA_LANGUAGES;
 export type WidgetBackground = keyof typeof WIDGET_BACKGROUNDS;
@@ -155,18 +160,19 @@ export function contrastRatio(a: string, b: string) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-const lighten = (hex: string, amount: number) => `#${rgb(hex)
-  .map((byte) => Math.round(byte + (255 - byte) * amount).toString(16).padStart(2, '0')).join('')}`;
+const tintToward = (hex: string, target: 0 | 255, amount: number) => `#${rgb(hex)
+  .map((byte) => Math.round(byte + (target - byte) * amount).toString(16).padStart(2, '0')).join('')}`;
 
-/** Preserve the selected hue, lightening dark custom accents against app surfaces when necessary. */
+/** Preserve the selected hue while keeping custom accents legible on either material. */
 export function accentFor(appearance: Appearance): string {
   const theme = THEMES[appearance.theme];
   const base = isHexColor(appearance.accent) ? appearance.accent : theme.accent;
+  const target = appearance.theme === 'macos' ? 0 : 255;
   for (let step = 0; step <= 20; step++) {
-    const candidate = step === 0 ? base : lighten(base, step / 20);
+    const candidate = step === 0 ? base : tintToward(base, target, step / 20);
     if (contrastRatio(candidate, theme.raised) >= 4.5) return candidate;
   }
-  return '#ffffff';
+  return target === 0 ? '#000000' : '#ffffff';
 }
 
 export function themeVariables(appearance: Appearance) {
@@ -175,7 +181,7 @@ export function themeVariables(appearance: Appearance) {
   return {
     '--chrome-bg': theme.chrome, '--sidebar-bg': theme.side, '--panel-bg': theme.panel, '--raised-bg': theme.raised,
     '--stage-bg': theme.stage, '--stage-glow': theme.glow,
-    '--accent': accent, '--accent-light': lighten(accent, 0.25),
+    '--accent': accent, '--accent-light': tintToward(accent, appearance.theme === 'macos' ? 0 : 255, 0.20),
     '--accent-ink': contrastRatio(accent, '#151419') >= contrastRatio(accent, '#ffffff') ? '#151419' : '#ffffff',
   };
 }
