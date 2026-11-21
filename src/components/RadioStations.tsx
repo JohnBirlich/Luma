@@ -64,21 +64,22 @@ export function RadioStations({ saved, activeId, playing, loading, connected, bu
   return <div className="radio-shelves">
     <section className="hub-shelf" aria-labelledby="radio-added"><header className="hub-shelf-head"><h2 id="radio-added"><Radio size={18} />{t('Добавленные')}</h2>
       <span className="hub-badge">{added.length}</span></header>
-      {added.length ? tiles(added) : <p>{t('Нажмите «+» на карточке станции, чтобы она появилась здесь.')}</p>}
+      {added.length ? tiles(added) : <p className="hub-note">{t('Нажмите «+» на карточке станции, чтобы она появилась здесь.')}</p>}
     </section>
     <section className="hub-shelf" aria-labelledby="radio-stations"><header className="hub-shelf-head"><div><h2 id="radio-stations">{t('Радиостанции')}</h2>
       <p>{t('{0} в Luma · {1} в браузере', nativeCount, RADIO_DIRECTORY.length - nativeCount)}</p></div><span className="hub-badge">{RADIO_DIRECTORY.length}</span></header>
-      <p>{t('Прямые эфиры вещателей. Без перемотки и скачивания. Доступность зависит от сети и станции.')}</p>
+      <p className="hub-note">{t('Прямые эфиры вещателей. Без перемотки и скачивания. Доступность зависит от сети и станции.')}</p>
       {!connected && <p className="online-offline" role="status">{t('Для эфира нужно подключение к интернету.')}</p>}
-      <div className="radio-search library-search"><Search size={16} aria-hidden="true" /><input type="search" value={query} maxLength={120}
-        aria-label={t('Найти радиостанцию')} placeholder={t('Найти радиостанцию')} onChange={(event) => setQuery(event.currentTarget.value)} />
-        {query && <button className="icon-button" type="button" aria-label={t('Очистить поиск')} onClick={() => setQuery('')}><X size={15} /></button>}</div>
-      <div className="hub-chips" role="group" aria-label={t('Где слушать')}>
-        {(Object.keys(modes) as (keyof typeof modes)[]).map((id) => <button type="button" key={id} aria-pressed={mode === id} onClick={() => setMode(id)}>{t(modes[id])}</button>)}
-      </div>
-      <div className="hub-chips" role="group" aria-label={t('Жанры радио')}>
-        {(Object.keys(RADIO_GENRES) as (keyof typeof RADIO_GENRES)[]).map((id) =>
-          <button type="button" key={id} aria-pressed={genre === id} onClick={() => setGenre(id)}>{t(RADIO_GENRES[id])}</button>)}
+      <div className="radio-controls">
+        <div className="radio-search library-search"><Search size={16} aria-hidden="true" /><input type="search" value={query} maxLength={120}
+          aria-label={t('Найти радиостанцию')} placeholder={t('Найти радиостанцию')} onChange={(event) => setQuery(event.currentTarget.value)} />
+          {query && <button className="icon-button" type="button" aria-label={t('Очистить поиск')} onClick={() => setQuery('')}><X size={15} /></button>}</div>
+        <select aria-label={t('Где слушать')} value={mode} onChange={(event) => setMode(event.currentTarget.value as keyof typeof modes)}>
+          {Object.entries(modes).map(([id, label]) => <option value={id} key={id}>{t(label)}</option>)}
+        </select>
+        <select aria-label={t('Жанры радио')} value={genre} onChange={(event) => setGenre(event.currentTarget.value as keyof typeof RADIO_GENRES)}>
+          {Object.entries(RADIO_GENRES).map(([id, label]) => <option value={id} key={id}>{t(label)}</option>)}
+        </select>
       </div>
       {directory.length > 0 && tiles(directory)}
       {extras.length > 0 && <div className="station-extras"><h3>{t('Каналы Record и SomaFM')}</h3>{tiles(extras)}</div>}

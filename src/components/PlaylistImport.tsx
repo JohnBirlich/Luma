@@ -129,16 +129,17 @@ export function PlaylistImport({ collection, save, close }: {
             <span className="playlist-match" data-status={status}>{t(IMPORT_STATUS[status])}</span>
           </li>)}
         </ol>
-        {preview.rows.length > PAGE_SIZE && <div className="playlist-import-pager">
-          <button type="button" className="icon-button" aria-label={t('Предыдущая страница')} disabled={page === 0} onClick={() => setPage(page - 1)}><ChevronLeft size={18} /></button>
-          <span>{page + 1} / {Math.ceil(preview.rows.length / PAGE_SIZE)}</span>
-          <button type="button" className="icon-button" aria-label={t('Следующая страница')} disabled={(page + 1) * PAGE_SIZE >= preview.rows.length} onClick={() => setPage(page + 1)}><ChevronRight size={18} /></button>
-        </div>}
+
       </>}
       {error && <p className="hub-error" role="alert">{t(error)}</p>}
     </div>
     <footer className="playlist-import-foot">
       {source && <button type="button" className="button outline-button" onClick={goBack}><ArrowLeft size={16} />{t('Назад')}</button>}
+      {preview && preview.rows.length > PAGE_SIZE && <div className="playlist-import-pager">
+          <button type="button" className="icon-button" aria-label={t('Предыдущая страница')} disabled={page === 0} onClick={() => { setPage(page - 1); body.current?.scrollTo({ top: 0 }); }}><ChevronLeft size={18} /></button>
+          <span aria-live="polite">{page + 1} / {Math.ceil(preview.rows.length / PAGE_SIZE)}</span>
+          <button type="button" className="icon-button" aria-label={t('Следующая страница')} disabled={(page + 1) * PAGE_SIZE >= preview.rows.length} onClick={() => { setPage(page + 1); body.current?.scrollTo({ top: 0 }); }}><ChevronRight size={18} /></button>
+        </div>}
       {preview && <button type="button" className="button primary-button" disabled={!playlistTitle(title) || !preview.items.length} onClick={() => {
         if (!save(title, preview.items)) setError('Не удалось сохранить плейлист. Проверьте лимит плейлистов.');
       }}>{t('Сохранить плейлист')}</button>}

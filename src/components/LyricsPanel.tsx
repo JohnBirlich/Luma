@@ -1,5 +1,6 @@
 import { memo, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { AlignLeft, FileUp, Music2 } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { TrackLyrics } from '../player/useTrackLyrics';
@@ -47,7 +48,7 @@ const TimedText = memo(function TimedText({ lines, elapsed, clock, follow, layou
 });
 
 export function LyricsPanel({ state, elapsed, clock, karaoke, demo = false }: {
-  state: TrackLyrics; elapsed: number; clock?: () => number; karaoke?: { style: KaraokeStyle; change(style: KaraokeStyle): void }; demo?: boolean;
+  state: TrackLyrics; elapsed: number; clock?: () => number; karaoke?: { style: KaraokeStyle; change(style: KaraokeStyle): void; tools: HTMLElement | null }; demo?: boolean;
 }) {
   const t = useText();
   const id = useId();
@@ -77,9 +78,10 @@ export function LyricsPanel({ state, elapsed, clock, karaoke, demo = false }: {
     style={karaoke && { '--karaoke-size': `${karaoke.style.size}px`, '--karaoke-weight': karaoke.style.weight,
       '--karaoke-spacing': `${karaoke.style.spacing}px`, '--karaoke-align': karaoke.style.align } as CSSProperties}>
     <header><AlignLeft size={19} aria-hidden="true" /><div><h2 id={id}>{t('Текст песни')}</h2><p>{description}{timing && ` · ${timing}`}</p></div>
-      {karaoke ? <KaraokeTextSettings {...karaoke} state={state} versions={versions} hasTiming={lines.length > 0} follow={follow} setFollow={setFollow}
-        openFile={openFile} removeAttachment={state.clear} /> : search}
+      {!karaoke && search}
     </header>
+    {karaoke?.tools && createPortal(<KaraokeTextSettings style={karaoke.style} change={karaoke.change} state={state} versions={versions}
+      hasTiming={lines.length > 0} follow={follow} setFollow={setFollow} openFile={openFile} removeAttachment={state.clear} />, karaoke.tools)}
     {lines.length > 0 ? <TimedText lines={lines} elapsed={elapsed} clock={clock} follow={follow} layout={karaoke?.style} />
       : lyrics?.plain ? <div className="lyrics-scroll lyrics-plain" tabIndex={0} role="region" aria-label={t('Текст песни')}>{lyrics.plain}</div>
       : <div className="lyrics-empty">

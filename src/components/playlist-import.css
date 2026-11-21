@@ -32,6 +32,10 @@
 .playlist-match { max-width: 47%; overflow-wrap: anywhere; padding: 4px 6px; border-radius: 7px; background: var(--panel-bg); color: var(--muted); font-size: 11px; }
 .playlist-match[data-status='match'] { color: var(--accent-light); background: var(--accent-fill); }
 .playlist-import-pager, .playlist-import-foot { display: flex; align-items: center; gap: 8px; }
-.playlist-import-pager { justify-self: center; font-size: 12px; }
+.playlist-import-pager { gap: 4px; font-size: 12px; white-space: nowrap; }
 .playlist-import-pager > button { width: 30px; height: 30px; }
 .playlist-import-foot:not(:empty) { justify-content: space-between; flex-wrap: wrap; padding-top: 11px; }
+
+@media (max-width: 440px) {
+  .playlist-import-pager { order: -1; width: 100%; justify-content: center; }
+}

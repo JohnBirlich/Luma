@@ -53,6 +53,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   const artworkBackdrop = track.backdropUrl ?? track.artworkUrl;
   const ref = useRef<HTMLDialogElement>(null);
   const [karaokeQueue, setKaraokeQueue] = useState(false);
+  const [karaokeTools, setKaraokeTools] = useState<HTMLDivElement | null>(null);
   const queueVisible = karaoke ? karaokeQueue : appearance.fullscreenQueue;
   function jumpToQueue() {
     const panel = ref.current?.querySelector<HTMLElement>('#immersive-upcoming');
@@ -81,7 +82,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
           <button type="button" className="icon-button immersive-queue-toggle" onClick={karaoke ? () => setKaraokeQueue(!karaokeQueue) : props.toggleQueue}
             aria-expanded={queueVisible} aria-controls={queueVisible ? 'immersive-upcoming' : undefined} aria-label={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}
             title={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}><ListMusic size={20} /></button>
-          {!karaoke && <div className="immersive-brand" aria-hidden="true"><AudioLines size={19} /><span>Luma Player</span></div>}
+          {karaoke ? <div ref={setKaraokeTools} /> : <div className="immersive-brand" aria-hidden="true"><AudioLines size={19} /><span>Luma Player</span></div>}
         </div>
       </header>
       <div className="immersive-scroll">{karaoke ? <div className={`karaoke-grid${queueVisible ? ' karaoke-with-queue' : ''}`}>
@@ -100,7 +101,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
               </div>
             </div>
           </div>
-          <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} clock={props.clock} karaoke={{ style: props.karaokeStyle, change: props.changeKaraokeStyle }} demo={track.demo} />
+          <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} clock={props.clock} karaoke={{ style: props.karaokeStyle, change: props.changeKaraokeStyle, tools: karaokeTools }} demo={track.demo} />
         </div>
         {queueVisible && <UpcomingTracks tracks={props.upcoming} repeat={props.repeat} autoNext={props.autoNext} fullNumbers={appearance.fullNumbers} play={props.playUpcoming} />}
       </div> : <div className={`immersive-main${queueVisible ? ' immersive-with-queue' : ''}`}>

@@ -160,6 +160,7 @@ export default function App() {
   const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance || importPlaylist);
   const { kind: presentationKind, show: showStage, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
   const presentationOpen = presentationKind !== null;
+  const karaokeOpen = presentationKind === 'karaoke' && !live;
   const showPresentation = useCallback(() => showStage('player'), [showStage]);
   const showKaraoke = useCallback(() => { if (!live) showStage('karaoke'); }, [showStage, live]);
   const trackStarted = useCallback((id: string) => setPreferences((data) => {
@@ -169,7 +170,7 @@ export default function App() {
   }), []);
   const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
-  const lyrics = useTrackLyrics(live ? null : current, { enabled: !widget && (presentationKind === 'karaoke' || (!presentationOpen && page === 'player' && homeTab === 'home' && !homeQuery.trim())),
+  const lyrics = useTrackLyrics(live ? null : current, { enabled: !widget && (karaokeOpen || (!presentationOpen && page === 'player' && homeTab === 'home' && !homeQuery.trim())),
     auto: preferences.autoLyrics, connected, playing: player.playing, duration: player.duration });
   const changeWidget = useCallback(async (enabled: boolean) => {
     if (!window.luma || switchingWidget.current || presentationOpen) return;
@@ -732,9 +733,9 @@ export default function App() {
       {widget ? <DesktopWidget track={current} tint={sampledTone} background={appearance.widgetBackground} controls={localControls} pending={widgetPending} restore={() => { void changeWidget(false); }} />
       : <PlayerBar {...localControls} track={current} classic={!glass && appearance.classicDock}
         goToPlayer={() => { navigate('player'); scrollArea.current?.scrollTo({ top: 0 }); }} openPresentation={showPresentation} openKaraoke={showKaraoke} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
-      {presentationKind && current && !widget && <FullscreenPlayer {...localControls} karaoke={presentationKind === 'karaoke'} lyrics={lyrics} clock={player.playing ? position : undefined}
+      {presentationKind && current && !widget && <FullscreenPlayer {...localControls} karaoke={karaokeOpen} lyrics={lyrics} clock={player.playing ? position : undefined}
         karaokeStyle={preferences.karaokeStyle} changeKaraokeStyle={(karaokeStyle) => setPreferences((data) => ({ ...data, karaokeStyle }))}
-        toggleKaraoke={presentationKind === 'karaoke' ? showPresentation : showKaraoke} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={effectiveAppearance}
+        toggleKaraoke={karaokeOpen ? showPresentation : showKaraoke} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={effectiveAppearance}
         favorite={(live ? stationIds : favoriteIds).has(current.id)} disliked={dislikedIds.has(current.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
         toggleQueue={() => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, fullscreenQueue: !data.appearance.fullscreenQueue } }))}
         openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} />}

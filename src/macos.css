@@ -234,7 +234,7 @@
 }
 [data-layout='glass'] .karaoke-track .artwork { border-color: var(--glass-edge); box-shadow: 0 22px 56px #38417143; }
 [data-layout='glass'] .karaoke-meta > p { color: var(--muted); }
-[data-layout='glass'] .karaoke-settings-toggle { color: var(--accent-light); background: var(--glass-lens); border-color: var(--glass-edge); }
+[data-layout='glass'] .immersive-header .karaoke-settings-toggle { color: var(--accent-light); background: var(--glass-lens); border-color: var(--glass-edge); }
 [data-layout='glass'] .karaoke-stage .immersive-queue-toggle[aria-expanded='true'] { background: var(--accent-fill); }
 [data-layout='glass'] .desktop-widget { border-radius: 23px; }
 [data-layout='glass'] .desktop-widget:not([data-widget-background='white'],[data-widget-background='paper'],[data-widget-background='liquid']) { --accent: #dce7ff; --accent-light: #e9efff; --accent-ink: #1b2852; }
