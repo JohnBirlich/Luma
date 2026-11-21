@@ -735,9 +735,26 @@ async function smoke() {
     assert.ok(streamCalls.includes(storageStream));
     await go('Главная');
     await waitFor('Audius does not offer lyrics or saved listening actions', () => run(`document.querySelector('.hero h2')?.textContent === 'Siberian Jazz'
-      && document.querySelector('.hero-karaoke')?.disabled && !document.querySelector('.lyrics-panel')`));
+      && document.querySelector('.hero-karaoke')?.disabled && !document.querySelector('.lyrics-card')`));
+    assert.ok(!lyricQueries.some(({ track_name }) => track_name === audiusRecording.title));
     await go('Поиск');
-    await waitFor('catalog search restored', () => run(`!!document.querySelector(${JSON.stringify(playOnline)})`));
+    const searchField = 'main input[type="search"]';
+    const manualSearch = '.catalog-controls button[aria-label="Искать во всех каталогах"]';
+    const autoSearch = '.catalog-controls input[type="checkbox"]';
+    await waitFor('catalog search ready', () => run(`!!document.querySelector('${searchField}')`));
+    await click(autoSearch);
+    const beforeManualSearch = catalogCalls.length;
+    await fill(searchField, 'manual first');
+    await delay(800);
+    assert.equal(catalogCalls.length, beforeManualSearch);
+    await click(manualSearch);
+    await waitFor('manual search made a request', () => catalogCalls.length === beforeManualSearch + 1);
+    await fill(searchField, 'manual second');
+    await delay(800);
+    assert.equal(catalogCalls.length, beforeManualSearch + 1, 'editing a submitted term must not send another request');
+    await click(autoSearch);
+    await fill(searchField, 'jazz');
+    await waitFor('catalog results visible again', () => run(`!!document.querySelector(${JSON.stringify(playOnline)})`));
     assert.doesNotMatch(JSON.stringify(await preferences()), /audius-|DX0Xb|Siberian Jazz|cidstream/);
     const partialAudius = await run(`(async () => {
       const response = await fetch(${JSON.stringify(ephemeralUrl)}, { headers: { Range: 'bytes=24-31' } });
