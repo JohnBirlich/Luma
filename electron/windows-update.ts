@@ -21,10 +21,10 @@ function releaseAssetRedirect(value: string | null) {
 }
 
 const checkSignature = promisify(execFile);
-const verifyScript = `
+const verifyScript = String.raw`
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$info = Microsoft.PowerShell.Security\u005cGet-AuthenticodeSignature -LiteralPath $env:LUMA_SIGNATURE_FILE
+$info = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $env:LUMA_SIGNATURE_FILE
 if ($info.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $info.SignerCertificate) { exit 1 }
 [Convert]::ToBase64String($info.SignerCertificate.RawData)
 `;

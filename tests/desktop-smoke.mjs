@@ -144,8 +144,20 @@ async function smoke() {
   if (process.platform === 'win32') {
     const system = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
     const powershell = join(system, 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    const verificationFixture = execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command',
-      `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; foreach ($file in @($PSHOME+'\\powershell.exe', $env:SystemRoot+'\\System32\\cmd.exe', $env:SystemRoot+'\\System32\\notepad.exe')) { $sig=Get-AuthenticodeSignature -LiteralPath $file; if ($sig.Status -eq 'Valid' -and $sig.SignerCertificate) { @{ path=$file; cert=[Convert]::ToBase64String($sig.SignerCertificate.RawData) } | ConvertTo-Json -Compress; exit 0 } }; exit 1`], {
+    const signatureFixtureScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$files = @((Join-Path $PSHOME 'powershell.exe'), (Join-Path $env:SystemRoot 'System32\cmd.exe'), (Join-Path $env:SystemRoot 'System32\notepad.exe'))
+foreach ($file in $files) {
+  $sig = Get-AuthenticodeSignature -LiteralPath $file
+  if ($sig.Status -eq 'Valid' -and $sig.SignerCertificate) {
+    @{ path = $file; cert = [Convert]::ToBase64String($sig.SignerCertificate.RawData) } | ConvertTo-Json -Compress
+    exit 0
+  }
+}
+throw 'No valid Windows signature fixture found'
+`;
+    const verificationFixture = execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(signatureFixtureScript, 'utf16le').toString('base64')], {
       encoding: 'utf8', windowsHide: true, timeout: 45_000,
     });
     const { path: signedFile, cert } = JSON.parse(verificationFixture);
