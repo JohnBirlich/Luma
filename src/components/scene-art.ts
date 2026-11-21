@@ -156,6 +156,54 @@ export function drawSpectrum(ctx: CanvasRenderingContext2D, w: number, h: number
   ctx.restore();
 }
 
+// The logarithmic frequency columns and colors of the original Spectrum scene.
+const bandEdges = [1, 2, 3, 4, 6, 8, 11, 15, 21, 29, 40, 55, 76, 105, 144, 202, 279, 393];
+const idleBars = [.26,.36,.34,.5,.64,.6,.84,.9,.8,.68,.64,.71,.5,.43,.49,.28,.22];
+export const spectrumColumns = () => new Float32Array(bandEdges.length - 1);
+interface ColumnSample { time: number; bins?: Uint8Array }
+
+/** Read band peaks from the Web Audio analyser. On pause, ease each bar back to a short baseline. */
+export function advanceColumns(bars: Float32Array, dt: number, sample?: ColumnSample) {
+  const attack = -Math.expm1(-24 * dt), release = -Math.expm1(-9 * dt);
+  for (let i = 0; i < bars.length; i++) {
+    let target = 0;
+    if (sample?.bins) {
+      let energy = 0;
+      for (let bin = bandEdges[i]; bin < bandEdges[i + 1]; bin++) energy = Math.max(energy, sample.bins[bin] ?? 0);
+      target = .84 * (energy / 255) ** 1.22;
+    } else if (sample) {
+      target = idleBars[i] * (.74 + .19 * Math.sin(sample.time * (2.35 + i * .11) + i * .88));
+    }
+    const value = bars[i] + (target - bars[i]) * (target > bars[i] ? attack : release);
+    bars[i] = value > .001 ? value : 0;
+  }
+}
+
+export function columnPalettes(ctx: CanvasRenderingContext2D, height: number) {
+  return ['#ab9dff', '#6ad9f7', '#e09abf'].map((color) => {
+    const gradient = ctx.createLinearGradient(0, height, 0, height * .09);
+    gradient.addColorStop(0, `${color}09`);
+    gradient.addColorStop(.69, `${color}bf`);
+    gradient.addColorStop(1, '#fff5eb');
+    return { gradient, color };
+  });
+}
+
+export function drawColumns(ctx: CanvasRenderingContext2D, w: number, h: number, bars: Float32Array, palette: ReturnType<typeof columnPalettes>) {
+  const slot = w * .89 / bars.length, base = h * .92;
+  const tip = Math.max(1, h * .0035);
+  ctx.save();
+  for (let i = 0; i < bars.length; i++) {
+    const { color, gradient } = palette[i % palette.length];
+    const x = w * .055 + i * slot, bar = Math.max(tip, (bars[i] + .025) * base);
+    ctx.fillStyle = gradient; ctx.fillRect(x, base - bar, slot * .70, bar);
+    ctx.globalAlpha = .56 + .40 * Math.min(1, bars[i] * 3);
+    ctx.fillStyle = color; ctx.fillRect(x, base - bar, slot * .70, tip);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
 export function drawOrbits(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
   const r = Math.min(h * .252, w * .22), x = w * .66, y = h * .52;
   const angle = -.27 + .11 * Math.sin(t * .33), tilt = .39 + .072 * Math.sin(t * .27);
@@ -200,13 +248,14 @@ export function drawOrbits(ctx: CanvasRenderingContext2D, w: number, h: number, 
 
 type Point = [number, number];
 type Vector = [number, number, number];
-// A square base and a single apex, viewed from above and to one side. No animated pose.
+// A single apex above a square base. Rotate around the vertical axis—no tumble or stretching.
 const baseCorners: readonly Vector[] = [[-.9,.6,-.9],[.9,.6,-.9],[.9,.6,.9],[-.9,.6,.9]];
-const yaw = .58, pitch = -.24;
-const aim = [Math.cos(yaw), Math.sin(yaw), Math.cos(pitch), Math.sin(pitch)] as const;
+const pitch = -.235, cp = Math.cos(pitch), sp = Math.sin(pitch);
+export const PRISM_TURN_SECONDS = 18;
 
-export function pyramidProjection(w: number, h: number) {
-  const [cy, sy, cp, sp] = aim;
+export function pyramidProjection(w: number, h: number, seconds = 0) {
+  const angle = .58 + (seconds % PRISM_TURN_SECONDS) * tau / PRISM_TURN_SECONDS;
+  const cy = Math.cos(angle), sy = Math.sin(angle);
   const size = Math.min(h * .46, w * .247);
   const x0 = w * (w / h > 1.45 ? .66 : .57), y0 = h * .49;
   function project([x, y, z]: Vector): Point {
@@ -214,7 +263,13 @@ export function pyramidProjection(w: number, h: number) {
     const zoom = 1 + .078 * (y * sp + depth * cp);
     return [x0 + size * zoom * (x * cy + z * sy), y0 + size * zoom * (y * cp - depth * sp)];
   }
-  return { apex: project([0,-.94,0]), base: baseCorners.map(project), size };
+  const apex = project([0,-.94,0]), base = baseCorners.map(project);
+  const faces = base.flatMap((a, i) => {
+    const b = base[(i + 1) % base.length];
+    const area = (a[0] - apex[0]) * (b[1] - apex[1]) - (a[1] - apex[1]) * (b[0] - apex[0]);
+    return area > 0 ? [{ a, b, index: i }] : [];
+  });
+  return { apex, base, faces, size };
 }
 
 function triangle(ctx: CanvasRenderingContext2D, a: Point, b: Point, c: Point) {
@@ -222,20 +277,25 @@ function triangle(ctx: CanvasRenderingContext2D, a: Point, b: Point, c: Point) {
 }
 
 const rayColors = ['ff799b', 'ffb879', 'ffe69a', '8af4bc', '7cddff', 'c5a6ff'];
+const facetColors = ['#5eb7d1bb', '#9c96e0bc', '#759ee6c0', '#b59aefad'];
 export function drawPrism(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, kick: number) {
-  const { apex, base: [left, , right, ridge], size } = pyramidProjection(w, h);
-  const light = .85 + .10 * Math.sin(t * .96) + .13 * kick;
-  const shadow = ctx.createRadialGradient(apex[0], ridge[1] + size * .16, 0, apex[0], ridge[1] + size * .16, size * 1.7);
-  shadow.addColorStop(0, '#546fe44d'); shadow.addColorStop(.55, '#493f9952'); shadow.addColorStop(1, '#211a5100');
+  const { apex, base, faces, size } = pyramidProjection(w, h, t);
+  const floor = Math.max(...base.map((point) => point[1]));
+  const light = .86 + .10 * Math.sin(t * .96) + .13 * kick;
+  const shadow = ctx.createRadialGradient(apex[0], floor + size * .12, 0, apex[0], floor + size * .12, size * 1.48);
+  shadow.addColorStop(0, '#546fe449'); shadow.addColorStop(.55, '#493f9952'); shadow.addColorStop(1, '#211a5100');
   ctx.save();
-  ctx.fillStyle = shadow; ctx.fillRect(0, ridge[1] - size * .4, w, h - ridge[1] + size * .4);
+  ctx.fillStyle = shadow; ctx.fillRect(0, floor - size * .4, w, h - floor + size * .4);
+  ctx.lineJoin = 'round';
 
-  const cool = ctx.createLinearGradient(...apex, ...left);
-  cool.addColorStop(0, '#bde9fcba'); cool.addColorStop(.4, '#538bdd52'); cool.addColorStop(1, '#567ccead');
-  const warm = ctx.createLinearGradient(...ridge, ...apex);
-  warm.addColorStop(0, '#ab8bf9c8'); warm.addColorStop(.42, '#867bd06b'); warm.addColorStop(.76, '#54abc150'); warm.addColorStop(1, '#d4f4ffc9');
-  triangle(ctx, apex, left, ridge); ctx.fillStyle = cool; ctx.fill();
-  triangle(ctx, apex, ridge, right); ctx.fillStyle = warm; ctx.fill();
+  for (const { a, b, index } of faces) {
+    const bottom: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const fill = ctx.createLinearGradient(...apex, ...bottom);
+    fill.addColorStop(0, '#d6f4ffd1'); fill.addColorStop(.38, '#607dba58');
+    fill.addColorStop(.75, '#5488bb6a'); fill.addColorStop(1, facetColors[index]);
+    triangle(ctx, apex, a, b);
+    ctx.fillStyle = fill; ctx.fill();
+  }
 
   function ray(from: Point, to: Point, color: string, outside: boolean) {
     const beam = ctx.createLinearGradient(...from, ...to);
@@ -243,32 +303,28 @@ export function drawPrism(ctx: CanvasRenderingContext2D, w: number, h: number, t
     beam.addColorStop(1, `#${color}${outside ? '08' : 'f8'}`);
     ctx.strokeStyle = beam;
     ctx.beginPath(); ctx.moveTo(...from); ctx.lineTo(...to);
-    ctx.lineWidth = Math.max(2.4, size * .057); ctx.globalAlpha = light * .24; ctx.stroke();
-    ctx.lineWidth = Math.max(.9, size * .0125); ctx.globalAlpha = light * .89; ctx.stroke();
+    ctx.lineWidth = Math.max(2.4, size * .056); ctx.globalAlpha = light * .26; ctx.stroke();
+    ctx.lineWidth = Math.max(.9, size * .013); ctx.globalAlpha = light * .89; ctx.stroke();
   }
-  const facetPoint = (a: Point, b: Point, weights: readonly [number, number, number]): Point => [
-    apex[0] * weights[0] + a[0] * weights[1] + b[0] * weights[2],
-    apex[1] * weights[0] + a[1] * weights[1] + b[1] * weights[2],
-  ];
-  const entry = facetPoint(left, ridge, [.36,.50,.14]);
-  const exit = facetPoint(ridge, right, [.29,.13,.58]);
+  const beamY = apex[1] + size * .96;
+  const cuts = base.map(([x, y]) => apex[0] + (x - apex[0]) * ((beamY - apex[1]) / (y - apex[1])));
+  const entry: Point = [Math.min(...cuts), beamY];
+  const exit: Point = [Math.max(...cuts), beamY];
   ctx.globalCompositeOperation = 'screen';
-  ray(entry, [-.08 * w, entry[1] + .12 * h], 'bdf8ff', true);
-  ray(entry, exit, 'dce9ff', false);
+  ray(entry, [-.07 * w, beamY + .13 * h], 'c8f7ff', true);
+  ray(entry, exit, 'dfebff', false);
   rayColors.forEach((color, i) => {
     const spread = (i / (rayColors.length - 1) - .52) * h * .37;
-    ray([exit[0], exit[1] + size * .007 * i], [w * 1.07, exit[1] - .10 * h + spread], color, true);
+    ray(exit, [w * 1.07, exit[1] - .09 * h + spread], color, true);
   });
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
 
-  // One silhouette and a central ridge make the pyramid readable in a tiny preview as well.
-  ctx.lineJoin = 'round';
-  ctx.beginPath(); ctx.moveTo(...apex); ctx.lineTo(...left); ctx.lineTo(...ridge); ctx.lineTo(...right); ctx.closePath();
-  ctx.lineWidth = Math.max(.8, size * .016); ctx.strokeStyle = '#dcf7ffd6'; ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(...apex); ctx.lineTo(...ridge);
-  ctx.lineWidth = Math.max(.62, size * .012); ctx.strokeStyle = '#e9e1ffca'; ctx.stroke();
-  ctx.fillStyle = '#effcff'; dot(ctx, ...apex, Math.max(.65, size * .014));
+  // A bright silhouette and ridges keep the shape readable throughout the turn.
+  ctx.lineWidth = Math.max(.8, size * .015);
+  ctx.strokeStyle = '#ddf4ffc0';
+  for (const { a, b } of faces) { triangle(ctx, apex, a, b); ctx.stroke(); }
+  ctx.fillStyle = '#effcff'; dot(ctx, ...apex, Math.max(.65, size * .017));
   ctx.restore();
 }
 

@@ -3,11 +3,13 @@ import type { OnlineTrack } from '../shared/online';
 
 const OPENVERSE = { id: 'openverse', source: 'all', name: 'Jamendo + Wikimedia Commons' } as const;
 const NETLABELS = { id: 'netlabels', source: 'netlabels', name: 'Internet Archive · Netlabels' } as const;
-const SOUTHERN_CITY = { id: 'southern_city', source: 'southern_city', name: 'Southern City’s Lab · Россия' } as const;
-export type CatalogTarget = typeof OPENVERSE | typeof NETLABELS | typeof SOUTHERN_CITY;
+const SOUTHERN_CITY = { id: 'southern_city', source: 'southern_city', name: 'Southern City’s Lab · Internet Archive' } as const;
+const CCMIXTER = { id: 'ccmixter', source: 'ccmixter', name: 'ccMixter' } as const;
+const AUDIUS = { id: 'audius', source: 'audius', name: 'Audius' } as const;
+export type CatalogTarget = typeof OPENVERSE | typeof NETLABELS | typeof SOUTHERN_CITY | typeof CCMIXTER | typeof AUDIUS;
 export type CatalogId = CatalogTarget['id'];
 export type CatalogResult = { id: CatalogId; tracks: OnlineTrack[] } | { id: CatalogId; error: unknown };
-export const catalogTargets = (desktop: boolean): readonly CatalogTarget[] => desktop ? [OPENVERSE, NETLABELS, SOUTHERN_CITY] : [OPENVERSE];
+export const catalogTargets = (desktop: boolean): readonly CatalogTarget[] => desktop ? [OPENVERSE, NETLABELS, CCMIXTER, AUDIUS, SOUTHERN_CITY] : [OPENVERSE];
 export const CATALOG_DEBOUNCE_MS = 650;
 
 export function catalogQuery(text: string) {

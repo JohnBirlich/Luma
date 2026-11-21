@@ -3,7 +3,7 @@ import { readLumaPlaylists } from '../shared/luma-playlists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
 import { readUiLanguage } from '../shared/ui-language';
 import type { UiLanguage } from '../shared/ui-language';
-import { readOnlineShelf } from '../shared/online';
+import { readOnlineShelf, sessionCatalogId } from '../shared/online';
 import type { OnlineTrack } from '../shared/online';
 import { clamp, defaultEqualizer, readEqualizer } from '../shared/equalizer';
 import type { EqualizerSettings } from '../shared/equalizer';
@@ -49,13 +49,15 @@ const defaults: Preferences = {
   playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, exportLyrics: false,
   resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
 };
+const persistentIds = (ids: readonly string[]) => ids.filter((id) => !sessionCatalogId(id));
+const persistentShelf = (tracks: unknown) => readOnlineShelf(tracks).filter(({ id }) => !sessionCatalogId(id));
 const readRepeat = (value: unknown): Repeat => value === 'all' || value === 'one' ? value : 'off';
 const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.every((id) => typeof id === 'string');
 export function readFavorites(value: unknown): string[] {
-  return Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128 && !STATION_IDS.has(id)))] : [];
+  return Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128 && !STATION_IDS.has(id) && !sessionCatalogId(id)))] : [];
 }
 export function rememberTrack(ids: string[], id: string): string[] {
-  return ids[0] === id || STATION_IDS.has(id) ? ids : [id, ...ids.filter((item) => item !== id)].slice(0, RECENT_LIMIT);
+  return ids[0] === id || STATION_IDS.has(id) || sessionCatalogId(id) ? ids : [id, ...ids.filter((item) => item !== id)].slice(0, RECENT_LIMIT);
 }
 const numeric = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? clamp(value, min, max) : fallback;
@@ -69,7 +71,7 @@ export function decodePreferences(value: string | null): Preferences {
     const queue = data.queue;
     const playback = readPlayback(data.playback);
     const resumeRepeat = playback.rememberRepeat ? readRepeat(data.resumeRepeat ?? queue?.repeat) : 'off';
-    const beforeShuffle = validIds(queue?.beforeShuffle) ? queue.beforeShuffle : null;
+    const beforeShuffle = validIds(queue?.beforeShuffle) ? persistentIds(queue.beforeShuffle) : null;
     const resumeShuffle = playback.rememberShuffle && (data.resumeShuffle ?? Boolean(beforeShuffle)) === true;
     return {
       volume: numeric(data.volume, defaults.volume, 0, 1),
@@ -82,8 +84,8 @@ export function decodePreferences(value: string | null): Preferences {
       recent: readFavorites(data.recent).slice(0, RECENT_LIMIT),
       stationIds: readStationIds(data.stationIds),
       playlists: readLumaPlaylists(data.playlists),
-      onlineTracks: readOnlineShelf(data.onlineTracks),
-      onlineRefs: readOnlineShelf(data.onlineRefs),
+      onlineTracks: persistentShelf(data.onlineTracks),
+      onlineRefs: persistentShelf(data.onlineRefs),
       playback,
       audioQuality: readAudioQuality(data.audioQuality),
       autoLyrics: data.autoLyrics === true,
@@ -93,8 +95,8 @@ export function decodePreferences(value: string | null): Preferences {
       resumeRepeat, resumeShuffle,
       equalizer: readEqualizer(data.equalizer),
       queue: playback.rememberQueue && queue && validIds(queue.order) ? {
-        order: !resumeShuffle && beforeShuffle ? beforeShuffle : queue.order,
-        currentId: typeof queue.currentId === 'string' ? queue.currentId : null,
+        order: !resumeShuffle && beforeShuffle ? beforeShuffle : persistentIds(queue.order),
+        currentId: typeof queue.currentId === 'string' && !sessionCatalogId(queue.currentId) ? queue.currentId : null,
         beforeShuffle: resumeShuffle ? beforeShuffle : null,
         repeat: resumeRepeat,
       } : undefined,
@@ -117,11 +119,17 @@ export function encodePreferences(preferences: Preferences, current: QueueState)
   const resumeRepeat = rememberRepeat ? current.repeat : 'off';
   const resumeShuffle = rememberShuffle && current.beforeShuffle !== null;
   const queue = rememberQueue ? {
-    order: resumeShuffle ? current.order : current.beforeShuffle ?? current.order,
-    currentId: current.currentId, beforeShuffle: resumeShuffle ? current.beforeShuffle : null, repeat: resumeRepeat,
+    order: persistentIds(resumeShuffle ? current.order : current.beforeShuffle ?? current.order),
+    currentId: sessionCatalogId(current.currentId) ? null : current.currentId,
+    beforeShuffle: resumeShuffle && current.beforeShuffle ? persistentIds(current.beforeShuffle) : null, repeat: resumeRepeat,
   } : undefined;
   const stored = { ...preferences, resumeRepeat, resumeShuffle, queue };
-  return JSON.stringify({ ...stored, onlineRefs: activeOnlineRefs(stored) });
+  // Audius API content is session-only, even when a track is in the current queue.
+  return JSON.stringify({ ...stored,
+    favorites: persistentIds(stored.favorites), disliked: persistentIds(stored.disliked), recent: persistentIds(stored.recent),
+    playlists: readLumaPlaylists(stored.playlists), onlineTracks: stored.onlineTracks.filter(({ id }) => !sessionCatalogId(id)),
+    onlineRefs: activeOnlineRefs(stored).filter(({ id }) => !sessionCatalogId(id)),
+  });
 }
 
 export function savePreferences(preferences: Preferences, queue: QueueState) {

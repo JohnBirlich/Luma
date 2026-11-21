@@ -6,25 +6,27 @@ import type { ReadSpectrum } from '../player/useAudio';
 import { useVisualMotion } from '../player/useVisualMotion';
 import oceanUrl from '../assets/scenes/ocean.webm?url';
 import oceanPoster from '../assets/scenes/ocean.webp?url';
-import type { Track } from '../shared/media';
-import { Artwork } from './Artwork';
 import { SceneCanvas } from './SceneCanvas';
 import { isCanvasEffect } from '../shared/scene-motion';
 
 interface SceneProps {
   effect: BackgroundEffect;
-  track?: Track | null;
+  tone?: string;
   strength?: number;
   animate?: boolean;
   visible?: boolean;
   tempo?: EffectTempo;
   sample?: ReadSpectrum;
 }
-export const SceneBackground = memo(function SceneBackground({ effect, track, strength = 0.75, animate = false, visible = true, tempo = 'normal', sample }: SceneProps) {
+const tunnelRings = Array.from({ length: 7 }, (_, index) => ({
+  '--tunnel-scale': .13 + index * .15, '--tunnel-phase': index / 7,
+}) as CSSProperties);
+
+export const SceneBackground = memo(function SceneBackground({ effect, tone, strength = 0.75, animate = false, visible = true, tempo = 'normal', sample }: SceneProps) {
   const element = useRef<HTMLDivElement>(null);
   const ocean = useRef<HTMLVideoElement>(null);
   const [inView, setInView] = useState(typeof IntersectionObserver === 'undefined');
-  const allowed = useVisualMotion(visible && strength > 0 && effect !== 'off' && effect !== 'cover');
+  const allowed = useVisualMotion(visible && strength > 0 && effect !== 'off');
   const enabled = allowed && inView;
   const moving = enabled && animate;
   const factor = EFFECT_TEMPOS[tempo].factor;
@@ -48,8 +50,11 @@ export const SceneBackground = memo(function SceneBackground({ effect, track, st
   }, [factor, moving, effect]);
   if (effect === 'off') return null;
   return <div className={`scene-background scene-${effect}${moving ? ' scene-moving' : ''}`} ref={element}
-    style={{ '--strength': strength, '--scene-tempo': factor } as CSSProperties} aria-hidden="true">
-    {effect === 'cover' && (track?.backdropUrl || track?.artworkUrl) && <Artwork track={track} imageUrl={track.backdropUrl} className="scene-cover-art" />}
+    data-cover-tone={effect === 'mix-flow' && tone ? '' : undefined}
+    style={{ '--strength': strength, '--scene-tempo': factor, '--scene-tone': tone } as CSSProperties} aria-hidden="true">
+    {effect === 'tunnel' && <div className="tunnel-depth">{tunnelRings.map((style, index) => <svg key={index} className="tunnel-frame" style={style} viewBox="0 0 300 260" focusable="false">
+      <path d="M 76,5 H 224 L 296,130 224,255 H 76 L 4,130 Z" />
+    </svg>)}</div>}
     {effect === 'waves' && moving && <video ref={ocean} className="scene-ocean-film" poster={oceanPoster} loop muted playsInline disablePictureInPicture preload="none" />}
     {strength > 0 && isCanvasEffect(effect) && <SceneCanvas effect={effect} enabled={enabled} playing={animate} tempo={factor} sample={sample} />}
     {effect === 'nebula' && <><i className="nebula-plate" /><i className="nebula-stars" /></>}

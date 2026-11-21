@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { advanceSpectrum, drawPrism, pyramidProjection, spectrumFrames, spectrumSpan } from '../src/components/scene-art.js';
+import { advanceColumns, advanceSpectrum, drawPrism, PRISM_TURN_SECONDS, pyramidProjection, spectrumColumns, spectrumFrames, spectrumSpan } from '../src/components/scene-art.js';
 import { CANVAS_EFFECTS, coastSpeed, isCanvasEffect } from '../src/shared/scene-motion.js';
 
 const peak = (band: Float32Array) => Math.max(...band);
@@ -51,14 +51,40 @@ test('spectrum ridges span the canvas and settle in place to straight lines on p
   }
 });
 
-test('prism shows one apex over a square base, with the same outline throughout a beat', () => {
+test('the restored 17 columns respond to distinct frequency bands and release to baseline', () => {
+  const bars = spectrumColumns();
+  assert.equal(bars.length, 17);
+  const bins = new Uint8Array(512);
+  advanceColumns(bars, 1 / 30, { time: 0, bins });
+  assert.equal(peak(bars), 0);
+  advanceColumns(bars, 1 / 30, { time: 1, bins: bins.fill(242, 1, 4) });
+  assert.ok(bars[1] > .35);
+  assert.equal(bars.at(-1), 0);
+  advanceColumns(bars, 1 / 30, { time: 2, bins: bins.fill(0).fill(242, 279, 390) });
+  const treble = bars.at(-1)!;
+  assert.ok(treble > .35 && treble > bars[1]);
+  advanceColumns(bars, 1 / 30);
+  assert.ok(bars.at(-1)! < treble && bars.at(-1)! > 0);
+  for (let i = 0; i < 30; i++) advanceColumns(bars, 1 / 30);
+  assert.equal(peak(bars), 0);
+  assert.equal(CANVAS_EFFECTS.columns, true);
+});
+
+test('prism rotates a square base beneath a single upright apex, independently of the beat', () => {
   for (const [w, h] of [[1060, 340], [375, 415], [288, 110]]) {
-    const { apex, base } = pyramidProjection(w, h);
-    assert.equal(base.length, 4);
-    assert.ok(base.every(([x, y]) => 0 < x && x < w && apex[1] < y && y < h));
-    assert.ok(apex[1] > 0);
-    assert.ok(base[0][0] < apex[0] && apex[0] < base[2][0]);
-    assert.equal(new Set(base.map((point) => point.join(','))).size, 4);
+    const initial = pyramidProjection(w, h);
+    for (let time = 0; time < PRISM_TURN_SECONDS; time += .25) {
+      const { apex, base, faces } = pyramidProjection(w, h, time);
+      assert.deepEqual(apex, initial.apex);
+      assert.equal(base.length, 4);
+      assert.ok(faces.length > 0 && faces.length < 4);
+      assert.ok(base.every(([x, y]) => 0 < x && x < w && apex[1] < y && y < h));
+      assert.ok(apex[1] > 0);
+      assert.ok(Math.min(...base.map(([x]) => x)) < apex[0] && apex[0] < Math.max(...base.map(([x]) => x)));
+      assert.equal(new Set(base.map((point) => point.join(','))).size, 4);
+    }
+    assert.notDeepEqual(pyramidProjection(w, h, 1.5).base, initial.base);
+    assert.deepEqual(pyramidProjection(w, h, PRISM_TURN_SECONDS).base, initial.base);
   }
   function geometry(time: number, kick: number) {
     const points: number[][] = [];
@@ -73,6 +99,8 @@ test('prism shows one apex over a square base, with the same outline throughout 
   }
   const outline = geometry(0, 0);
   assert.ok(outline.length > 10);
-  assert.deepEqual(geometry(14, .98), outline);
+  assert.deepEqual(geometry(0, .98), outline);
+  assert.notDeepEqual(geometry(1.5, 0), outline);
+  assert.equal(isCanvasEffect('tunnel'), false);
   assert.equal(isCanvasEffect('mix-flow'), false, 'the mix banner uses CSS rather than a second canvas');
 });

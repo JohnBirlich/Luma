@@ -15,7 +15,7 @@ export const ACCENTS = [
 ] as const;
 
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
-export const BACKGROUND_EFFECTS = ['off', 'cover', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors', 'notes', 'liquid', 'mix-flow'] as const;
+export const BACKGROUND_EFFECTS = ['off', 'tunnel', 'aurora', 'waves', 'stars', 'spectrum', 'columns', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors', 'notes', 'liquid', 'mix-flow'] as const;
 export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
 export const START_PAGES = ['player', 'library', 'local', 'search'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
@@ -89,12 +89,15 @@ export const isHexColor = (value: unknown): value is string => typeof value === 
 
 export function readAppearance(value: unknown): Appearance {
   const data = value as Partial<Appearance> | null | undefined;
+  const effect: unknown = data?.effect;
   const oldAppearance = data && typeof data === 'object' && HERO_STYLES.includes(data.hero as HeroStyle) && !Object.hasOwn(data, 'effect');
   return {
     theme: typeof data?.theme === 'string' && Object.hasOwn(THEMES, data.theme) ? data.theme : defaultAppearance.theme,
     accent: isHexColor(data?.accent) ? data.accent.toLowerCase() : null,
     hero: data?.hero && HERO_STYLES.includes(data.hero) ? data.hero : defaultAppearance.hero,
-    effect: data?.effect && BACKGROUND_EFFECTS.includes(data.effect) ? data.effect : oldAppearance ? 'off' : defaultAppearance.effect,
+    // Old album backgrounds fall back to the existing layout, without selecting a new effect for the user.
+    effect: BACKGROUND_EFFECTS.includes(effect as BackgroundEffect) ? effect as BackgroundEffect
+      : effect === 'cover' || oldAppearance ? 'off' : defaultAppearance.effect,
     effectStrength: typeof data?.effectStrength === 'number' && Number.isFinite(data.effectStrength) ? Math.max(0.25, Math.min(1, data.effectStrength)) : defaultAppearance.effectStrength,
     effectTempo: typeof data?.effectTempo === 'string' && Object.hasOwn(EFFECT_TEMPOS, data.effectTempo) ? data.effectTempo : defaultAppearance.effectTempo,
     audioReactive: data?.audioReactive !== false,

@@ -78,9 +78,9 @@ function ThemePreview({ appearance, track, tint }: { appearance: Appearance; tra
       <div className="settings-preview-heading"><p className="overline">{t("Предпросмотр")}</p><span>{t(THEMES[appearance.theme].name)}</span></div>
       <div className="settings-preview-window" aria-hidden="true">
         <div className="settings-preview-chrome"><AudioLines size={13} /><span>Luma Player</span><i /><i /><i /></div>
-        <div data-effect={appearance.effect} className={`settings-preview-hero settings-preview-${appearance.hero}${appearance.effect !== 'off' ? ' settings-preview-has-effect' : ''}`} style={{ '--sample-tone': tint, '--scene-tone': tint } as CSSProperties}>
-          <SceneBackground effect={appearance.effect} track={track} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} visible={appearance.motion} />
-          {appearance.effect !== 'cover' && appearance.effect !== 'mix-flow' && picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
+        <div data-effect={appearance.effect} className={`settings-preview-hero settings-preview-${appearance.hero}`} style={{ '--sample-tone': tint, '--scene-tone': tint } as CSSProperties}>
+          <SceneBackground effect={appearance.effect} tone={track ? tint : undefined} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} visible={appearance.motion} />
+          {appearance.effect === 'off' && picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
           {appearance.hero === 'center' && <Artwork track={track} className="settings-preview-center-art" />}
           {appearance.hero === 'vinyl' && <VinylRecord className="settings-preview-record" track={track} animate={appearance.motion} />}
           <div><small>{t("СЕЙЧАС ИГРАЕТ")}</small><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
@@ -252,11 +252,11 @@ export function SettingsPage(props: SettingsProps) {
           </>}
           {section?.id === 'now' && <>
             <SettingCard title={t("Экран «Сейчас играет»")}>
-              <NowPlayingOptions appearance={appearance} change={changeAppearance} track={props.previewTrack} />
+              <NowPlayingOptions appearance={appearance} change={changeAppearance} />
               <ToggleRow title={t("Цвет фона из обложки")} detail={t("Если выключено, фон использует акцент темы.")} enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
               <ToggleRow title={t("Реакция на музыку")} detail={t("Спектр и свет в некоторых фонах откликаются на локальный трек. При отключении остаётся обычная анимация.")} enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
               <label className="setting-row select-row"><span><strong>{t("Темп фона")}</strong><small>{t("Скорость анимации, не скорость песни.")}</small></span>
-                <select value={appearance.effectTempo} disabled={appearance.effect === 'off' || appearance.effect === 'cover'} onChange={(event) => changeAppearance({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
+                <select value={appearance.effectTempo} disabled={appearance.effect === 'off'} onChange={(event) => changeAppearance({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
                   {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select>
               </label>

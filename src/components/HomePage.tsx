@@ -116,12 +116,10 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       <div className="hub-topline"><nav aria-label={t('Разделы на главной')} className="hub-tabs">
         {(Object.keys(TABS) as HomeTab[]).map((id) => <button type="button" key={id} data-home-tab={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => selectTab(id)}>{t(TABS[id])}</button>)}
       </nav><div className="hub-top-actions">
-        <button type="button" className="button outline-button" disabled={props.busy} onClick={addMusic} title={t('Добавить музыку (Ctrl+O)')}>
-          <Plus size={17} aria-hidden="true" />{t('Добавить музыку')}
-        </button>
-        <button type="button" className="button outline-button" data-playlist-import aria-haspopup="dialog" disabled={props.busy} onClick={props.openPlaylistImport}>
-          <ListEnd size={17} aria-hidden="true" />{t('Импорт из сервисов')}
-        </button>
+        <button type="button" className="icon-button" disabled={props.busy} onClick={addMusic}
+          aria-label={t('Добавить музыку')} title={t('Добавить музыку (Ctrl+O)')}><Plus size={18} aria-hidden="true" /></button>
+        <button type="button" className="icon-button" data-playlist-import aria-haspopup="dialog" disabled={props.busy} onClick={props.openPlaylistImport}
+          aria-label={t('Импорт из сервисов')} title={t('Импорт из сервисов')}><ListEnd size={18} aria-hidden="true" /></button>
         <button type="button" className="icon-button" onClick={props.openMixes} title={t('Миксы Luma')} aria-label={t('Миксы Luma')}><ListMusic size={18} /></button>
       </div></div>
     </header>

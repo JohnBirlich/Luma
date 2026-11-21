@@ -1,3 +1,4 @@
+import { sessionCatalogId } from './online.js';
 import { STATION_IDS } from './radio.js';
 import { cleanTrackText } from './russian.js';
 
@@ -7,7 +8,7 @@ export interface LumaPlaylist { id: string; title: string; trackIds: string[] }
 
 export const playlistTitle = (value: unknown) => typeof value === 'string' ? cleanTrackText(value).slice(0, 64) : '';
 export function playlistTrackIds(value: readonly unknown[]) {
-  return [...new Set(value.slice(0, MAX_PLAYLIST_TRACKS).filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128 && !STATION_IDS.has(id)))];
+  return [...new Set(value.slice(0, MAX_PLAYLIST_TRACKS).filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 128 && !STATION_IDS.has(id) && !sessionCatalogId(id)))];
 }
 export function readLumaPlaylists(value: unknown): LumaPlaylist[] {
   if (!Array.isArray(value)) return [];

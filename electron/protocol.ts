@@ -7,6 +7,7 @@ import { RADIO_ORIGINS } from '../src/shared/radio.js';
 import { audioMime } from '../src/shared/media.js';
 import { APP_ORIGIN, type DesktopLibrary } from './library.js';
 import type { StreamCache } from './stream-cache.js';
+import { streamAudius } from './audius-stream.js';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -62,7 +63,7 @@ async function streamFile(path: string, request: Request, headers: Headers) {
   return new Response(body, { status: range ? 206 : 200, headers });
 }
 
-export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache) {
+export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache, audiusFetch?: (url: string, init?: RequestInit) => Promise<Response>) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.protocol !== 'luma:' || url.hostname !== 'app' || url.port || url.username || url.password) return new Response(null, { status: 404 });
@@ -87,6 +88,8 @@ export function createProtocolHandler(root: string, library: DesktopLibrary, dev
     }
     if (request.method === 'OPTIONS' && origin && origin === devOrigin) return new Response(null, { status: 204, headers });
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405, headers });
+    const audius = /^\/media\/audius\/([A-Za-z0-9]{3,16})$/.exec(url.pathname);
+    if (audius && audiusFetch && !url.search) return streamAudius(audiusFetch, audius[1], request, headers);
     const cacheMatch = /^\/media\/cache\/([a-f0-9]{64})$/.exec(url.pathname);
     if (cacheMatch) {
       const path = cache?.mediaPath(cacheMatch[1]);

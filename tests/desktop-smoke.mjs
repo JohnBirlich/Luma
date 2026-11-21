@@ -13,6 +13,7 @@ import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
+import { audiusRecording, ccMixterUrl, creatorStream, remixRecording } from './fixtures/public-catalogs.mjs';
 import { parseFile } from 'music-metadata';
 import { taggedMp3 } from './fixtures/mp3.mjs';
 import { probeRadio } from './live-radio.mjs';
@@ -41,7 +42,7 @@ async function waitFor(label, check) {
 const liveCatalog = process.env.LUMA_LIVE_CATALOG === '1';
 const liveServices = process.env.LUMA_LIVE_SERVICES === '1';
 const liveRadio = process.env.LUMA_LIVE_RADIO === '1';
-const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), liveRadio ? 410_000 : (liveCatalog || liveServices) ? 260_000 : 170_000);
+const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), liveRadio ? 410_000 : liveCatalog ? 400_000 : liveServices ? 260_000 : 170_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
 const cover = await readFile(join(root, 'public/artwork/afterimage.webp'));
@@ -297,13 +298,13 @@ async function smoke() {
   console.log(`::notice title=Native fullscreen::Electron fullscreen reached ${display.bounds.width}×${display.bounds.height} monitor bounds; button, Esc, and host exit passed.`);
   await click('.scene-open');
   await waitFor('scene dialog reopens', () => run(`!!document.querySelector('.scene-dialog[open]')`));
-  for (const [label, effect] of [['Спектр', 'spectrum'], ['Ноты', 'notes']]) {
+  for (const [label, effect] of [['Спектр', 'spectrum'], ['Столбцы', 'columns'], ['Ноты', 'notes']]) {
     await click(`.scene-choice[aria-label="${label}"]`);
     await waitFor(`${label} previews on a bounded canvas`, () => run(`(() => {
       const backdrop = document.querySelector('.scene-dialog-preview .scene-${effect}');
       const canvas = backdrop?.querySelector('canvas');
       return canvas && canvas.width * canvas.height > 0 && canvas.width * canvas.height <= 134400
-        && (${JSON.stringify(effect)} !== 'spectrum' || !backdrop.classList.contains('scene-moving'));
+        && (${JSON.stringify(effect)} === 'notes' || !backdrop.classList.contains('scene-moving'));
     })()`));
   }
   if (!await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`)) {
@@ -319,13 +320,21 @@ async function smoke() {
       return canvas && canvas.width * canvas.height > 0 && canvas.width * canvas.height <= 368640;
     })()`));
   }
+  await click('.scene-choice[aria-label="Тоннель"]');
+  await waitFor('the tunnel replaces the background effect with bounded SVG geometry', () => run(`document.querySelectorAll('.scene-dialog-preview .scene-tunnel .tunnel-frame').length === 7
+    && !document.querySelector('.scene-dialog-preview canvas, .scene-dialog-preview video, .scene-choice[aria-label="Обложка на фоне"]')`));
   await run(`[...document.querySelectorAll('.scene-layouts button')].find((item) => item.textContent === 'Обложка').click()`);
-  await waitFor('cover style replaces the previous effect', async () => (await preferences()).appearance.effect === 'cover' && await run(`!!document.querySelector('.scene-dialog-preview .scene-cover') && !document.querySelector('.scene-dialog-preview canvas, .scene-dialog-preview video')`));
+  await waitFor('cover layout keeps the selected effect', async () => {
+    const { hero, effect } = (await preferences()).appearance;
+    return hero === 'cover' && effect === 'tunnel' && await run(`!!document.querySelector('.scene-dialog-preview .scene-preview-art')`);
+  });
+  await click('.scene-choice[aria-label="Без эффекта"]');
   await click('.scene-dialog .primary-button');
   await expand();
-  await waitFor('normal fullscreen still shows the selected cover backdrop', () => run(`!!document.querySelector('.immersive-stage > .scene-cover')`));
+  await waitFor('normal fullscreen still shows artwork in the cover layout', () => run(`!!document.querySelector('.immersive-stage.immersive-cover .immersive-art .artwork')
+    && !document.querySelector('.immersive-stage > .scene-background')`));
   await click('.immersive-karaoke-toggle');
-  await waitFor('karaoke substitutes ambient light for the selected cover backdrop', () => run(`!!document.querySelector('.karaoke-track .artwork') && !document.querySelector('.karaoke-stage > :is(.scene-background,.immersive-backdrop,.immersive-scrim)')`));
+  await waitFor('karaoke keeps its own ambient light and foreground cover', () => run(`!!document.querySelector('.karaoke-track .artwork') && !document.querySelector('.karaoke-stage > :is(.scene-background,.immersive-backdrop,.immersive-scrim)')`));
   await click('.immersive-karaoke-toggle');
   await click('.immersive-tools button[aria-label="Оформление полноэкранного плеера"]');
   await waitFor('fullscreen scene dialog', () => run(`!!document.querySelector('.scene-dialog[open]')`));
@@ -334,16 +343,17 @@ async function smoke() {
     && await run(`!!document.querySelector('.scene-dialog-preview .scene-mix-flow .mix-flow-light') && !!document.querySelector('.immersive-stage > .scene-mix-flow')`));
   await click('.scene-dialog .primary-button');
   await click('.immersive-karaoke-toggle');
-  await waitFor('karaoke uses the selected non-cover scene with only the foreground art', () => run(`!!document.querySelector('.karaoke-stage > .scene-mix-flow')
-    && !!document.querySelector('.karaoke-track .artwork') && !document.querySelector('.karaoke-stage > :is(.scene-cover,.immersive-backdrop)')`));
+  await waitFor('karaoke uses the selected scene with only the foreground art', () => run(`!!document.querySelector('.karaoke-stage > .scene-mix-flow')
+    && !!document.querySelector('.karaoke-track .artwork') && !document.querySelector('.karaoke-stage > .immersive-backdrop')`));
   await click('.immersive-collapse');
   await waitFor('fullscreen exits after switching modes', async () => !window.isFullScreen() && await run(`!document.querySelector('.immersive-player')`));
   assert.ok(await run(`(() => {
     const visual = (selector) => getComputedStyle(document.querySelector(selector + ' .mix-flow-light'));
     const player = visual('.hero'), banner = visual('.hub-hero');
-    return player.backgroundImage !== 'none' && player.backgroundImage === banner.backgroundImage
-      && player.animationName === banner.animationName && !document.querySelector('.hero .scene-liquid');
-  })()`), 'the banner and Now Playing share the same CSS effect, distinct from Liquid Glass');
+    return player.backgroundImage !== 'none' && player.backgroundImage !== banner.backgroundImage
+      && player.animationName === banner.animationName && !!document.querySelector('.hero .scene-mix-flow[data-cover-tone]')
+      && player.getPropertyValue('--scene-tone').trim() === getComputedStyle(document.querySelector('.hero')).getPropertyValue('--hero-tone').trim();
+  })()`), 'the mix effect shares animation with the banner, but uses the current cover tone');
 
   assert.equal(await run(`document.querySelector('.home-now [aria-label="Эквалайзер"]')`), null);
   await click('.sidebar [aria-label="Эквалайзер из боковой панели"]');
@@ -376,7 +386,7 @@ async function smoke() {
   await run(`document.querySelector('.settings-page [aria-label="Обновления приложения"]').click()`);
   await waitFor('settings show package version', () => run(`document.querySelector('.settings-page .setting-card header')?.textContent.includes(${JSON.stringify(`Установлена версия ${version}.`)})`));
   await go('Меню');
-  const vkEntry = '.menu-page [aria-label="Эквалайзер"] + a[aria-label="Зайти в VK"]';
+  const vkEntry = '.sidebar-shortcuts [aria-label="Эквалайзер из боковой панели"] + a[aria-label="Зайти в VK"]';
   const externalOpens = [];
   const systemBrowser = shell.openExternal;
   shell.openExternal = async (url) => {
@@ -384,16 +394,17 @@ async function smoke() {
     if (externalOpens.length === 1) throw new Error('fixture browser unavailable');
   };
   try {
-    await waitFor('VK sign-in directly below equalizer', () => run(`!!document.querySelector('${vkEntry}')`));
+    await waitFor('VK sign-in in sidebar shortcuts directly below equalizer', () => run(`!!document.querySelector('${vkEntry}')`));
     assert.deepEqual(await run(`(() => {
       const link = document.querySelector('${vkEntry}');
-      return [link.href, link.target, link.rel, link.nextElementSibling.getAttribute('aria-label')];
-    })()`), [VK_MUSIC_URL, '_blank', 'noopener noreferrer', 'О приложении']);
-    assert.match(await run(`document.querySelector('${vkEntry} small').textContent`), /в браузере, без синхронизации/);
+      return [link.href, link.target, link.rel, link.closest('section').getAttribute('aria-label')];
+    })()`), [VK_MUSIC_URL, '_blank', 'noopener noreferrer', 'Быстрый доступ']);
+    assert.equal(await run(`!!document.querySelector('.menu-page [aria-label="Зайти в VK"]')`), false);
+    assert.match(await run(`document.querySelector('${vkEntry}').getAttribute('aria-description')`), /в браузере, без синхронизации/);
     assert.deepEqual(externalOpens, [], 'rendering the row does not make a VK request');
     const appUrl = window.webContents.getURL();
     await click(vkEntry);
-    await waitFor('browser launch failure is explained next to the link', () => run(`document.querySelector('${vkEntry} [role="status"]').textContent.includes('Не удалось открыть VK')`));
+    await waitFor('browser launch failure is explained next to the link', () => run(`document.querySelector('${vkEntry} + [role="status"]').textContent.includes('Не удалось открыть VK')`));
     await click(vkEntry);
     await waitFor('VK handed to the browser on retry', () => externalOpens.length === 2);
     assert.deepEqual(externalOpens, [VK_MUSIC_URL, VK_MUSIC_URL]);
@@ -509,6 +520,7 @@ async function smoke() {
 
   const catalogCalls = [];
   const archiveCalls = [];
+  const extraCatalogCalls = [];
   const archiveRelease = { metadata: { identifier: 'SCL108', mediatype: 'audio', collection: ['netlabels', 'southern-citys-lab'],
     licenseurl: 'https://creativecommons.org/licenses/by/4.0/', creator: 'Fixture label', title: 'Jazz release' },
     files: [{ name: 'Jazz archive.mp3', source: 'original', format: 'VBR MP3', title: 'Jazz archive', length: '32' }] };
@@ -591,10 +603,21 @@ async function smoke() {
       if (query.startsWith('collection:southern-citys-lab ') && query.includes('"Ты"')) return new Response(null, { status: 503 });
       return Response.json({ response: { docs: query.includes('"jazz"') ? [{ identifier: 'SCL108' }] : [] } });
     }
+    if (url.origin === 'https://ccmixter.org' && url.pathname === '/api/query') {
+      extraCatalogCalls.push(url);
+      return Response.json(url.searchParams.get('s') === 'jazz' ? [remixRecording] : []);
+    }
+    if (url.origin === 'https://api.audius.co' && url.pathname === '/v1/tracks/search') {
+      extraCatalogCalls.push(url);
+      return Response.json({ data: url.searchParams.get('query') === 'jazz' ? [audiusRecording, { ...audiusRecording, id: '1233T', title: 'Restricted', is_stream_gated: true }] : [] });
+    }
+    if (url.origin === 'https://api.audius.co' && url.pathname === '/v1/tracks/DX0Xb/stream' && url.searchParams.get('no_redirect') === 'true') {
+      return Response.json({ data: creatorStream });
+    }
     if (url.href === 'https://archive.org/metadata/SCL108') return Response.json(archiveRelease);
     if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
     const radioFixture = radioFixtureUrls.has(url.href);
-    if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url].includes(url.href)) {
+    if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, ccMixterUrl, creatorStream].includes(url.href)) {
       // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
       (radioFixture ? radioCalls : streamCalls).push(url.href);
       const range = request.headers.get('Range');
@@ -680,12 +703,17 @@ async function smoke() {
         if (value === 'ja') await new Promise(resolve => setTimeout(resolve, 90));
       }
     })()`);
-    await waitFor('automatic results from all four desktop catalogs', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 3
-      && document.querySelectorAll('.online-results li').length === 3`));
+    await waitFor('automatic results from all four catalog backends', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 5
+      && document.querySelectorAll('.online-results li').length === 5 && !document.querySelector('.catalog-details').open`));
     assert.equal(await run(`!!document.querySelector('.catalog-search select, .music-sites')`), false);
     assert.equal(catalogCalls.length, 1);
     assert.equal(catalogCalls[0].searchParams.get('q'), 'jazz');
     assert.equal(catalogCalls[0].searchParams.get('source'), 'jamendo,wikimedia_audio');
+    assert.deepEqual(extraCatalogCalls.map((url) => [url.origin, url.searchParams.get('s') ?? url.searchParams.get('query')]).sort(),
+      [['https://api.audius.co', 'jazz'], ['https://ccmixter.org', 'jazz']]);
+    await click('.catalog-details summary');
+    assert.equal(await run(`document.querySelector('.catalog-details').open && !!document.querySelector('.catalog-details a[href="https://audius.co/legal/api-terms"]')`), true);
+    await click('.catalog-details summary');
     assert.deepEqual(archiveCalls.map((q) => q.split(' ')[0]).sort(), ['collection:netlabels', 'collection:southern-citys-lab']);
     assert.equal(await run(`document.querySelectorAll('.online-results [data-source="netlabels"]').length`), 1, 'overlapping Archive results deduplicate');
     await click(queueOnline);
@@ -700,6 +728,26 @@ async function smoke() {
     assert.equal((await preferences()).onlineTracks.length, 0, 'playing is not a library save');
     await click('button[aria-label="Сохранить: All About Jazz"]');
     await waitFor('online link saved', async () => (await preferences()).onlineTracks.length === 1);
+    const streamReady = (url) => run(`(() => {
+      const media = document.querySelector('${onlineAudio}');
+      return media.currentSrc === ${JSON.stringify(url)} && media.currentTime > .15 && !media.paused;
+    })()`);
+    await click('.online-results li[data-source="ccmixter"] button:first-child');
+    await waitFor('ccMixter MP3 decodes with production CSP', () => streamReady(ccMixterUrl));
+    assert.ok(streamCalls.includes(ccMixterUrl));
+    assert.equal(await run(`document.querySelectorAll('.online-results li[data-source="audius"] button').length`), 2, 'Audius offers play and queue, not save or download');
+    const ephemeralUrl = 'luma://app/media/audius/DX0Xb';
+    await click('.online-results li[data-source="audius"] button:first-child');
+    await waitFor('Audius stream decodes through the private protocol', () => streamReady(ephemeralUrl));
+    assert.ok(streamCalls.includes(creatorStream));
+    assert.doesNotMatch(JSON.stringify(await preferences()), /audius-|DX0Xb|Siberian Jazz|cidstream/);
+    const partialAudius = await run(`(async () => {
+      const response = await fetch(${JSON.stringify(ephemeralUrl)}, { headers: { Range: 'bytes=24-31' } });
+      return [response.status, response.headers.get('Cache-Control'), [...new Uint8Array(await response.arrayBuffer())]];
+    })()`);
+    assert.deepEqual(partialAudius, [206, 'no-store', [...sample.subarray(24, 32)]]);
+    await click(playOnline);
+    await waitFor('back on Jamendo', () => streamReady(economyUrl));
     await go('Главная');
     await waitFor('online attribution shown in player', () => run(`document.querySelector('.hero .online-credit')?.textContent.includes('CC BY-NC-ND 3.0')`));
     const opened = [];
@@ -721,11 +769,12 @@ async function smoke() {
       await fill('.hub-search input', 'Ты здесь');
       await waitFor('native search finds a local track', () => run(`document.querySelector('.hub-track strong')?.textContent === 'Ты здесь'`));
       assert.equal(await run(`!!document.querySelector('.vk-track-matches')`), false);
-      await waitFor('Home finds local and online matches despite a failed catalog', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 2
+      await waitFor('Home finds local and online matches despite a failed catalog', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 4
         && document.querySelector('[data-catalog="southern_city"]').dataset.state === 'error'
         && document.querySelectorAll('.online-results li').length === 2`));
       assert.equal(catalogCalls.length, 2);
       assert.equal(catalogCalls[1].searchParams.get('q'), 'Ты здесь');
+      assert.deepEqual(extraCatalogCalls.slice(2).map((url) => url.searchParams.get('s') ?? url.searchParams.get('query')), ['Ты здесь', 'Ты здесь']);
       assert.equal(opened.length, 0, 'no browser tab from automatic searches');
       assert.equal(await run(`!!document.querySelector('.music-sites, .music-site-grid')`), false);
       for (const url of ['https://example.invalid/', VK_MUSIC_URL, 'https://vk.ru/audio?q=jazz', 'https://my.mail.ru/music', 'https://music.yandex.ru/']) {
@@ -741,7 +790,8 @@ async function smoke() {
           (index === 0 || headings.indexOf(title) > headings.indexOf(expected[index - 1]))) && !headings.includes('Жанры и настроения');
       })()`));
       const homeImport = '.hub-top-actions [data-playlist-import]';
-      assert.equal(await run(`document.querySelector('${homeImport}')?.previousElementSibling?.textContent.trim()`), 'Добавить музыку');
+      assert.deepEqual(await run(`[...document.querySelectorAll('.hub-top-actions button')].map(button => [button.textContent.trim(), button.getAttribute('aria-label')])`),
+        [['', 'Добавить музыку'], ['', 'Импорт из сервисов'], ['', 'Миксы Luma']]);
       await run(`document.querySelector('${homeImport}').focus()`);
       await click(homeImport);
       await waitFor('Home shortcut opens the service picker', () => run(`!!document.querySelector('.playlist-import[open] [data-source="apple"]')`));
@@ -803,6 +853,7 @@ async function smoke() {
       assert.deepEqual((await preferences()).queue, beforeImport.queue);
       assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
       assert.equal(catalogCalls.length, 2, 'playlist preview and save are local');
+      assert.equal(extraCatalogCalls.length, 4);
       await run('window.luma.clearLegacyVkSession()');
       assert.equal((await legacyVk.cookies.get({ name: 'lumaFixture' })).length, 0);
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
@@ -1109,7 +1160,7 @@ async function smoke() {
   if (liveCatalog) {
     await session.defaultSession.clearCache();
     const failed = [];
-    for (const source of ['jamendo', 'wikimedia_audio', 'netlabels', 'southern_city']) {
+    for (const source of ['ccmixter', 'audius', 'jamendo', 'wikimedia_audio', 'netlabels', 'southern_city']) {
       // The controlled check exercised mp31. The live check confirms the requested variant really plays.
 
       let result;
@@ -1117,7 +1168,7 @@ async function smoke() {
         await go('Главная');
         await go('Поиск');
         await waitFor('live search field', () => run(`!!document.querySelector('main input[type="search"]')`));
-        await fill('main input[type="search"]', ({ jamendo: 'jazz', wikimedia_audio: 'Bach chaconne', netlabels: 'Anatoly Nikulin', southern_city: 'Газ' })[source]);
+        await fill('main input[type="search"]', ({ jamendo: 'jazz', wikimedia_audio: 'Bach chaconne', netlabels: 'Anatoly Nikulin', southern_city: 'Газ', ccmixter: 'jazz', audius: 'jazz' })[source]);
         const target = source === 'jamendo' || source === 'wikimedia_audio' ? 'openverse' : source;
         const resultSource = source === 'southern_city' ? 'netlabels' : source;
         const options = await waitFor(`${source} live results`, async () => {

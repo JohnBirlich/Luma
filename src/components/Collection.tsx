@@ -108,13 +108,13 @@ export function NowPlayingCard(props: NowPlayingProps) {
           <button type="button" className="button outline-button scene-open" onClick={props.openAppearance} aria-label={t("Оформление экрана «Сейчас играет»")} title={t("Оформление")} aria-haspopup="dialog"><Palette size={17} /></button>
           {track && !track.demo && !track.online && <button type="button" className="button outline-button track-details-button" onClick={() => props.editDetails(track.id)}
             aria-label={t("Редактировать данные трека")} title={t("Редактировать данные трека")} aria-haspopup="dialog"><Pencil size={16} /></button>}
-          {track && track.online?.source !== "broadcast" && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
+          {track && track.online?.source !== 'broadcast' && track.online?.source !== 'audius' && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
             aria-label={t("Редактировать обложку")} title={t("Редактировать обложку")} aria-haspopup="dialog"><ImagePlus size={17} /></button>}
 
         </div>
       </header>
       <section aria-label={t("Текущий трек")} data-effect={effect} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
-        <SceneBackground effect={effect} track={track} strength={effectStrength} tempo={appearance.effectTempo} animate={playing} visible={motion && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
+        <SceneBackground effect={effect} tone={track ? tint : undefined} strength={effectStrength} tempo={appearance.effectTempo} animate={playing} visible={motion && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
         {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
           onError={() => { if (!fallback) setFailedPicture(source); }} />}
         {hero === 'vinyl' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}

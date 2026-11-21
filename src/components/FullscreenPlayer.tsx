@@ -47,9 +47,8 @@ interface FullscreenPlayerProps extends PlaybackProps {
 export function FullscreenPlayer(props: FullscreenPlayerProps) {
   const t = useText();
   const { track, tint, appearance, playing, favorite, close, karaoke } = props;
-  const { hero, effect, effectStrength, motion } = appearance;
+  const { hero, effect: scene, effectStrength, motion } = appearance;
   const ambient = karaoke || appearance.theme === 'macos';
-  const scene = ambient && effect === 'cover' ? 'off' : effect;
   const artworkBackdrop = track.backdropUrl ?? track.artworkUrl;
   const ref = useRef<HTMLDialogElement>(null);
   const [karaokeQueue, setKaraokeQueue] = useState(false);
@@ -70,7 +69,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
     <div ref={props.stage} data-effect={scene} data-ambient={ambient || undefined} className={`immersive-stage ${karaoke ? 'karaoke-stage' : `immersive-${hero}`}`} style={{ '--immersive-tone': tint } as CSSProperties}>
       {!ambient && scene === 'off' && artworkBackdrop && (hero === 'cover' || appearance.coverColors) &&
         <Artwork track={track} className="immersive-backdrop" imageUrl={artworkBackdrop} />}
-      <SceneBackground effect={scene} track={track} strength={effectStrength * (karaoke ? .62 : 1)} tempo={appearance.effectTempo}
+      <SceneBackground effect={scene} tone={tint} strength={effectStrength * (karaoke ? .62 : 1)} tempo={appearance.effectTempo}
         animate={playing} visible={motion && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
       {(!ambient || scene !== 'off') && <div aria-hidden="true" className="immersive-scrim" />}
       <header className="immersive-header">

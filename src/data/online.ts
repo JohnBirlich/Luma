@@ -1,5 +1,5 @@
 import { catalogRetryDelay, decodeOpenverse, onlineSearchUrl, OPENVERSE_API, openverseLinkId } from '../shared/online';
-import type { CommunitySource, OnlineFilter, OnlineTrack } from '../shared/online';
+import type { DesktopCatalogSource, OnlineFilter, OnlineTrack } from '../shared/online';
 
 const MAX_JSON = 512 * 1024;
 
@@ -43,7 +43,7 @@ async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
 }
 
 let requestId = 0;
-async function communityTracks(query: string, source: CommunitySource, signal: AbortSignal) {
+async function communityTracks(query: string, source: DesktopCatalogSource, signal: AbortSignal) {
   if (!window.luma) throw new Error('Этот каталог доступен в настольной версии Luma.');
   signal.throwIfAborted();
   const id = ++requestId;
@@ -55,7 +55,7 @@ async function communityTracks(query: string, source: CommunitySource, signal: A
 }
 
 export async function findOnlineTracks(query: string, source: OnlineFilter, signal: AbortSignal): Promise<OnlineTrack[]> {
-  if (source === 'southern_city' || source === 'netlabels') return communityTracks(query, source, signal);
+  if (source === 'southern_city' || source === 'netlabels' || source === 'ccmixter' || source === 'audius') return communityTracks(query, source, signal);
   const data = await getJson(onlineSearchUrl(query, source), signal) as { results?: unknown[] } | null;
   if (!Array.isArray(data?.results)) throw new Error('Каталог вернул неожиданный ответ.');
   const tracks = new Map<string, OnlineTrack>();

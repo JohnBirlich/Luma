@@ -60,6 +60,11 @@ test('legacy layouts remain unchanged; effect intensity and favorite IDs are val
   const old = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl' }, favorites: ['demo-afterimage', 5, 'demo-afterimage', '', 'local'] }));
   assert.equal(old.appearance.hero, 'vinyl');
   assert.equal(old.appearance.effect, 'off');
+  const cover = decodePreferences(JSON.stringify({ appearance: { hero: 'cover', effect: 'cover', motion: false }, volume: .31 }));
+  assert.equal(cover.appearance.hero, 'cover');
+  assert.equal(cover.appearance.effect, 'off');
+  assert.equal(cover.appearance.motion, false);
+  assert.equal(cover.volume, .31);
   assert.deepEqual(old.favorites, ['demo-afterimage', 'local']);
   const options = decodePreferences(JSON.stringify({ appearance: { effect: 'waves', effectStrength: 50, compactSidebar: true } }));
   assert.equal(options.appearance.effect, 'waves');
@@ -68,7 +73,7 @@ test('legacy layouts remain unchanged; effect intensity and favorite IDs are val
 });
 
 test('scene choices persist without replacing old settings', () => {
-  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'notes', 'liquid', 'mix-flow', 'cover', 'off']) {
+  for (const effect of ['orbits', 'prism', 'spectrum', 'columns', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'notes', 'liquid', 'mix-flow', 'tunnel', 'off']) {
     const prefs = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl', effect, effectStrength: 0.6, motion: false }, volume: 0.17 }));
     assert.equal(prefs.appearance.effect, effect);
     assert.equal(prefs.appearance.hero, 'vinyl');

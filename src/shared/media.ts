@@ -6,7 +6,7 @@ import type { AppInfo } from './app-info.js';
 import type { DiagnosticsBridge } from './diagnostics.js';
 import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
 import { cleanTrackText, musicSearchKey, readTrackTag } from './russian.js';
-import type { CommunitySource, Mp3ExportResult, OnlineCreditData, OnlineTrack } from './online.js';
+import type { DesktopCatalogSource, Mp3ExportResult, OnlineCreditData, OnlineTrack } from './online.js';
 import type { StreamCacheInfo } from './stream-cache.js';
 import type { LastFmStatus, ListeningEvent } from './lastfm.js';
 import type { Lyrics, LyricsQuery } from './lyrics.js';
@@ -59,7 +59,7 @@ export interface DesktopBridge {
   setUiLanguage(value: UiLanguage): Promise<void>;
   getAppInfo(): Promise<AppInfo>;
   openReleases(): Promise<void>;
-  searchCommunity(id: number, query: string, source: CommunitySource): Promise<OnlineTrack[]>;
+  searchCommunity(id: number, query: string, source: DesktopCatalogSource): Promise<OnlineTrack[]>;
   cancelCatalogSearch(id: number): Promise<void>;
   openOnlineLink(url: string): Promise<void>;
   getTracks(): Promise<Track[]>;

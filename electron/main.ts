@@ -338,7 +338,7 @@ if (!app.requestSingleInstanceLock()) {
       canRouteAudio(contents, permission, details.requestingUrl, details.isMainFrame));
     const library = await DesktopLibrary.open(app.getPath('userData'));
     const cache = await StreamCache.open(join(app.getPath('userData'), 'stream-cache'), net.fetch);
-    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache));
+    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache, net.fetch));
     journal.main('desktop.protocol');
     const lastfm = await DesktopLastFm.open(lastFmConfig(process.env.LUMA_LASTFM_API_KEY, process.env.LUMA_LASTFM_SECRET), net.fetch,
       join(app.getPath('userData'), 'lastfm-session.bin'), safeStorage);

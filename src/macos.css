@@ -84,20 +84,20 @@
 [data-layout='glass'] .player-bar .range::-webkit-slider-runnable-track { background: linear-gradient(to right,var(--accent) var(--filled),#34507342 var(--filled)); }
 [data-layout='glass'] .player-bar .range::-moz-range-track { background: linear-gradient(to right,var(--accent) var(--filled),#34507342 var(--filled)); }
 [data-layout='glass'] .player-bar .timeline > span { color: var(--quiet); }
-/* A macOS-style app dock, not a second set of pill tabs. Only Luma destinations. */
+/* A macOS-style app dock with its own quick-access shortcuts. */
 .glass-dock { grid-area: 4 / 1 / 5 / -1; align-self: center; justify-self: center; max-width: calc(100% - 16px); z-index: 4; }
-.glass-navigation { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; align-items: stretch;
+.glass-navigation { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto minmax(30px, .58fr); align-items: stretch;
   gap: clamp(2px,.65vw,9px); width: min(490px,calc(100vw - 18px)); min-width: 0;
   border-radius: 22px; padding: 6px 8px 4px; background: linear-gradient(175deg,#fcfeffaf,#bcd0ed80); }
-.glass-navigation button { position: relative; display: grid; place-items: center; align-content: start; gap: 3px; min-width: 0; min-height: 61px;
+.glass-navigation :is(button, .vk-dock) { position: relative; display: grid; place-items: center; align-content: start; gap: 3px; min-width: 0; min-height: 61px;
   padding: 2px 3px 7px; border: 0; background: none; color: var(--text); font: 680 clamp(8px,1.45vw,11px)/1.1 var(--display); }
-.glass-navigation button > span { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+.glass-navigation :is(button, .vk-dock) > span { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: center; }
 .glass-navigation button[aria-current='page']::after { content: ''; position: absolute; bottom: 1px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent-light); }
 .glass-dock-icon { width: clamp(29px,5.4vw,41px); aspect-ratio: 1; display: grid; place-items: center; border-radius: 28%;
   color: #fff; background: linear-gradient(151deg,var(--dock-high,#afb8cf),var(--dock-low,#38476d));
   box-shadow: inset 0 1px 1px #fff9, inset 0 -1px 1px #15205461, 0 4px 8px #2337583b;
   transform-origin: 50% 88%; transition: transform .2s cubic-bezier(.2,.75,.25,1); }
-.glass-navigation button:is(:hover,:focus-visible) .glass-dock-icon { transform: translateY(-4px) scale(1.13); }
+.glass-navigation :is(button, .vk-dock):is(:hover,:focus-visible) .glass-dock-icon { transform: translateY(-4px) scale(1.13); }
 [data-dock-item='player'] { --dock-high:#4ac3fa; --dock-low:#1b56ba; }
 [data-dock-item='search'] { --dock-high:#ad8df6; --dock-low:#6041c0; }
 [data-dock-item='library'] { --dock-high:#ff7c8c; --dock-low:#b62373; }
@@ -107,6 +107,7 @@
   width: auto; border-radius: 0; box-shadow: none; backdrop-filter: none; }
 .glass-sound .enabled-dot { position: absolute; top: 1px; right: 1px; background: #5fffd2; }
 .glass-navigation .glass-sound .glass-dock-icon { --dock-high:#4fa994; --dock-low:#15685d; }
+.glass-navigation .vk-dock .glass-dock-icon { --dock-high:#619ff0; --dock-low:#2355a0; }
 
 /* Dedicated glass cards, cohesive styling for every tab, popover and preference panel. */
 [data-layout='glass'] :is(.home-now,.hub-shelf,.setting-card,.settings-preview,.menu-items,.menu-profile,.menu-about,.online-surface,.online-panel,.journal,.diagnostic-system > div,.mix-control,.mix-card,.track-card,.track-list-item,.lyrics-card) {
@@ -127,7 +128,7 @@
 [data-layout='glass'] .home-now .page-actions .button { color: var(--accent-light); background: #fff6; border-color: #fff9; }
 [data-layout='glass'] .home-now .hero { border-radius: 17px; }
 [data-layout='glass'] .hub-hero { border-radius: 26px; border-color: #ffffffbd; box-shadow: 0 10px 35px #25396d38; }
-[data-layout='glass'] .scene-mix-flow .mix-flow-light { background:
+[data-layout='glass'] .scene-mix-flow:not([data-cover-tone]) .mix-flow-light { background:
   radial-gradient(ellipse at 82% 26%,#f7c7ffb3 0%,#a47dea73 23%,transparent 57%),
   radial-gradient(ellipse at 72% 73%,#2f96f1 0%,#2748aa99 37%,transparent 71%),
   linear-gradient(151deg,#091f4b 14%,#2a2b7e 59%,#6b5bb6); }
@@ -259,7 +260,7 @@
   [data-layout='glass'] .hub-tabs { flex-wrap: wrap; justify-content: center; border-radius: 18px; }
   [data-layout='glass'] .hub-tabs button { padding-inline: 7px; }
   .glass-navigation { padding-inline: 4px; }
-  .glass-navigation button { padding-inline: 1px; min-height: 58px; }
+  .glass-navigation :is(button, .vk-dock) { padding-inline: 1px; min-height: 58px; }
   .glass-dock-icon svg { width: 17px; height: 17px; }
 }
 
@@ -378,6 +379,6 @@
 [data-layout='glass'] .immersive-meta h1, [data-layout='glass'] .karaoke-meta h1 { line-height: 1.12; }
 [data-layout='glass'] .glass-navigation button:not(.glass-sound) { border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) {
-  .glass-navigation button:is(:hover,:focus-visible) .glass-dock-icon { transform: none; }
+  .glass-navigation :is(button, .vk-dock):is(:hover,:focus-visible) .glass-dock-icon { transform: none; }
 }
-.motion-off .glass-navigation button:is(:hover,:focus-visible) .glass-dock-icon { transform: none; }
+.motion-off .glass-navigation :is(button, .vk-dock):is(:hover,:focus-visible) .glass-dock-icon { transform: none; }

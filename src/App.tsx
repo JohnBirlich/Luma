@@ -47,7 +47,7 @@ import { dataLocale } from './shared/app-info';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
 import { adjacentStationId, stationTracks, STATION_IDS, tuneStation } from './shared/radio';
 import { MAX_PLAYLISTS, playlistTitle, playlistTrackIds } from './shared/luma-playlists';
-import { MAX_ONLINE_TRACKS, readOnlineTrack } from './shared/online';
+import { MAX_ONLINE_TRACKS, readOnlineTrack, sessionCatalogId } from './shared/online';
 import type { OnlineTrack } from './shared/online';
 import type { ImportResult, Track } from './shared/media';
 import { adjacentId, appendToQueue, moveUpcoming, reconcileQueue, removeFromQueue, startQueue, toggleShuffle, upcomingIds } from './shared/queue';
@@ -442,7 +442,7 @@ export default function App() {
     } finally { busy.current = false; setWorking(false); }
   }
   const chooseOnline = useCallback((track: OnlineTrack, action: OnlineAction) => {
-    if (!ready) return;
+    if (!ready || (sessionCatalogId(track.id) && action !== 'play' && action !== 'queue')) return;
     const state = queueRef.current;
     if (action === 'cache') {
       if (!window.luma?.streamCache || busy.current) return;
@@ -546,6 +546,7 @@ export default function App() {
     });
   }
   function editTrackCover(id: string) {
+    if (sessionCatalogId(id)) return;
     const track = originals.find((item) => item.id === id);
     if (track) setCoverTarget({ key: trackCoverKey(id), title: byId.get(id)?.title ?? track.title, kind: 'track', originalUrl: track.artworkUrl });
   }
@@ -638,13 +639,14 @@ export default function App() {
     }));
   }, []);
   const toggleFavorite = useCallback((id: string) => {
+    if (sessionCatalogId(id)) return;
     if (STATION_IDS.has(id)) { saveStation(id); return; }
     setPreferences((data) => ({
       ...data, favorites: data.favorites.includes(id) ? data.favorites.filter((favorite) => favorite !== id) : [...data.favorites, id],
       disliked: data.disliked.filter((item) => item !== id),
     }));
   }, [saveStation]);
-  const toggleDislike = useCallback((id: string) => setPreferences((data) => ({
+  const toggleDislike = useCallback((id: string) => setPreferences((data) => sessionCatalogId(id) ? data : ({
     ...data, disliked: data.disliked.includes(id) ? data.disliked.filter((item) => item !== id) : [...data.disliked, id],
     favorites: data.favorites.filter((item) => item !== id),
   })), []);

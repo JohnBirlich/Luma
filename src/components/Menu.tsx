@@ -1,36 +1,10 @@
 import { useText } from '../i18n/context';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, ArrowUpRight, AudioLines, Bug, ChevronRight, Heart, History, Info, LogIn, Music2, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bug, ChevronRight, Heart, History, Info, Music2, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
-import { VK_MUSIC_URL } from '../shared/vk';
 import { About } from './About';
-
-function VkMusicLink() {
-  const t = useText();
-  const description = useId();
-  const [opening, setOpening] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const title = t('Зайти в VK');
-  return <a className="menu-item menu-link" href={VK_MUSIC_URL} target="_blank" rel="noopener noreferrer"
-    aria-label={title} aria-describedby={description} onClick={(event) => {
-      if (!window.luma) return;
-      event.preventDefault();
-      if (opening) return;
-      setOpening(true);
-      setFailed(false);
-      void window.luma.openVkMusic().catch(() => setFailed(true)).finally(() => setOpening(false));
-    }}>
-    <span className="menu-item-icon" aria-hidden="true"><LogIn size={19} strokeWidth={1.75} /></span>
-    <span className="menu-item-copy"><strong>{title}</strong>
-      <small id={description}>{t('Вход и плейлисты на vk.ru в браузере, без синхронизации с Luma.')}
-        <span role="status" className="menu-link-status">{failed && t('Не удалось открыть VK. Перейдите на vk.ru/audio в браузере.')}</span>
-      </small>
-    </span>
-    <ArrowUpRight className="menu-chevron" size={17} aria-hidden="true" />
-  </a>;
-}
 
 interface MenuItemProps {
   icon: LucideIcon;
@@ -94,7 +68,6 @@ export function MenuPage(props: MenuPageProps) {
             <MenuItem icon={Settings2} title={t("Настройки")} detail={t("Внешний вид, медиатека и воспроизведение")} select={props.openSettings} />
             <MenuItem icon={Bug} title={t("Диагностика")} detail={t("Журнал событий, подключение и сведения о системе")} select={props.openDiagnostics} />
             <MenuItem icon={SlidersHorizontal} title={t('Эквалайзер')} detail={t('Настройте частоты и предусиление')} select={props.openEqualizer} dialog />
-            <VkMusicLink />
             <MenuItem icon={Info} title={t("О приложении")} detail={t("Версия Luma, возможности и релизы")} select={() => setAbout(true)} />
           </MenuGroup>
         </>}

@@ -1,7 +1,8 @@
 import { archiveId, catalogLicense, catalogRetryDelay, catalogObject as object, readOnlineTrack } from './online.js';
-import type { CommunitySource, OnlineTrack } from './online.js';
+import type { CommunitySource, DesktopCatalogSource, OnlineTrack } from './online.js';
 import { musicSearchKey } from './russian.js';
 import { readLimitedBody } from './metadata-service.js';
+import { publicCatalogTracks, publicCatalogUrl } from './public-catalogs.js';
 
 const list = (value: unknown, max: number) => Array.isArray(value) ? value.slice(0, max) : [];
 const str = (value: unknown) => typeof value === 'string' ? value : '';
@@ -37,15 +38,18 @@ export function communitySearchUrl(query: string, source: CommunitySource) {
 type FetchCatalog = (url: string, init?: RequestInit) => Promise<Response>;
 const validQuery = (value: unknown): value is string => typeof value === 'string' && value.length <= 140 && value.trim().length >= 2 && /[\p{L}\p{N}]/u.test(value);
 
-export async function searchCommunity(fetcher: FetchCatalog, value: unknown, source: CommunitySource, signal: AbortSignal) {
+export async function searchCommunity(fetcher: FetchCatalog, value: unknown, source: DesktopCatalogSource, signal: AbortSignal) {
   if (!validQuery(value)) return [];
   async function get(url: URL, limit: number) {
-    const response = await fetcher(url.href, { signal, credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', headers: { Accept: 'application/json' } });
+    const response = await fetcher(url.href, { signal, cache: 'no-store', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', headers: { Accept: 'application/json' } });
     if (!response.ok || !response.body) {
       void response.body?.cancel().catch(() => {});
       throw new Error('Каталог сейчас недоступен.');
     }
     return JSON.parse(new TextDecoder().decode(await readLimitedBody(response, limit, signal))) as unknown;
+  }
+  if (source === 'ccmixter' || source === 'audius') {
+    return publicCatalogTracks(await get(publicCatalogUrl(value, source), 768 * 1024), source);
   }
   const results = await get(communitySearchUrl(value, source), 768 * 1024);
   const response = object(object(results).response);
@@ -58,24 +62,25 @@ export async function searchCommunity(fetcher: FetchCatalog, value: unknown, sou
   return metadata.flatMap((entry) => entry.status === 'fulfilled' ? entry.value : []).sort((a, b) => scores(b) - scores(a)).slice(0, 18);
 }
 
-/** A new query replaces only its own scope. Archive's quota is shared between scopes. */
+/** A new query replaces only its own scope. The two Archive scopes share one quota. */
 export function createCommunitySearch(fetcher: FetchCatalog, now = Date.now) {
-  const active = new Map<CommunitySource, { id: number; controller: AbortController }>();
-  let retryAt = 0;
+  const active = new Map<DesktopCatalogSource, { id: number; controller: AbortController }>();
+  const retryAt = new Map<string, number>();
   const fetchCatalog: FetchCatalog = async (url, init) => {
     init?.signal?.throwIfAborted();
-    if (retryAt > now()) throw new Error('Каталог сейчас недоступен.');
+    const host = new URL(url).hostname;
+    if ((retryAt.get(host) ?? 0) > now()) throw new Error('Каталог сейчас недоступен.');
     const response = await fetcher(url, init);
     if (response.status === 429) {
       const time = now();
-      retryAt = Math.max(retryAt, time + catalogRetryDelay(response.headers.get('Retry-After'), time));
+      retryAt.set(host, Math.max(retryAt.get(host) ?? 0, time + catalogRetryDelay(response.headers.get('Retry-After'), time)));
     }
     return response;
   };
   return {
     async search(id: unknown, query: unknown, source: unknown) {
       if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || !validQuery(query)
-        || (source !== 'netlabels' && source !== 'southern_city')) return [];
+        || (source !== 'netlabels' && source !== 'southern_city' && source !== 'ccmixter' && source !== 'audius')) return [];
       active.get(source)?.controller.abort();
       const controller = new AbortController();
       active.set(source, { id, controller });
