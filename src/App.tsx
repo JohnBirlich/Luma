@@ -158,9 +158,10 @@ export default function App() {
   const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance || importPlaylist);
   const { kind: presentationKind, show: showStage, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
   const presentationOpen = presentationKind !== null;
-  const karaokeOpen = presentationKind === 'karaoke' && !live;
+  const canUseLyrics = !!current && !live && !sessionCatalogId(current.id);
+  const karaokeOpen = presentationKind === 'karaoke' && canUseLyrics;
   const showPresentation = useCallback(() => showStage('player'), [showStage]);
-  const showKaraoke = useCallback(() => { if (!live) showStage('karaoke'); }, [showStage, live]);
+  const showKaraoke = useCallback(() => { if (canUseLyrics) showStage('karaoke'); }, [showStage, canUseLyrics]);
   const trackStarted = useCallback((id: string) => setPreferences((data) => {
     if (!data.playback.rememberRecent) return data;
     const recent = rememberTrack(data.recent, id);
@@ -168,7 +169,7 @@ export default function App() {
   }), []);
   const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
-  const lyrics = useTrackLyrics(live ? null : current, { enabled: !widget && (karaokeOpen || (!presentationOpen && page === 'player' && homeTab === 'home' && !homeQuery.trim())),
+  const lyrics = useTrackLyrics(canUseLyrics ? current : null, { enabled: !widget && (karaokeOpen || (!presentationOpen && page === 'player' && homeTab === 'home' && !homeQuery.trim())),
     auto: preferences.autoLyrics, connected, playing: player.playing, duration: player.duration });
   const changeWidget = useCallback(async (enabled: boolean) => {
     if (!window.luma || switchingWidget.current || presentationOpen) return;
@@ -706,7 +707,7 @@ export default function App() {
               favorite={!!current && (live ? stationIds : favoriteIds).has(current.id)} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)}
               openPresentation={showPresentation} openKaraoke={showKaraoke} sceneVisible={page === 'player' && !widget && !presentationOpen && !modalOpen}
               readSpectrum={player.readSpectrum} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} />}
-            lyrics={current && !live && !presentationOpen && page === 'player' && (!current.demo || lyrics.attached)
+            lyrics={current && canUseLyrics && !presentationOpen && page === 'player' && (!current.demo || lyrics.attached)
               ? <LyricsPanel key={current.id} state={lyrics} elapsed={player.elapsed} clock={player.playing ? position : undefined} demo={current.demo} /> : undefined} />
           </Suspense> :
           basePage === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :

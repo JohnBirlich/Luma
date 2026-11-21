@@ -1,12 +1,6 @@
-export const ccMixterUrl = 'https://ccmixter.org/content/airtone/airtone_-_reFramed.mp3';
-export const remixRecording = {
-  upload_id: 71367, upload_name: 'reFramed', user_name: 'airtone', user_real_name: 'airtone',
-  upload_extra: { nsfw: false, usertags: 'chill,instrumental,acoustic,jazz' },
-  license_url: 'http://creativecommons.org/licenses/by-nc/3.0/',
-  files: [{ file_upload: 71367, file_order: 0, file_is_remote: 0, download_url: ccMixterUrl,
-    file_format_info: { 'format-name': 'audio-mp3-mp3', ps: '2:36' } }],
-};
-export const creatorStream = 'https://creatornode.audius.co/tracks/cidstream/QmerX2iozUJH2SXLw3s4WYr82wSSeTaf6DiNm6bk2jnfiR?signature=fixture';
+const cid = 'QmerX2iozUJH2SXLw3s4WYr82wSSeTaf6DiNm6bk2jnfiR';
+export const creatorStream = `https://creatornode.audius.co/tracks/cidstream/${cid}?signature=fixture`;
+export const storageStream = `https://validator.eeba4a6ca56a0d87af802270217c2a51.r2.cloudflarestorage.com/nfi/${cid}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=${'a'.repeat(64)}`;
 export const audiusRecording = {
   id: 'DX0Xb', title: 'Siberian Jazz', user: { name: 'EIME', handle: 'EIME' }, genre: 'Jazz', duration: 115,
   permalink: '/EIME/siberian-jazz', license: 'All rights reserved', is_available: true, is_streamable: true,

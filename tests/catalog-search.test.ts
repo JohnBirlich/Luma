@@ -28,16 +28,15 @@ test('one normalized query starts every desktop catalog and publishes partial re
   const controller = new AbortController();
   const results: CatalogResult[] = [];
   const finished = search('  jazz\t café ', catalogTargets(true), controller.signal, (result) => results.push(result));
-  assert.deepEqual(calls, ['all', 'netlabels', 'ccmixter', 'audius', 'southern_city'].map((source) => ['jazz café', source, controller.signal]));
+  assert.deepEqual(calls, ['all', 'netlabels', 'audius', 'southern_city'].map((source) => ['jazz café', source, controller.signal]));
   settle.get('all')!([jamendo, commons]);
   await Promise.resolve();
   assert.deepEqual(results, [{ id: 'openverse', tracks: [jamendo, commons] }], 'do not wait for Archive');
   settle.get('netlabels')!([archive]);
-  settle.get('ccmixter')!([]);
   settle.get('audius')!([]);
   settle.get('southern_city')!([archive]);
   await finished;
-  assert.deepEqual(results.map(({ id }) => id), ['openverse', 'netlabels', 'ccmixter', 'audius', 'southern_city']);
+  assert.deepEqual(results.map(({ id }) => id), ['openverse', 'netlabels', 'audius', 'southern_city']);
   assert.deepEqual(mergeCatalogResults(results), [jamendo, archive, commons]);
 });
 

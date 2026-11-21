@@ -4,7 +4,7 @@ import { MAX_LYRIC_FILE, readCustomLyrics, readLocalLyrics, readLyricsQuery, sel
 import type { Lyrics, LyricSource } from '../shared/lyrics';
 import { createLyricsService } from '../shared/lyrics-service';
 import type { Track } from '../shared/media';
-import { ONLINE_SOURCES } from '../shared/online';
+import { ONLINE_SOURCES, sessionCatalogId } from '../shared/online';
 
 const webLyrics = createLyricsService();
 interface Workspace {
@@ -33,7 +33,8 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
   const update = useCallback((patch: (previous: Workspace) => Partial<Workspace>) => {
     setStore((previous) => previous.token === token ? { ...previous, ...patch(previous) } : previous);
   }, [token]);
-  const edition = useMemo(() => track && !track.demo ? findLyricEdition(track.title) : undefined, [track?.title, track?.demo]);
+  const sessionOnly = sessionCatalogId(id);
+  const edition = useMemo(() => track && !track.demo && !sessionOnly ? findLyricEdition(track.title) : undefined, [track?.title, track?.demo, sessionOnly]);
   const online = track?.online;
   const canReadSidecar = Boolean(window.luma && track && !track.demo && !online);
   const embedded = useMemo(() => readLocalLyrics(track?.embeddedLyrics), [track?.embeddedLyrics]);
@@ -42,8 +43,8 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
   const title = track?.title, artist = track?.artist, album = track?.album;
   // Catalog duration belongs to that record. For files without a tag, use the decoded duration.
   const length = track?.duration || Math.round(duration);
-  const query = useMemo(() => demo || online?.source === 'broadcast' ? undefined : readLyricsQuery({ title, artist,
-    album: online && album === ONLINE_SOURCES[online.source] ? undefined : album, duration: length }), [title, artist, album, length, online, demo]);
+  const query = useMemo(() => demo || sessionOnly || online?.source === 'broadcast' ? undefined : readLyricsQuery({ title, artist,
+    album: online && album === ONLINE_SOURCES[online.source] ? undefined : album, duration: length }), [title, artist, album, length, online, demo, sessionOnly]);
   const key = query ? JSON.stringify(query) : '';
   const cached = remote && remote.key === key ? remote : undefined;
   const done = cached?.attempt === attempt;

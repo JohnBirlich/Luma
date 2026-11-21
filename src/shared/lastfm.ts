@@ -1,5 +1,6 @@
 import type { Track } from './media.js';
 import { cleanTrackText } from './russian.js';
+import { sessionCatalogId } from './online.js';
 
 export const LASTFM_GUIDE = 'https://www.last.fm/api/account/create';
 export type LastFmIssue = 'authorize' | 'offline' | 'rejected' | 'expired' | 'tokenExpired' | 'credentials' | 'storage'
@@ -47,7 +48,7 @@ export class ListeningClock {
   private constructor(private readonly tags: Pick<ListeningEvent, 'title' | 'artist' | 'album' | 'started'>) {}
   static start(track: Track, started: number) {
     const title = tag(track.title), artist = tag(track.artist), album = tag(track.album);
-    if (track.demo || !title || !artist || title === 'Без названия' || artist === 'Неизвестный исполнитель') return;
+    if (track.demo || sessionCatalogId(track.id) || !title || !artist || title === 'Без названия' || artist === 'Неизвестный исполнитель') return;
     return new ListeningClock({ title, artist, album: track.online || album === 'Без альбома' ? undefined : album || undefined, started });
   }
   now(duration: number): ListeningEvent { return { ...this.tags, kind: 'now', duration, listened: 0 }; }

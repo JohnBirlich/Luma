@@ -8,6 +8,7 @@ import type { Appearance } from '../shared/customization';
 import type { KaraokeStyle } from '../shared/karaoke-style';
 import type { Track } from '../shared/media';
 import { OnlineCredit } from './OnlineMusic';
+import { sessionCatalogId } from '../shared/online';
 import { LyricsPanel } from './LyricsPanel';
 import './karaoke.css';
 import { Artwork } from './Artwork';
@@ -76,7 +77,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
         <button type="button" className="icon-button immersive-collapse" onClick={close} title={t("Свернуть (Esc)")} aria-label={t("Свернуть полноэкранный плеер")}><ChevronDown size={24} /></button>
         <div><p className="overline">{t(karaoke ? "Караоке" : "Сейчас играет")}</p><strong>{props.live ? t("Прямой эфир") : track.online ? t("Онлайн-трек") : track.demo ? t("Демотреки Luma") : t("Локальная медиатека")}</strong></div>
         <div className="immersive-header-actions">
-          <button type="button" className="icon-button immersive-karaoke-toggle" onClick={props.toggleKaraoke} disabled={props.live && !karaoke}
+          <button type="button" className="icon-button immersive-karaoke-toggle" onClick={props.toggleKaraoke} disabled={!karaoke && (props.live || sessionCatalogId(track.id))}
             aria-pressed={karaoke} aria-label={t('Караоке')} title={t(karaoke ? 'Вернуться к обложке' : 'Караоке (L)')}><MicVocal size={20} /></button>
           <button type="button" className="icon-button immersive-queue-toggle" onClick={karaoke ? () => setKaraokeQueue(!karaokeQueue) : props.toggleQueue}
             aria-expanded={queueVisible} aria-controls={queueVisible ? 'immersive-upcoming' : undefined} aria-label={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}

@@ -8,6 +8,7 @@ import { audioMime } from '../src/shared/media.js';
 import { APP_ORIGIN, type DesktopLibrary } from './library.js';
 import type { StreamCache } from './stream-cache.js';
 import { streamAudius } from './audius-stream.js';
+import type { AudiusFetch } from './audius-stream.js';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -63,7 +64,7 @@ async function streamFile(path: string, request: Request, headers: Headers) {
   return new Response(body, { status: range ? 206 : 200, headers });
 }
 
-export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache, audiusFetch?: (url: string, init?: RequestInit) => Promise<Response>) {
+export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache, audiusFetch?: AudiusFetch) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.protocol !== 'luma:' || url.hostname !== 'app' || url.port || url.username || url.password) return new Response(null, { status: 404 });

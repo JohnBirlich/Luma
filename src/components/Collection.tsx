@@ -7,6 +7,7 @@ import { formatCount } from '../shared/customization';
 import { musicGroups, tracksInGroup } from '../shared/mix';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
+import { sessionCatalogId } from '../shared/online';
 import type { OnlineTrack } from '../shared/online';
 import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
 import type { CatalogSearchPreferences } from './OnlineMusic';
@@ -134,7 +135,7 @@ export function NowPlayingCard(props: NowPlayingProps) {
             {track && <>
               <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />
               {track.online?.source !== "broadcast" && <DislikeButton track={track} selected={props.disliked.has(track.id)} toggle={props.toggleDislike} />}
-              <button type="button" className="icon-button hero-karaoke" disabled={track.online?.source === "broadcast"} onClick={props.openKaraoke} aria-label={t("Караоке")} title={t("Караоке (L)")} aria-haspopup="dialog"><MicVocal size={17} /></button>
+              <button type="button" className="icon-button hero-karaoke" disabled={track.online?.source === "broadcast" || sessionCatalogId(track.id)} onClick={props.openKaraoke} aria-label={t("Караоке")} title={t("Караоке (L)")} aria-haspopup="dialog"><MicVocal size={17} /></button>
               <button type="button" className="icon-button hero-fullscreen" onClick={props.openPresentation} aria-label={t("Развернуть текущий трек")} title={t("Во весь экран (F)")} aria-haspopup="dialog"><Maximize2 size={17} /></button>
             </>}
           </div>

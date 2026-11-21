@@ -4,7 +4,6 @@ import { cleanTrackText } from './russian.js';
 
 export const OPENVERSE_API = 'https://api.openverse.org/v1/audio/';
 const OPENVERSE_ORIGIN = new URL(OPENVERSE_API).origin;
-export const CCMIXTER_ORIGIN = 'https://ccmixter.org';
 export const AUDIUS_API = 'https://api.audius.co/v1/tracks/';
 export const AUDIUS_CONTENT_ORIGIN = 'https://creatornode.audius.co';
 export const AUDIUS_LEGAL = {
@@ -14,12 +13,12 @@ export const AUDIUS_APP_NAME = 'Luma Player';
 export const ONLINE_ORIGINS = {
   connect: OPENVERSE_ORIGIN,
   images: 'https://api.openverse.org/v1/audio/',
-  media: 'https://*.storage.jamendo.com https://storage.jamendo.com https://upload.wikimedia.org/wikipedia/commons/ https://archive.org/download/ https://*.archive.org/ https://ccmixter.org/content/',
+  media: 'https://*.storage.jamendo.com https://storage.jamendo.com https://upload.wikimedia.org/wikipedia/commons/ https://archive.org/download/ https://*.archive.org/',
 };
-export const ONLINE_SOURCES = { jamendo: 'Jamendo', wikimedia_audio: 'Wikimedia Commons', netlabels: 'Internet Archive · Netlabels', ccmixter: 'ccMixter', audius: 'Audius' } as const;
+export const ONLINE_SOURCES = { jamendo: 'Jamendo', wikimedia_audio: 'Wikimedia Commons', netlabels: 'Internet Archive · Netlabels', audius: 'Audius' } as const;
 export type OnlineSource = keyof typeof ONLINE_SOURCES;
 export type CommunitySource = 'netlabels' | 'southern_city';
-export type DesktopCatalogSource = CommunitySource | 'ccmixter' | 'audius';
+export type DesktopCatalogSource = CommunitySource | 'audius';
 export type OnlineFilter = OnlineSource | DesktopCatalogSource | 'all';
 export const MAX_ONLINE_TRACKS = 180;
 export interface OnlineCreditData { source: OnlineSource | 'broadcast'; page: string; license: string; licenseUrl: string }
@@ -46,7 +45,6 @@ function webUrl(value: unknown): URL | undefined {
 
 export const archiveId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{1,99}$/.test(value);
 
-const ccMixterPage = /^\/files\/([\w-]{1,80})\/([1-9]\d{0,11})$/;
 const audiusTrackPage = /^\/[\w-]{1,64}\/[\w-]{1,180}$/;
 export const audiusId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9]{3,16}$/.test(value);
 export const sessionCatalogId = (value: unknown) => typeof value === 'string' && value.startsWith('audius-') && audiusId(value.slice(7));
@@ -60,8 +58,6 @@ function sourcePage(url: URL, source: OnlineSource): URL | undefined {
   } else if (source === 'netlabels') {
     const id = url.pathname.match(/^\/details\/([^/]+)\/?$/)?.[1];
     if (url.hostname === 'archive.org' && archiveId(id)) return new URL(`${url.origin}/details/${id}`);
-  } else if (source === 'ccmixter') {
-    if (url.origin === CCMIXTER_ORIGIN && ccMixterPage.test(url.pathname)) return new URL(url.origin + url.pathname);
   } else if (source === 'audius') {
     if (url.origin === 'https://audius.co' && audiusTrackPage.test(url.pathname)) return new URL(url.origin + url.pathname);
   } else if (url.hostname === 'commons.wikimedia.org') {
@@ -108,10 +104,6 @@ function sourceMedia(url: URL, source: OnlineSource, page: URL): string | undefi
     const prefix = `/download/${page.pathname.split('/')[2]}/`;
     const file = url.hostname === 'archive.org' && url.pathname.startsWith(prefix) && singleAudioFile(url.pathname.slice(prefix.length));
     if (file) return url.origin + prefix + file;
-  } else if (source === 'ccmixter') {
-    const prefix = `/content/${page.pathname.split('/')[2]}/`;
-    const file = url.origin === CCMIXTER_ORIGIN && url.pathname.startsWith(prefix) && singleAudioFile(url.pathname.slice(prefix.length));
-    if (file) return url.origin + prefix + file;
   } else if (source === 'wikimedia_audio' && url.hostname === 'upload.wikimedia.org' && /^\/wikipedia\/commons\/[\da-f]\/[\da-f]{2}\/[^/]+\.(?:ogg|oga|opus|mp3|flac|wav|webm)$/i.test(url.pathname)) {
     return url.origin + url.pathname;
   }
@@ -133,7 +125,7 @@ export function readOnlineTrack(value: unknown): OnlineTrack | undefined {
   const info = catalogObject(row.online);
   const id = typeof row.id === 'string' && row.id.startsWith('ov-') ? row.id.slice(3) : '';
   const source = info.source;
-  if (source !== 'jamendo' && source !== 'wikimedia_audio' && source !== 'netlabels' && source !== 'ccmixter' && source !== 'audius') return;
+  if (source !== 'jamendo' && source !== 'wikimedia_audio' && source !== 'netlabels' && source !== 'audius') return;
   const openverse = source === 'jamendo' || source === 'wikimedia_audio';
   if (openverse && !uuid.test(id)) return;
   const pageUrl = webUrl(info.page), audioUrl = webUrl(row.audioUrl), licenseUrl = webUrl(info.licenseUrl);
@@ -145,8 +137,7 @@ export function readOnlineTrack(value: unknown): OnlineTrack | undefined {
   if (!page || !media || !license) return;
   const name = title(row.title);
   if (!name) return;
-  const normalizedId = openverse ? `ov-${id.toLowerCase()}` : source === 'ccmixter' ? `ccmixter-${page.pathname.split('/')[3]}`
-    : audius ? `audius-${audius}` : archiveTrackId(media);
+  const normalizedId = openverse ? `ov-${id.toLowerCase()}` : audius ? `audius-${audius}` : archiveTrackId(media);
   if (!openverse && row.id !== normalizedId && row.id !== undefined) return;
   const art = openverse ? webUrl(row.artworkUrl) : undefined;
   const cover = art?.origin === OPENVERSE_ORIGIN && art.pathname === `/v1/audio/${id}/thumb/` ? art.origin + art.pathname : undefined;

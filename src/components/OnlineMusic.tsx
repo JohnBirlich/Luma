@@ -48,7 +48,8 @@ function subscribeVisibility(listener: () => void) {
   return () => document.removeEventListener('visibilitychange', listener);
 }
 
-type SearchSnapshot = { term: string; attempt: number; results: Partial<Record<CatalogId, CatalogResult>> };
+type SearchAttempt = { term: string };
+type SearchSnapshot = { term: string; attempt?: SearchAttempt; results: Partial<Record<CatalogId, CatalogResult>> };
 
 /** Both search surfaces share one policy and show each supported catalog as it finishes. */
 export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCatalogSearch, saved, disabled, choose }: CatalogSearchPreferences & {
@@ -60,9 +61,12 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
   const desktop = !!window.luma?.searchCommunity;
   const targets = useMemo(() => catalogTargets(desktop), [desktop]);
   const term = catalogQuery(query);
-  const [attempt, setAttempt] = useState(0);
+  const [manual, setManual] = useState<SearchAttempt>();
+  const attempt = manual?.term === term ? manual : undefined;
+  // A manual request (including a retry) never carries over to later input.
+  if (manual && !attempt) setManual(undefined);
   const [snapshot, setSnapshot] = useState<SearchSnapshot>();
-  const active = !!term && connected && visible && foreground && (autoCatalogSearch || attempt > 0);
+  const active = !!term && connected && visible && foreground && (autoCatalogSearch || !!attempt);
   const results = active && snapshot?.term === term && snapshot.attempt === attempt ? snapshot.results : undefined;
   const settled = targets.flatMap(({ id }) => results?.[id] ?? []);
   const searching = active && settled.length < targets.length;
@@ -78,7 +82,7 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
         setSnapshot((state) => state?.term === term && state.attempt === attempt
           ? { ...state, results: { ...state.results, [result.id]: result } } : state);
       });
-    }, attempt > 0 ? 0 : CATALOG_DEBOUNCE_MS);
+    }, attempt ? 0 : CATALOG_DEBOUNCE_MS);
     return () => { window.clearTimeout(timeout); request.abort(); };
   }, [active, term, attempt, targets]);
 
@@ -91,11 +95,11 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
       <div className="catalog-controls">
         <label className="catalog-toggle" title={t('Автоматический онлайн-поиск')}>
           <input type="checkbox" aria-label={t('Автоматический онлайн-поиск')} checked={autoCatalogSearch} onChange={(event) => {
-            setSnapshot(undefined); setAttempt(0); changeAutoCatalogSearch(event.currentTarget.checked);
+            setSnapshot(undefined); setManual(undefined); changeAutoCatalogSearch(event.currentTarget.checked);
           }} />{t('Автопоиск')}
         </label>
         {(!autoCatalogSearch || failures.length > 0) && <button className="icon-button catalog-request" type="button" disabled={!canRequest}
-          aria-label={searchLabel} title={searchLabel} onClick={() => setAttempt((value) => value + 1)}><SearchIcon size={16} aria-hidden="true" /></button>}
+          aria-label={searchLabel} title={searchLabel} onClick={() => setManual({ term })}><SearchIcon size={16} aria-hidden="true" /></button>}
       </div>
     </header>
     <details className="catalog-details">

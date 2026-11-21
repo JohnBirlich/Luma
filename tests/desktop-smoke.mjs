@@ -13,7 +13,7 @@ import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
-import { audiusRecording, ccMixterUrl, creatorStream, remixRecording } from './fixtures/public-catalogs.mjs';
+import { audiusRecording, creatorStream, storageStream } from './fixtures/public-catalogs.mjs';
 import { parseFile } from 'music-metadata';
 import { taggedMp3 } from './fixtures/mp3.mjs';
 import { probeRadio } from './live-radio.mjs';
@@ -603,10 +603,6 @@ async function smoke() {
       if (query.startsWith('collection:southern-citys-lab ') && query.includes('"Ты"')) return new Response(null, { status: 503 });
       return Response.json({ response: { docs: query.includes('"jazz"') ? [{ identifier: 'SCL108' }] : [] } });
     }
-    if (url.origin === 'https://ccmixter.org' && url.pathname === '/api/query') {
-      extraCatalogCalls.push(url);
-      return Response.json(url.searchParams.get('s') === 'jazz' ? [remixRecording] : []);
-    }
     if (url.origin === 'https://api.audius.co' && url.pathname === '/v1/tracks/search') {
       extraCatalogCalls.push(url);
       return Response.json({ data: url.searchParams.get('query') === 'jazz' ? [audiusRecording, { ...audiusRecording, id: '1233T', title: 'Restricted', is_stream_gated: true }] : [] });
@@ -614,10 +610,11 @@ async function smoke() {
     if (url.origin === 'https://api.audius.co' && url.pathname === '/v1/tracks/DX0Xb/stream' && url.searchParams.get('no_redirect') === 'true') {
       return Response.json({ data: creatorStream });
     }
+    if (url.href === creatorStream) return Response.redirect(storageStream, 307);
     if (url.href === 'https://archive.org/metadata/SCL108') return Response.json(archiveRelease);
     if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
     const radioFixture = radioFixtureUrls.has(url.href);
-    if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, ccMixterUrl, creatorStream].includes(url.href)) {
+    if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, storageStream].includes(url.href)) {
       // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
       (radioFixture ? radioCalls : streamCalls).push(url.href);
       const range = request.headers.get('Range');
@@ -703,14 +700,13 @@ async function smoke() {
         if (value === 'ja') await new Promise(resolve => setTimeout(resolve, 90));
       }
     })()`);
-    await waitFor('automatic results from all four catalog backends', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 5
-      && document.querySelectorAll('.online-results li').length === 5 && !document.querySelector('.catalog-details').open`));
+    await waitFor('automatic results from all three catalog backends', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 4
+      && document.querySelectorAll('.online-results li').length === 4 && !document.querySelector('.catalog-details').open`));
     assert.equal(await run(`!!document.querySelector('.catalog-search select, .music-sites')`), false);
     assert.equal(catalogCalls.length, 1);
     assert.equal(catalogCalls[0].searchParams.get('q'), 'jazz');
     assert.equal(catalogCalls[0].searchParams.get('source'), 'jamendo,wikimedia_audio');
-    assert.deepEqual(extraCatalogCalls.map((url) => [url.origin, url.searchParams.get('s') ?? url.searchParams.get('query')]).sort(),
-      [['https://api.audius.co', 'jazz'], ['https://ccmixter.org', 'jazz']]);
+    assert.deepEqual(extraCatalogCalls.map((url) => [url.origin, url.searchParams.get('query')]), [['https://api.audius.co', 'jazz']]);
     await click('.catalog-details summary');
     assert.equal(await run(`document.querySelector('.catalog-details').open && !!document.querySelector('.catalog-details a[href="https://audius.co/legal/api-terms"]')`), true);
     await click('.catalog-details summary');
@@ -732,14 +728,16 @@ async function smoke() {
       const media = document.querySelector('${onlineAudio}');
       return media.currentSrc === ${JSON.stringify(url)} && media.currentTime > .15 && !media.paused;
     })()`);
-    await click('.online-results li[data-source="ccmixter"] button:first-child');
-    await waitFor('ccMixter MP3 decodes with production CSP', () => streamReady(ccMixterUrl));
-    assert.ok(streamCalls.includes(ccMixterUrl));
     assert.equal(await run(`document.querySelectorAll('.online-results li[data-source="audius"] button').length`), 2, 'Audius offers play and queue, not save or download');
     const ephemeralUrl = 'luma://app/media/audius/DX0Xb';
     await click('.online-results li[data-source="audius"] button:first-child');
     await waitFor('Audius stream decodes through the private protocol', () => streamReady(ephemeralUrl));
-    assert.ok(streamCalls.includes(creatorStream));
+    assert.ok(streamCalls.includes(storageStream));
+    await go('Главная');
+    await waitFor('Audius does not offer lyrics or saved listening actions', () => run(`document.querySelector('.hero h2')?.textContent === 'Siberian Jazz'
+      && document.querySelector('.hero-karaoke')?.disabled && !document.querySelector('.lyrics-panel')`));
+    await go('Поиск');
+    await waitFor('catalog search restored', () => run(`!!document.querySelector(${JSON.stringify(playOnline)})`));
     assert.doesNotMatch(JSON.stringify(await preferences()), /audius-|DX0Xb|Siberian Jazz|cidstream/);
     const partialAudius = await run(`(async () => {
       const response = await fetch(${JSON.stringify(ephemeralUrl)}, { headers: { Range: 'bytes=24-31' } });
@@ -1162,11 +1160,11 @@ async function smoke() {
     await session.defaultSession.clearCache();
     const { webRequest } = session.defaultSession;
     const network = [];
-    // Only capture statuses and origins, never media paths, signed URLs, cookies or user data.
-    const upstream = { urls: ['https://ccmixter.org/*', 'https://api.audius.co/*', 'https://creatornode.audius.co/*'] };
+    // Network diagnostics are limited to statuses, MIME, and origins.
+    const upstream = { urls: ['https://api.audius.co/*', 'https://creatornode.audius.co/*', `${new URL(storageStream).origin}/*`] };
     const label = (url) => {
       const { hostname, pathname } = new URL(url);
-      return `${hostname}${pathname.endsWith('/stream') ? '(resolve)' : pathname.includes('/cidstream/') || pathname.startsWith('/content/') ? '(media)' : '(query)'}`;
+      return `${hostname}${pathname.endsWith('/stream') ? '(resolve)' : pathname.includes('/cidstream/') || hostname.endsWith('.r2.cloudflarestorage.com') ? '(media)' : '(query)'}`;
     };
     webRequest.onResponseStarted(upstream, ({ url, statusCode, responseHeaders }) => {
       const mime = Object.entries(responseHeaders ?? {}).find(([key]) => key.toLowerCase() === 'content-type')?.[1]?.[0]?.split(';')[0];
@@ -1179,7 +1177,7 @@ async function smoke() {
       if (url && event.violatedDirective === 'media-src') (window.catalogPolicyBlocks ??= []).push(url.origin);
     });`);
     const sources = [
-      ['ccmixter', 'ccmixter', 'jazz', 'ccmixter.org'], ['audius', 'audius', 'jazz', 'app'],
+      ['audius', 'audius', 'jazz', 'app'],
       ['jamendo', 'openverse', 'jazz', 'storage.jamendo.com'], ['wikimedia_audio', 'openverse', 'Bach chaconne', 'upload.wikimedia.org'],
       ['netlabels', 'netlabels', 'Anatoly Nikulin', 'archive.org'], ['netlabels', 'southern_city', 'Газ', 'archive.org'],
     ];

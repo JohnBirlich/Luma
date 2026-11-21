@@ -55,7 +55,7 @@ async function communityTracks(query: string, source: DesktopCatalogSource, sign
 }
 
 export async function findOnlineTracks(query: string, source: OnlineFilter, signal: AbortSignal): Promise<OnlineTrack[]> {
-  if (source === 'southern_city' || source === 'netlabels' || source === 'ccmixter' || source === 'audius') return communityTracks(query, source, signal);
+  if (source === 'southern_city' || source === 'netlabels' || source === 'audius') return communityTracks(query, source, signal);
   const data = await getJson(onlineSearchUrl(query, source), signal) as { results?: unknown[] } | null;
   if (!Array.isArray(data?.results)) throw new Error('Каталог вернул неожиданный ответ.');
   const tracks = new Map<string, OnlineTrack>();

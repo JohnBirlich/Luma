@@ -2,7 +2,7 @@ import { archiveId, catalogLicense, catalogRetryDelay, catalogObject as object, 
 import type { CommunitySource, DesktopCatalogSource, OnlineTrack } from './online.js';
 import { musicSearchKey } from './russian.js';
 import { readLimitedBody } from './metadata-service.js';
-import { publicCatalogTracks, publicCatalogUrl } from './public-catalogs.js';
+import { audiusSearchUrl, audiusTracks } from './public-catalogs.js';
 
 const list = (value: unknown, max: number) => Array.isArray(value) ? value.slice(0, max) : [];
 const str = (value: unknown) => typeof value === 'string' ? value : '';
@@ -48,8 +48,8 @@ export async function searchCommunity(fetcher: FetchCatalog, value: unknown, sou
     }
     return JSON.parse(new TextDecoder().decode(await readLimitedBody(response, limit, signal))) as unknown;
   }
-  if (source === 'ccmixter' || source === 'audius') {
-    return publicCatalogTracks(await get(publicCatalogUrl(value, source), 768 * 1024), source);
+  if (source === 'audius') {
+    return audiusTracks(await get(audiusSearchUrl(value), 768 * 1024));
   }
   const results = await get(communitySearchUrl(value, source), 768 * 1024);
   const response = object(object(results).response);
@@ -80,7 +80,7 @@ export function createCommunitySearch(fetcher: FetchCatalog, now = Date.now) {
   return {
     async search(id: unknown, query: unknown, source: unknown) {
       if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || !validQuery(query)
-        || (source !== 'netlabels' && source !== 'southern_city' && source !== 'ccmixter' && source !== 'audius')) return [];
+        || (source !== 'netlabels' && source !== 'southern_city' && source !== 'audius')) return [];
       active.get(source)?.controller.abort();
       const controller = new AbortController();
       active.set(source, { id, controller });
