@@ -26,7 +26,11 @@ export function useSleepTimer(pause: () => void, onExpired: () => void) {
     check();
     window.addEventListener('focus', check);
     document.addEventListener('visibilitychange', check);
-    return () => { window.clearTimeout(timeout); window.removeEventListener('focus', check); document.removeEventListener('visibilitychange', check); };
+    const unsubscribe = window.luma?.window.onResume?.(check);
+    return () => {
+      window.clearTimeout(timeout); window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check); unsubscribe?.();
+    };
   }, [deadline, expire]);
   return { deadline, change, expire };
 }

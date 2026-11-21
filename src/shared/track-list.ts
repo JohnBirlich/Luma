@@ -1,5 +1,5 @@
 import type { Track } from './media.js';
-import { recordingKey } from './recording-match.js';
+import { knownRecordingName, recordingKey } from './recording-match.js';
 import { cleanTrackText, musicSearchKey } from './russian.js';
 
 /** Metadata only. Never carry service URLs, paths, or credentials. */
@@ -91,8 +91,7 @@ export function localRecordingMatches(tracks: readonly Track[]) {
     else index.set(key, [track]);
   }
   return (item: RecordingReference): readonly Track[] => {
-    const artist = musicSearchKey(item.artist);
-    if (!artist || artist === 'неизвестный исполнитель') return [];
+    if (!knownRecordingName(item)) return [];
     const byName = index.get(recordingKey(item)) ?? [];
     return item.album ? byName.filter(({ album }) => musicSearchKey(album) === musicSearchKey(item.album)) : byName;
   };

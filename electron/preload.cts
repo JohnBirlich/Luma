@@ -98,6 +98,11 @@ const bridge: DesktopBridge = {
     isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
     setWidget: (enabled) => ipcRenderer.invoke('window:widget', enabled),
     setFullscreen: (fullscreen) => ipcRenderer.invoke('window:set-fullscreen', fullscreen),
+    onResume: (callback) => {
+      const listener = () => callback();
+      ipcRenderer.on('player:resume', listener);
+      return () => ipcRenderer.removeListener('player:resume', listener);
+    },
     onWidgetShortcut: (callback) => {
       const listener = () => callback();
       ipcRenderer.on('window:widgetShortcut', listener);

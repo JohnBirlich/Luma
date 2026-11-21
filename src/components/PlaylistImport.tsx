@@ -116,7 +116,7 @@ export function PlaylistImport({ collection, save, close }: {
     setReading(true);
     try {
       if (file.size > MAX_PLAYLIST_IMPORT_BYTES) throw new Error('Выберите файл плейлиста размером до 2 МБ.');
-      const format = playlistImportFormat(file.name);
+      const format = provider.id === 'luma' && /\.json$/i.test(file.name) ? 'luma-json' : playlistImportFormat(file.name);
         const allowed = provider.id === 'm3u' ? format === 'm3u' : provider.id === 'luma' ? format === 'luma-json'
         : format === 'csv' || format === 'txt' || (format === 'spotify-json' && provider.id === 'spotify');
       if (!format || !allowed) {
@@ -181,13 +181,12 @@ export function PlaylistImport({ collection, save, close }: {
             const row = page * PAGE_SIZE + index;
             return <li key={`${list}:${row}`}>
               <span><strong>{ref.title}</strong><small>{[ref.artist, ref.album].filter(Boolean).join(' · ')}</small>
-                {match && choices.get(row) && <small>{t('В плейлист: {0}', `${match.artist} — ${match.title}`)}</small>}</span>
+                {match && (status === 'match' || status === 'chosen') && <small>{t('В плейлист: {0}', `${match.artist} — ${match.title}`)}</small>}</span>
               <span className="playlist-match" data-status={status}>{t(IMPORT_STATUS[status])}</span>
               <MatchOptions title={ref.title} choices={available} candidates={candidates} match={match} choice={choices.get(row)} change={(value) => resolve(row, value)} />
             </li>;
           })}
         </ol>
-
       </>}
       {error && <p className="hub-error" role="alert">{t(error)}</p>}
     </div>

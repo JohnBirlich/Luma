@@ -17,7 +17,7 @@ export function recordingKey({ title, artist }: Names) {
   return JSON.stringify([musicSearchKey(title), musicSearchKey(artist)]);
 }
 
-function knownName({ title, artist }: Names) {
+export function knownRecordingName({ title, artist }: Names) {
   return !unknownNames.has(musicSearchKey(title)) && !unknownNames.has(musicSearchKey(artist));
 }
 
@@ -29,7 +29,7 @@ function albumName(track: Track) {
 
 export function recordingEvidence(left: Track, right: Track): 'verified' | 'choice' | undefined {
   if (left.demo || right.demo || left.online?.source === 'broadcast' || right.online?.source === 'broadcast'
-    || !knownName(left) || !knownName(right) || recordingKey(left) !== recordingKey(right)
+    || !knownRecordingName(left) || !knownRecordingName(right) || recordingKey(left) !== recordingKey(right)
     || !Number.isFinite(left.duration) || !Number.isFinite(right.duration) || Math.min(left.duration, right.duration) < 10
     || Math.abs(left.duration - right.duration) > 2) return;
   const first = readIsrc(left.isrc), second = readIsrc(right.isrc);

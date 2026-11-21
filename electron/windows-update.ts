@@ -23,6 +23,7 @@ function releaseAssetRedirect(value: string | null) {
 const checkSignature = promisify(execFile);
 const verifyScript = `
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $info = Microsoft.PowerShell.Security\u005cGet-AuthenticodeSignature -LiteralPath $env:LUMA_SIGNATURE_FILE
 if ($info.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $info.SignerCertificate) { exit 1 }
 [Convert]::ToBase64String($info.SignerCertificate.RawData)
@@ -35,7 +36,7 @@ export async function verifyWindowsSigner(path: string, signer: string): Promise
     // No shell or user-controlled command text; a missing verifier fails closed.
     const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const { stdout, stderr } = await checkSignature(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedVerify], {
-      env: { ...process.env, PSModulePath: '', LUMA_SIGNATURE_FILE: path }, windowsHide: true, timeout: 30_000, maxBuffer: 32 * 1024,
+      env: { ...process.env, PSModulePath: join(dirname(powershell), 'Modules'), LUMA_SIGNATURE_FILE: path }, windowsHide: true, timeout: 30_000, maxBuffer: 32 * 1024,
     });
     const cert = stdout.trim();
     return !stderr && /^[A-Za-z0-9+/]+={0,2}$/.test(cert) && createHash('sha256').update(Buffer.from(cert, 'base64')).digest('hex') === signer;

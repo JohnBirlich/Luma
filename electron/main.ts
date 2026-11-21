@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, safeStorage, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, powerMonitor, protocol, safeStorage, session, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -24,7 +24,7 @@ import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
 import { isStationPage } from '../src/shared/radio.js';
 import { musicLaunchUrl, musicLinkArgument, readMusicLink } from '../src/shared/music-links.js';
-import { readSignerSha256 } from '../src/shared/release-updates.js';
+import { LATEST_RELEASE_API, readSignerSha256 } from '../src/shared/release-updates.js';
 import { readSharedPlaylist } from '../src/shared/playlist-share.js';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
@@ -159,7 +159,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
       title: t('Сохранить файл обмена Luma'), defaultPath: 'luma-playlist.luma.json', filters: [{ name: 'Luma JSON', extensions: ['json'] }],
     });
     if (!filePath || canceled) return false;
-    await writeFile(/\.luma\.json$/i.test(filePath) ? filePath : `${filePath}.luma.json`, JSON.stringify(playlist, null, 2), 'utf8');
+    await writeFile(filePath, JSON.stringify(playlist, null, 2), 'utf8');
     return true;
   });
   ipcMain.handle('vk:reset', async (event) => {
@@ -391,7 +391,7 @@ if (!app.requestSingleInstanceLock()) {
     const portable = !!process.env.PORTABLE_EXECUTABLE_FILE;
     const supported = process.platform === 'win32' && process.arch === 'x64' && app.isPackaged;
     const signer = supported && !portable ? readSignerSha256(JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8')).lumaWindowsSignerSha256) : undefined;
-    updates = new WindowsUpdates(info.version, !supported ? 'development' : portable ? 'portable' : signer ? 'signed' : 'manual', signer, app.getPath('temp'));
+    updates = new WindowsUpdates(info.version, !supported ? 'development' : portable ? 'portable' : signer ? 'signed' : 'manual', signer, app.getPath('temp'), (input, init) => input === LATEST_RELEASE_API ? net.fetch(input, init) : globalThis.fetch(input, init));
     journal = await DesktopDiagnostics.open(app.getPath('userData'), info);
     journal.main('desktop.start');
     Menu.setApplicationMenu(null);
@@ -413,6 +413,9 @@ if (!app.requestSingleInstanceLock()) {
     const lastfm = await DesktopLastFm.open(lastFmConfig(process.env.LUMA_LASTFM_API_KEY, process.env.LUMA_LASTFM_SECRET), net.fetch,
       join(app.getPath('userData'), 'lastfm-session.bin'), safeStorage);
     bindIpc(library, journal, info, lastfm, cache);
+    powerMonitor.on('resume', () => {
+      if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('player:resume');
+    });
     await createWindow();
     journal.main('desktop.ready', { ms: performance.now() - started });
     app.on('activate', () => { if (!window) void createWindow(); });

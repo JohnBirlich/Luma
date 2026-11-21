@@ -66,7 +66,7 @@ export function readPlaylistImport(bytes: Uint8Array, format: PlaylistFormat, fi
   const text = readText(bytes, format);
   const name = playlistTitle(fileName.split(/[\\/]/).pop()?.replace(/\.[^.]*$/, ''));
   if (format === 'luma-json') {
-    if (bytes.length > MAX_PLAYLIST_SHARE_BYTES) throw new Error('Нужен файл .luma.json размером до 128 КБ.');
+    if (bytes.length > MAX_PLAYLIST_SHARE_BYTES) throw new Error('Нужен файл .luma.json размером до 256 КБ.');
     let value: unknown;
     try { value = JSON.parse(text); } catch { throw new Error('Не удалось прочитать файл обмена Luma.'); }
     const shared = readSharedPlaylist(value);

@@ -1,16 +1,20 @@
 // Run with Electron after `npm run build`. Uses a temporary profile, not the user's library.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { release, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, clipboard, dialog, screen, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, powerMonitor, screen, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
 import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
+import { verifyWindowsSigner } from '../dist-electron/electron/windows-update.js';
+import { installerName, LATEST_RELEASE_API, RELEASE_REPO } from '../dist-electron/src/shared/release-updates.js';
 import { musicLaunchUrl, readMusicLink } from '../dist-electron/src/shared/music-links.js';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
@@ -138,6 +142,16 @@ async function smoke() {
   assert.equal(await run('window.luma.floatOutput.start("48000")'), 'failed', 'Float IPC rejects a non-numeric rate');
   let hasSystemSink = true;
   if (process.platform === 'win32') {
+    const system = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
+    const powershell = join(system, 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const verificationFixture = execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command',
+      `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; foreach ($file in @($PSHOME+'\\powershell.exe', $env:SystemRoot+'\\System32\\cmd.exe', $env:SystemRoot+'\\System32\\notepad.exe')) { $sig=Get-AuthenticodeSignature -LiteralPath $file; if ($sig.Status -eq 'Valid' -and $sig.SignerCertificate) { @{ path=$file; cert=[Convert]::ToBase64String($sig.SignerCertificate.RawData) } | ConvertTo-Json -Compress; exit 0 } }; exit 1`], {
+      encoding: 'utf8', windowsHide: true, timeout: 45_000,
+    });
+    const { path: signedFile, cert } = JSON.parse(verificationFixture);
+    const pin = createHash('sha256').update(Buffer.from(cert, 'base64')).digest('hex');
+    assert.equal(await verifyWindowsSigner(signedFile, pin), true, 'Windows verifier accepts a valid certificate pin');
+    assert.equal(await verifyWindowsSigner(signedFile, '0'.repeat(64)), false, 'Windows verifier rejects a different pin');
     assert.equal(await run('window.luma.floatOutput.available()'), true, 'the WASAPI helper was built');
     const mode = await run('window.luma.floatOutput.start(48000)');
     assert.ok(['running', 'unsupported'].includes(mode), `WASAPI helper starts or reports device incompatibility: ${mode}`);
@@ -187,12 +201,11 @@ async function smoke() {
   await waitFor('sleep timer is reachable from now playing', () => run(`!!document.querySelector('.sleep-timer button')`));
   await click('.sleep-timer button:first-child');
   await waitFor('timer has an in-session deadline', () => run(`document.querySelector('.sleep-timer button')?.textContent === 'Отменить таймер'`));
-  await run(`(() => {
-    const original = Date.now;
-    Date.now = () => original() + 6 * 60_000;
-    try { window.dispatchEvent(new Event('focus')); } finally { Date.now = original; }
-  })()`);
-  await waitFor('an expired timer pauses playback and clears itself', () => run(`document.querySelector('audio').paused && document.querySelector('.sleep-timer button')?.textContent === '5 мин'`));
+  await run(`void (window.originalClock = Date.now, Date.now = () => window.originalClock() + 6 * 60_000)`);
+  try {
+    powerMonitor.emit('resume');
+    await waitFor('an expired timer pauses playback and clears itself on system resume', () => run(`document.querySelector('audio').paused && document.querySelector('.sleep-timer button')?.textContent === '5 мин'`));
+  } finally { await run(`void (Date.now = window.originalClock, delete window.originalClock)`); }
   await closeSettings();
   await run(`(() => { document.querySelector('audio').currentTime = 1.5; })()`);
   await run(`(() => {
@@ -598,6 +611,11 @@ async function smoke() {
   session.defaultSession.protocol.handle('https', async (request) => {
     if (offlineFixture) return new Response(null, { status: 503 });
     const url = new URL(request.url);
+    if (url.href === LATEST_RELEASE_API) {
+      const next = '99.0.0', name = installerName(next);
+      return Response.json({ tag_name: `v${next}`, draft: false, prerelease: false, assets: [{ name, state: 'uploaded', size: 1234,
+        browser_download_url: `https://github.com/${RELEASE_REPO}/releases/download/v${next}/${name}`, digest: `sha256:${'b'.repeat(64)}` }] });
+    }
     if (url.origin === 'https://itunes.apple.com' && url.pathname === '/search') {
       const term = url.searchParams.get('term');
       titleQueries.push(term);
@@ -836,6 +854,10 @@ async function smoke() {
         return expected.every((title, index) => headings.filter(h => h === title).length === 1 &&
           (index === 0 || headings.indexOf(title) > headings.indexOf(expected[index - 1]))) && !headings.includes('Жанры и настроения');
       })()`));
+      await click('[data-home-tab="updates"]');
+      await waitFor('latest release is detected without installing from a development build', () => run(`document.querySelector('.hub-version .update-status')?.textContent.includes('Доступна версия 99.0.0.')
+        && ![...document.querySelectorAll('.hub-version .update-status button')].some(button => button.textContent.includes('Скачать и установить'))`));
+      await click('[data-home-tab="home"]');
       const homeImport = '.hub-top-actions [data-playlist-import]';
       assert.deepEqual(await run(`[...document.querySelectorAll('.hub-top-actions button')].map(button => [button.textContent.trim(), button.getAttribute('aria-label')])`),
         [['', 'Добавить музыку'], ['', 'Импорт из сервисов'], ['', 'Открыть музыкальную ссылку'], ['', 'Миксы Luma']]);

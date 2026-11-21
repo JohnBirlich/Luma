@@ -27,11 +27,11 @@
 .playlist-import-field { width: 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; font-size: 12px; }
 .playlist-import-field :is(input,select) { min-width: 0; width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-bg); color: var(--text); }
 .playlist-import-body > .playlist-import-summary { color: var(--text); font-weight: 760; font-size: 13px; }
-.playlist-import-preview > li { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px;
+.playlist-import-preview > li { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 7px 9px;
   border-radius: 8px; border: 1px solid var(--line); }
 .playlist-import-preview > li > span:first-child { min-width: 0; }
 .playlist-match { max-width: 155px; justify-self: end; overflow-wrap: anywhere; padding: 4px 6px; border-radius: 7px; background: var(--panel-bg); color: var(--muted); font-size: 11px; }
-.playlist-match[data-status='match'] { color: var(--accent-light); background: var(--accent-fill); }
+.playlist-match:is([data-status='match'],[data-status='chosen']) { color: var(--accent-light); background: var(--accent-fill); }
 .playlist-import-pager, .playlist-import-foot { display: flex; align-items: center; gap: 8px; }
 .playlist-import-pager { gap: 4px; font-size: 12px; white-space: nowrap; }
 .playlist-import-pager > button { width: 30px; height: 30px; }
@@ -40,8 +40,7 @@
 @media (max-width: 440px) {
   .playlist-import-pager { order: -1; width: 100%; justify-content: center; }
 }
-.playlist-match-options { grid-column: 1 / -1; font-size: .82rem; }
+.playlist-match-options { grid-column: 1 / -1; min-width: 0; font-size: .82rem; }
 .playlist-match-options > summary { color: var(--accent-light); cursor: pointer; width: fit-content; }
 .playlist-match-options[open] > summary { margin-bottom: 9px; }
 .playlist-match-options .playlist-import-field { margin: 6px 0; }
-.playlist-match[data-status='chosen'] { color: var(--accent-light); }

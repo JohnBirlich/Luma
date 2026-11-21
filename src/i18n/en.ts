@@ -1279,7 +1279,7 @@ export const english: Record<string, string> = {
   "Пока не выбран ни один трек. Проверьте варианты в списке.": "No tracks selected yet. Review the choices in the list.",
   "В плейлист: {0}": "To add: {0}",
   "Выберите полученный файл .luma.json, затем проверьте совпадения с вашей медиатекой.": "Choose a shared .luma.json file, then review the matches with your library.",
-  "Нужен файл .luma.json размером до 128 КБ.": "Choose a .luma.json file up to 128 KB.",
+  "Нужен файл .luma.json размером до 256 КБ.": "Choose a .luma.json file up to 256 KB.",
   "Не удалось прочитать файл обмена Luma.": "Could not read the Luma share file.",
   "История поиска": "Search history",
   "Очистить историю поиска": "Clear search history",

@@ -6,7 +6,7 @@ import type { RecordingReference } from './track-list.js';
 import { readIsrc } from './recording-match.js';
 
 export interface SharedRecording extends RecordingReference { duration?: number; isrc?: string }
-export const MAX_PLAYLIST_SHARE_BYTES = 128 * 1024;
+export const MAX_PLAYLIST_SHARE_BYTES = 256 * 1024;
 
 function shareRow(value: unknown): SharedRecording | undefined {
   const ref = readRecordingReference(value);

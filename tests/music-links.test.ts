@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Track } from '../src/shared/media.js';
 import { musicLaunchUrl, musicLinkArgument, readMusicLink } from '../src/shared/music-links.js';
-import { buildSharedPlaylist, readSharedPlaylist } from '../src/shared/playlist-share.js';
+import { buildSharedPlaylist, MAX_PLAYLIST_SHARE_BYTES, readSharedPlaylist } from '../src/shared/playlist-share.js';
 import { playlistImportFormat, previewPlaylist, readPlaylistImport } from '../src/shared/playlist-import.js';
 
 test('music links canonicalize official tracks, playlists, and Windows handoffs', () => {
@@ -46,4 +46,14 @@ test('portable playlist files export metadata only, then enter the normal review
   assert.equal(previewPlaylist(draft, [live]).rows[0].status, 'unmatched');
   assert.equal(readSharedPlaylist({ ...share, version: 2 }), undefined);
   assert.equal(readSharedPlaylist({ ...share, tracks: Array(101).fill(file) }), undefined);
+});
+
+
+test('even maximum-length multibyte metadata stays within the share file import limit', () => {
+  const long = '音'.repeat(240);
+  const share = buildSharedPlaylist('Shared list', Array.from({ length: 100 }, (_, i) => ({ ...file,
+    id: `${i}`, title: long, artist: long, album: long })));
+  const data = new TextEncoder().encode(JSON.stringify(share, null, 2));
+  assert.ok(data.byteLength <= MAX_PLAYLIST_SHARE_BYTES);
+  assert.equal(readPlaylistImport(data, 'luma-json', 'large.luma.json')[0].rows.length, 100);
 });

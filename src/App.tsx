@@ -106,6 +106,7 @@ export default function App() {
   const [showAppearance, setShowAppearance] = useState(false);
   const [importPlaylist, setImportPlaylist] = useState(false);
   const [musicDialog, setMusicDialog] = useState<{ url?: string }>();
+  const lastHandoff = useRef<typeof musicDialog>(undefined);
   const [coverTarget, setCoverTarget] = useState<CoverTarget>();
   const { urls: covers, update: updateCover } = useCoverArt();
   const [detailsId, setDetailsId] = useState<string>();
@@ -169,7 +170,7 @@ export default function App() {
   const current = byId.get(queue.currentId ?? '') ?? null;
   const live = current?.online?.source === 'broadcast';
   const detailsTrack = detailsId ? byId.get(detailsId) : undefined;
-  const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance || importPlaylist || musicDialog);
+  const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance || importPlaylist || (!widget && musicDialog));
   const { kind: presentationKind, show: showStage, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
   const presentationOpen = presentationKind !== null;
   const canUseLyrics = !!current && !live && !sessionCatalogId(current.id);
@@ -228,9 +229,10 @@ export default function App() {
     return () => { subscribed = false; unsubscribe(); };
   }, []);
   useEffect(() => {
-    if (!musicDialog?.url) return;
+    if (!musicDialog?.url || widgetPending || musicDialog === lastHandoff.current) return;
+    lastHandoff.current = musicDialog;
     if (presentationOpen) closePresentation();
-    if (widget && !widgetPending) void changeWidget(false);
+    if (widget) void changeWidget(false);
   }, [changeWidget, closePresentation, musicDialog, presentationOpen, widget, widgetPending]);
   useEffect(() => window.luma?.window.onWidgetShortcut(() => {
     if (!modalOpen) void changeWidget(!widget);

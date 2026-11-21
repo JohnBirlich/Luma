@@ -128,6 +128,7 @@ export interface DesktopBridge {
     setFullscreen(fullscreen: boolean): Promise<void>;
     setWidget(enabled: boolean): Promise<boolean>;
     onWidgetShortcut(callback: () => void): () => void;
+    onResume(callback: () => void): () => void;
     onFullscreen(callback: (fullscreen: boolean) => void): () => void;
     onMaximized(callback: (maximized: boolean) => void): () => void;
   };
