@@ -45,22 +45,30 @@ async function ps(script, values = {}, timeout = 25_000) {
 }
 
 async function state() {
-  return JSON.parse(await ps(String.raw`
+  const result = JSON.parse(await ps(String.raw`
 function Read-Registration($root) {
   $scheme = $root.OpenSubKey($env:LUMA_SMOKE_CLASS)
-  $command = $root.OpenSubKey($env:LUMA_SMOKE_CLASS + '\shell\open\command')
   $install = $root.OpenSubKey('Software\' + $env:LUMA_SMOKE_GUID)
   $uninstall = $root.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Uninstall\' + $env:LUMA_SMOKE_GUID)
-  @{ scheme = ($null -ne $scheme); protocol = $(if ($scheme) { $scheme.GetValue('URL Protocol') })
-    command = $(if ($command) { $command.GetValue('') }); install = $(if ($install) { $install.GetValue('InstallLocation') })
-    version = $(if ($uninstall) { $uninstall.GetValue('DisplayVersion') }) }
+  $entry = @{ scheme = ($null -ne $scheme); installKey = ($null -ne $install); uninstallKey = ($null -ne $uninstall) }
+  if ($entry.scheme) {
+    $entry.protocol = $scheme.GetValueNames() -contains 'URL Protocol'
+    $command = $scheme.OpenSubKey('shell\open\command')
+    if ($null -ne $command) { $entry.command = $command.GetValue('') }
+  }
+  if ($entry.uninstallKey) { $entry.version = $uninstall.GetValue('DisplayVersion') }
+  $entry
 }
 @{ user = Read-Registration ([Microsoft.Win32.Registry]::CurrentUser)
   machine = Read-Registration ([Microsoft.Win32.Registry]::LocalMachine) } | ConvertTo-Json -Compress
 `));
+  for (const entry of [result.user, result.machine]) {
+    assert.ok(['scheme', 'installKey', 'uninstallKey'].every((key) => typeof entry?.[key] === 'boolean'), 'registry probe returned boolean key-presence flags');
+  }
+  return result;
 }
 
-const noInstall = (entry) => !entry.install && !entry.version;
+const noInstall = (entry) => !entry.installKey && !entry.uninstallKey;
 const exists = (path) => stat(path).then(() => true, (error) => { if (error.code === 'ENOENT') return false; throw error; });
 
 async function install() {
@@ -71,7 +79,7 @@ if ($p.ExitCode -ne 0) { throw ('Setup exit: ' + $p.ExitCode) }`, { LUMA_SMOKE_E
   assert.ok(await exists(uninstaller), 'Setup created its own uninstaller');
   const { user, machine } = await state();
   assert.equal(user.version, version, 'installed version');
-  assert.equal(user.protocol, '', 'URL Protocol marker');
+  assert.equal(user.protocol, true, 'URL Protocol marker');
   assert.equal(user.command, expectedCommand, 'Setup owns the per-user protocol and quotes the application path');
   assert.ok(noInstall(machine) && !machine.scheme, 'per-user Setup did not register for all users');
 }
@@ -121,7 +129,7 @@ async function journal(profile, label, check) {
 const count = (events, name) => events.filter((event) => event === name).length;
 const delivered = 'desktop.musicLinkDelivered';
 const installedFixture = (entry) => ({
-  scheme: entry.scheme, hasCommand: !!entry.command, hasInstallLocation: !!entry.install, hasUninstaller: !!entry.version,
+  scheme: entry.scheme, installKey: entry.installKey, uninstallKey: entry.uninstallKey,
 });
 const preflightOnly = process.argv.includes('--preflight');
 let profile, clean = false, portableProcess;
