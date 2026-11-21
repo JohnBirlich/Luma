@@ -1007,7 +1007,8 @@ async function smoke() {
     assert.equal(palettes.size, 5);
     assert.equal(await run(`document.querySelector('.app-shell').dataset.layout === 'glass' && !document.querySelector('.sidebar')
       && !!document.querySelector('.glass-navigation') && getComputedStyle(document.querySelector('.app-shell')).colorScheme === 'light'`), true);
-    assert.equal(await run(`document.querySelectorAll('.glass-dock-icon').length`), 6);
+    assert.equal(await run(`document.querySelectorAll('.glass-dock-icon').length`), 7);
+    assert.equal(await run(`document.querySelector('.glass-navigation .vk-dock')?.getAttribute('href')`), VK_MUSIC_URL);
     await click('.glass-sound');
     await waitFor('the glass Dock opens the same EQ', () => run(`!!document.querySelector('.equalizer-dialog[open] .eq-response-path')`));
     await click('.equalizer-content .dialog-footer .primary-button');
