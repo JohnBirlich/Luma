@@ -472,6 +472,8 @@ async function smoke() {
   const streamCalls = [];
   const radioCalls = [];
   const recordStation = STATIONS.find(({ id }) => id === 'radio-record-record');
+  const piStation = STATIONS.find(({ id }) => id === 'radio-ru-pi-fm');
+  const radioFixtureUrls = new Set([recordStation.stream, piStation.stream]);
   const recordTrack = stationTracks.find(({ id }) => id === recordStation.id);
   const webStation = RADIO_DIRECTORY.find(({ id }) => id === 'radio-ru-mir-far-east');
   const stationSection = '[aria-labelledby="radio-stations"]';
@@ -548,9 +550,10 @@ async function smoke() {
     }
     if (url.href === 'https://archive.org/metadata/SCL108') return Response.json(archiveRelease);
     if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
-    if (url.href === recordStation.stream || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url].includes(url.href)) {
+    const radioFixture = radioFixtureUrls.has(url.href);
+    if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url].includes(url.href)) {
       // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
-      (url.href === recordStation.stream ? radioCalls : streamCalls).push(url.href);
+      (radioFixture ? radioCalls : streamCalls).push(url.href);
       const range = request.headers.get('Range');
       const bytes = range && parseByteRange(range, sample.length);
       const body = bytes ? sample.subarray(bytes.start, bytes.end + 1) : sample;
@@ -636,7 +639,7 @@ async function smoke() {
     })()`);
     await waitFor('automatic results from all four desktop catalogs', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 3
       && document.querySelectorAll('.online-results li').length === 3`));
-    assert.equal(await run(`!!document.querySelector('.catalog-search select') || document.querySelector('.music-sites').open`), false);
+    assert.equal(await run(`!!document.querySelector('.catalog-search select, .music-sites')`), false);
     assert.equal(catalogCalls.length, 1);
     assert.equal(catalogCalls[0].searchParams.get('q'), 'jazz');
     assert.equal(catalogCalls[0].searchParams.get('source'), 'jamendo,wikimedia_audio');
@@ -667,7 +670,7 @@ async function smoke() {
       await go('Главная');
       await waitFor('merged Home keeps discovery and now-playing together', () => run(`!!document.querySelector('.home-page .hub-hero') && !!document.querySelector('.home-page .home-now')`));
       assert.equal(await run(`!!document.querySelector('nav [aria-label="Музыка"]')`), false);
-      assert.equal(await run(`!!document.querySelector('iframe') || 'vk' in window.luma`), false);
+      assert.equal(await run(`!!document.querySelector('iframe') || 'vk' in window.luma || 'openVkLink' in window.luma`), false);
       assert.ok(window.contentView.children.every((view) => view.webContents?.session !== legacyVk));
       assert.equal(BrowserWindow.getAllWindows().length, 1);
       assert.equal(await run(`document.querySelector('${onlineAudio}').paused`), false, 'entering Home leaves online playback alone');
@@ -681,15 +684,27 @@ async function smoke() {
       assert.equal(catalogCalls.length, 2);
       assert.equal(catalogCalls[1].searchParams.get('q'), 'Ты здесь');
       assert.equal(opened.length, 0, 'no browser tab from automatic searches');
-      assert.equal(await run(`document.querySelector('.music-sites').open`), false);
-      await click('.music-sites > summary');
-      assert.equal(await run(`document.querySelectorAll('.music-site-grid a').length`), 6);
-      await click('.music-site-grid a[href^="https://vk.ru/audio?"]');
-      await waitFor('an explicit query goes to the system browser', () => opened.length === 1);
-      assert.equal(new URL(opened.pop()).searchParams.get('q'), 'Ты здесь');
-      assert.equal(catalogCalls.length, 2, 'a browser destination is not a native search request');
-      assert.equal(await run(`window.luma.openOnlineLink('https://example.invalid/').then(() => false, () => true)`), true);
-      await click('.hub-tabs button:nth-child(2)');
+      assert.equal(await run(`!!document.querySelector('.music-sites, .music-site-grid')`), false);
+      for (const url of ['https://example.invalid/', 'https://vk.ru/audio?q=jazz', 'https://my.mail.ru/music', 'https://music.yandex.ru/']) {
+        assert.equal(await run(`window.luma.openOnlineLink(${JSON.stringify(url)}).then(() => false, () => true)`), true);
+      }
+      assert.deepEqual(await run(`[...document.querySelectorAll('.hub-tabs button')].map(button => button.textContent)`),
+        ['Для вас', 'Моя музыка', 'Радио', 'Обновления']);
+      await click('[data-home-tab="home"]');
+      await waitFor('genres, moods and former Browse collections are together, in order', () => run(`(() => {
+        const headings = [...document.querySelectorAll('.home-page .hub-shelf-head h2')].map(h => h.textContent);
+        const expected = ['Жанры', 'Настроения и занятия', 'Подборки Luma'];
+        return expected.every((title, index) => headings.filter(h => h === title).length === 1 &&
+          (index === 0 || headings.indexOf(title) > headings.indexOf(expected[index - 1]))) && !headings.includes('Жанры и настроения');
+      })()`));
+      const homeImport = '.hub-top-actions [data-playlist-import]';
+      assert.equal(await run(`document.querySelector('${homeImport}')?.previousElementSibling?.textContent.trim()`), 'Добавить музыку');
+      await run(`document.querySelector('${homeImport}').focus()`);
+      await click(homeImport);
+      await waitFor('Home shortcut opens the service picker', () => run(`!!document.querySelector('.playlist-import[open] [data-source="apple"]')`));
+      await click('.playlist-import-head button');
+      await waitFor('closing the Home importer restores focus', () => run(`!document.querySelector('.playlist-import') && document.activeElement?.matches('${homeImport}')`));
+      await click('[data-home-tab="mine"]');
       await waitFor('My Music keeps its local playlist manager', () => run(`!!document.querySelector('.playlist-import-actions button')`));
       assert.equal(await run(`!!document.querySelector('.hub-bookmarks, .vk-track-shelf')`), false);
       const loadFile = (selector, name, body) => run(`(() => {
@@ -750,8 +765,8 @@ async function smoke() {
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
       assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
 
-      await click('.hub-tabs button:nth-child(3)');
-      await waitFor('Browse genres', () => run(`!!document.querySelector('[aria-label="Жанры"] .hub-tile[aria-label="Джаз"]')`));
+      await click('[data-home-tab="home"]');
+      await waitFor('For You genres', () => run(`!!document.querySelector('[aria-label="Жанры"] .hub-tile[aria-label="Джаз"]')`));
       await click('[aria-label="Жанры"] .hub-tile[aria-label="Джаз"]');
       await run(`[...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Найти в Jamendo').click()`);
       await waitFor('Jamendo recordings show up with attribution', () => run(`document.querySelector('.topic-detail .online-credit')?.textContent.includes('Jamendo')`));
@@ -759,7 +774,7 @@ async function smoke() {
       await run(`[...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Сохранить как плейлист').click()`);
       await waitFor('playlist includes Jamendo reference without downloading a track', async () => (await preferences()).playlists[0]?.trackIds.includes(`ov-${jamendoRecording.id}`));
       assert.deepEqual((await preferences()).queue, prior);
-      await click('.hub-tabs button:nth-child(2)');
+      await click('[data-home-tab="mine"]');
       await click('[aria-label="Мои плейлисты"] .hub-tile[aria-label="Джаз"]');
       await run(`[...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Слушать плейлист').click()`);
       await waitFor('playing a playlist replaces the queue with its ordered contents', async () => {
@@ -767,7 +782,7 @@ async function smoke() {
         return prefs.queue.order.join() === prefs.playlists[0].trackIds.join();
       });
 
-      await click('.hub-tabs button:nth-child(4)');
+      await click('[data-home-tab="radio"]');
       await waitFor('radio directory renders in exact order with Record artwork', () => run(`document.querySelectorAll('${stationSection} > .station-grid > .station-tile').length === ${RADIO_DIRECTORY.length}
         && document.querySelector('${stationSection} ${recordTile} .station-logo img')?.naturalWidth > 0`));
       assert.deepEqual(await run(`[...document.querySelectorAll('${stationSection} > .station-grid > .station-tile')].map(tile => tile.dataset.station)`), RADIO_DIRECTORY.map(({ id }) => id));
@@ -794,22 +809,41 @@ async function smoke() {
         && !!document.querySelector('.player-bar .live-timeline') && !document.querySelector('.player-bar .timeline')`));
       assert.ok(radioCalls.includes(recordStation.stream));
       assert.equal(await run(`navigator.mediaSession.metadata.title`), recordStation.name);
+      const nextStation = '.player-bar [aria-label="Следующая станция"]';
+      const previousStation = '.player-bar [aria-label="Предыдущая станция"]';
+      const waitForStation = ({ name, stream }) => waitFor(`playing ${name}`, () => run(`(() => {
+        const audio = document.querySelector('${onlineAudio}');
+        return audio.src === ${JSON.stringify(stream)} && audio.currentTime > .12 && !audio.paused
+          && !document.querySelector('.player-bar .timeline') && navigator.mediaSession.metadata?.title === ${JSON.stringify(name)};
+      })()`));
+      assert.equal(await run(`document.querySelectorAll('.player-bar .mode-button:disabled').length`), 2);
+      assert.equal(await run(`document.querySelector('${nextStation}').disabled || document.querySelector('${previousStation}').disabled`), false);
+      await click(nextStation);
+      await waitForStation(piStation);
+      assert.ok(radioCalls.includes(piStation.stream));
+      await click(previousStation);
+      await waitForStation(recordStation);
       await run(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight' }));`);
-      assert.ok(await run(`document.querySelector('${onlineAudio}').currentTime < 4`), 'keyboard seek does not seek the stream even if its fixture is seekable');
+      await waitForStation(piStation);
+      await run(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));`);
+      await waitForStation(recordStation);
+      assert.deepEqual((await preferences()).queue.order, [...beforeRadio.queue.order, recordStation.id], 'tuning does not accumulate stations or reorder songs');
+      assert.deepEqual((await preferences()).stationIds, [recordStation.id]);
       assert.deepEqual((await preferences()).onlineTracks, beforeRadio.onlineTracks);
       assert.ok(!(await preferences()).recent.includes(recordStation.id));
       assert.equal(lyricQueries.length, beforeRadioLyrics);
       assert.equal(await run(`window.luma.streamCache.save(${JSON.stringify(recordTrack)}).catch(() => false)`), false);
       assert.equal(await run(`window.luma.exportMp3(${JSON.stringify(recordTrack)}, true).then(({ saved }) => saved, () => false)`), false);
-      await click('.hub-tabs button:first-child');
+      await click('[data-home-tab="home"]');
       await waitFor('Home omits lyrics and disables karaoke for a station', () => run(`document.querySelector('.hero h2')?.textContent === ${JSON.stringify(recordStation.name)}
         && document.querySelector('.hero-karaoke')?.disabled && !document.querySelector('.home-page .lyrics-card')`));
       await click('.player-bar .play-button');
       await waitFor('stopping radio unloads the network source', () => run(`document.querySelector('${onlineAudio}').paused && !document.querySelector('${onlineAudio}').hasAttribute('src')`));
-      await click('.hub-tabs button:nth-child(4)');
+      await click('[data-home-tab="radio"]');
       await run(`Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }); window.dispatchEvent(new Event('offline'));`);
       await click('[data-radio-view="saved"]');
-      await waitFor('offline playback is unavailable without hiding saved stations', () => run(`document.querySelector('${savedStations} ${recordPlay}')?.disabled`));
+      await waitFor('offline playback and tuning are unavailable without hiding saved stations', () => run(`document.querySelector('${savedStations} ${recordPlay}')?.disabled
+        && document.querySelector('${nextStation}')?.disabled && document.querySelector('${previousStation}')?.disabled`));
       await run(`delete navigator.onLine; window.dispatchEvent(new Event('online'));`);
     } finally { shell.openExternal = openExternal; }
     await go('Поиск');
@@ -926,7 +960,7 @@ async function smoke() {
     assert.ok((await preferences()).playlists.some(({ title, trackIds }) => title === 'Очередь из файла' && trackIds.length === 2));
     assert.deepEqual((await preferences()).karaokeStyle, { size: 47, weight: 750, spacing: 20, align: 'center' });
     await go('Home');
-    await click('.hub-tabs button:nth-child(2)');
+    await click('[data-home-tab="mine"]');
     await waitFor('English My Music still has local playlists, without the old VK shelves', () => run(`!!document.querySelector('[aria-label="My playlists"]')
       && !document.querySelector('.hub-bookmarks, .vk-track-shelf')`));
     assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
@@ -966,7 +1000,7 @@ async function smoke() {
     session.defaultSession.protocol.unhandle('https');
     await legacyVk.clearStorageData();
   }
-  console.log('::notice title=Catalogs and playlists::Parallel catalog search, offline playlist import icons and preview, no VK shelves, and preservation of legacy profile data verified.');
+  console.log('::notice title=Catalogs and playlists::Merged Home, parallel catalog search without site shortcuts, playlist import, radio tuning in both directions, and preservation of legacy profile data verified.');
   console.log('Desktop smoke: monitor fullscreen; both widget layouts restore bounds and reuse audio; Apple/WASM; metered MP3; lyrics export; isolated legacy reset.');
   if (liveServices) {
     const suggestions = await run(`window.luma.recognition.search('Madam Broshkina', 'ru-RU')`);

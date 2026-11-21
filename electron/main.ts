@@ -22,9 +22,8 @@ import { createMetadataService, validAcoustidClient } from '../src/shared/metada
 import { isMetadataPage } from '../src/shared/recognition.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
-import { isMusicSiteUrl } from '../src/shared/music-sites.js';
 import { isStationPage } from '../src/shared/radio.js';
-import { isVkExternalUrl, LEGACY_VK_SESSION } from '../src/shared/vk.js';
+import { LEGACY_VK_SESSION } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { DesktopFloatOutput } from './float-output.js';
 import { StreamCache } from './stream-cache.js';
@@ -158,7 +157,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   });
   ipcMain.handle('online:open-link', (event, url: unknown) => {
     appWindow(event);
-    if (!(isOnlineExternalUrl(url) || isMusicSiteUrl(url) || isStationPage(url))) throw new Error('Unsupported catalog link');
+    if (!(isOnlineExternalUrl(url) || isStationPage(url))) throw new Error('Unsupported catalog link');
     return shell.openExternal(url);
   });
   ipcMain.handle('app:releases', (event) => { appWindow(event); return shell.openExternal(RELEASES_URL); });
@@ -201,11 +200,6 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     appWindow(event);
     if (typeof id !== 'string') throw new TypeError('Expected track ID');
     return library.remove(id);
-  });
-  ipcMain.handle('vk:open-link', (event, url: unknown) => {
-    appWindow(event);
-    if (!isVkExternalUrl(url)) throw new Error('Unsupported VK link');
-    return shell.openExternal(url).then(() => { logs.main('vk.browserOpened'); }, (error) => { logs.main('vk.browserFailed'); throw error; });
   });
   ipcMain.handle('window:minimize', (event) => appWindow(event).minimize());
   ipcMain.handle('window:toggle-maximize', (event) => {

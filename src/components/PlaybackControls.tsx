@@ -10,6 +10,7 @@ export interface TransportProps {
   playing: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  hasPrevious: boolean;
   hasNext: boolean;
   togglePlay(): void;
   toggleShuffle(): void;
@@ -22,20 +23,22 @@ export interface TimelineProps { live?: boolean; elapsed: number; duration: numb
 export interface VolumeProps { volume: number; toggleMute(): void; setVolume(volume: number): void }
 export type PlaybackProps = TransportProps & TimelineProps & VolumeProps;
 
-export function TransportControls({ hasTrack, live, playing, shuffle, repeat, hasNext, togglePlay, toggleShuffle, toggleRepeat, previous, next }: TransportProps) {
+export function TransportControls({ hasTrack, live, playing, shuffle, repeat, hasPrevious, hasNext, togglePlay, toggleShuffle, toggleRepeat, previous, next }: TransportProps) {
   const t = useText();
   const playLabel = live ? t(playing ? "Остановить эфир" : "Слушать эфир") : t(playing ? "Пауза" : "Воспроизвести");
   const repeatLabel = repeat === 'one' ? t("Повтор: один трек") : repeat === 'all' ? t("Повтор: вся очередь") : t("Повтор выключен");
+  const previousLabel = t(live ? 'Предыдущая станция' : 'Предыдущий трек');
+  const nextLabel = t(live ? 'Следующая станция' : 'Следующий трек');
   return <div className="transport-controls">
-    <button type="button" className="icon-button mode-button" onClick={toggleShuffle} aria-pressed={shuffle}
-      title={t("Перемешать очередь")} aria-label={t("Перемешать очередь")} disabled={!hasTrack}><Shuffle size={17} /></button>
-    <button type="button" className="icon-button step-button" onClick={previous} title={t("Предыдущий трек")} aria-label={t("Предыдущий трек")} disabled={!hasTrack}><SkipBack size={19} fill="currentColor" /></button>
+    <button type="button" className="icon-button mode-button" onClick={toggleShuffle} aria-pressed={!live && shuffle}
+      title={t("Перемешать очередь")} aria-label={t("Перемешать очередь")} disabled={!hasTrack || live}><Shuffle size={17} /></button>
+    <button type="button" className="icon-button step-button" onClick={previous} title={previousLabel} aria-label={previousLabel} disabled={!hasPrevious}><SkipBack size={19} fill="currentColor" /></button>
     <button type="button" className="play-button" onClick={togglePlay} title={live ? playLabel : t(playing ? "Пауза (Пробел)" : "Воспроизвести (Пробел)")} aria-label={playLabel} disabled={!hasTrack}>
       {playing ? <Pause size={18} fill="currentColor" /> : <Play className="play-icon" size={18} fill="currentColor" />}
     </button>
-    <button type="button" className="icon-button step-button" onClick={next} title={t("Следующий трек")} aria-label={t("Следующий трек")} disabled={!hasNext}><SkipForward size={19} fill="currentColor" /></button>
-    <button type="button" className="icon-button mode-button" onClick={toggleRepeat} aria-pressed={repeat !== 'off'}
-      title={repeatLabel} aria-label={repeatLabel} disabled={!hasTrack}>{repeat === 'one' ? <Repeat1 size={17} /> : <Repeat size={17} />}</button>
+    <button type="button" className="icon-button step-button" onClick={next} title={nextLabel} aria-label={nextLabel} disabled={!hasNext}><SkipForward size={19} fill="currentColor" /></button>
+    <button type="button" className="icon-button mode-button" onClick={toggleRepeat} aria-pressed={!live && repeat !== 'off'}
+      title={repeatLabel} aria-label={repeatLabel} disabled={!hasTrack || live}>{repeat === 'one' ? <Repeat1 size={17} /> : <Repeat size={17} />}</button>
   </div>;
 }
 

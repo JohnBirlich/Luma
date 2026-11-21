@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AudioLines, ChevronRight, Headphones, ListMusic, Play, Plus, Search, Settings2, X } from 'lucide-react';
+import { AudioLines, ChevronRight, Headphones, ListEnd, ListMusic, Play, Plus, Search, Settings2, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { Track } from '../shared/media';
 import { makeMix } from '../shared/mix';
@@ -13,15 +13,14 @@ import type { CatalogSearchPreferences } from './OnlineMusic';
 import { catalogQuery } from '../data/catalog-search';
 import type { OnlineAction } from './OnlineMusic';
 import { ReleaseLink, useInstalledBuild } from './About';
-import { MusicSites } from './MusicSites';
 import { RadioStations } from './RadioStations';
 import { Shelf, Tile, TrackRows } from './MusicShelf';
-import { Discovery, DiscoveryPreview } from './Discovery';
+import { Discovery } from './Discovery';
 import { MyPlaylists } from './MyPlaylists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
 import { useVisualMotion } from '../player/useVisualMotion';
 
-const TABS = { home: 'Для вас', mine: 'Моя музыка', browse: 'Обзор', radio: 'Радио', updates: 'Обновления' } as const;
+const TABS = { home: 'Для вас', mine: 'Моя музыка', radio: 'Радио', updates: 'Обновления' } as const;
 export type HomeTab = keyof typeof TABS;
 interface HomeProps extends CatalogSearchPreferences {
   tab: HomeTab;
@@ -81,8 +80,8 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
   const [mixType, setMixType] = useState<MixType>('library');
   const [justFiles, setJustFiles] = useState(false);
   const formInput = useRef<HTMLInputElement>(null);
-  const [topic, setTopic] = useState<string>();
   const data = useMemo(() => hubMusic(tracks, recent, disliked, !connected || justFiles, favorites), [tracks, recent, disliked, connected, justFiles, favorites]);
+  const discoveryTracks = useMemo(() => [...data.personal, ...data.demos], [data]);
   const sources = data.personal.length ? data.personal : data.demos;
   const demoMix = !data.personal.length && data.demos.length > 0;
   const mine = useMemo(() => tracks.filter(({ demo }) => !demo), [tracks]);
@@ -116,9 +115,14 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         onChange={(event) => setQuery(event.currentTarget.value)} onCompositionStart={() => setComposing(true)}
         onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div></div>
       <div className="hub-topline"><nav aria-label={t('Разделы на главной')} className="hub-tabs">
-        {(Object.keys(TABS) as HomeTab[]).map((id) => <button type="button" key={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => { if (id === 'browse') setTopic(undefined); selectTab(id); }}>{t(TABS[id])}</button>)}
+        {(Object.keys(TABS) as HomeTab[]).map((id) => <button type="button" key={id} data-home-tab={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => selectTab(id)}>{t(TABS[id])}</button>)}
       </nav><div className="hub-top-actions">
-        <button type="button" className="icon-button" disabled={props.busy} onClick={addMusic} title={t('Добавить музыку')} aria-label={t('Добавить музыку')}><Plus size={19} /></button>
+        <button type="button" className="button outline-button" disabled={props.busy} onClick={addMusic} title={t('Добавить музыку (Ctrl+O)')}>
+          <Plus size={17} aria-hidden="true" />{t('Добавить музыку')}
+        </button>
+        <button type="button" className="button outline-button" data-playlist-import aria-haspopup="dialog" disabled={props.busy} onClick={props.openPlaylistImport}>
+          <ListEnd size={17} aria-hidden="true" />{t('Импорт из сервисов')}
+        </button>
         <button type="button" className="icon-button" onClick={props.openMixes} title={t('Миксы Luma')} aria-label={t('Миксы Luma')}><ListMusic size={18} /></button>
       </div></div>
     </header>
@@ -128,7 +132,6 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       </Shelf>
       <OnlineSearch key={catalogTerm} query={query} visible={visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
         autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />
-      {catalogTerm && <MusicSites key={`sites:${catalogTerm}`} query={catalogTerm} />}
     </> : <>
       {tab === 'home' && <>
         <div className="hub-lead">{props.nowPlaying}<section className="hub-hero" aria-labelledby="hub-mix-title">
@@ -162,13 +165,9 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
             <Tile title={t('Избранное')} description={t('Треки, отмеченные сердцем')} color="rose" onClick={() => mix('favorites')} disabled={!favoriteOptions || props.busy} />
           </div>
         </Shelf>
-        {data.seed && data.related.length > 0 && <Shelf title={t('Похоже на «{0}»', data.seed.title)} detail={t('По исполнителям и жанрам в вашей медиатеке.')}>
-          <TrackRows {...rows} tracks={data.related} strip />
-        </Shelf>}
+        <Discovery tracks={discoveryTracks} recent={data.history} related={data.related} seed={data.seed} favorites={favorites} disliked={disliked}
+          {...rows} busy={props.busy} visible={visible} connected={connected} playAll={props.playCatalog} save={props.savePlaylist} />
       </>}
-      {tab === 'home' && <DiscoveryPreview tracks={data.personal.length ? data.personal : data.demos} open={(id) => { setTopic(id); selectTab('browse'); }} />}
-      {tab === 'browse' && <Discovery tracks={[...data.personal, ...data.demos]} recent={data.history} related={data.related} favorites={favorites} disliked={disliked}
-        {...rows} busy={props.busy} visible={visible} connected={connected} initialTopic={topic} playAll={props.playCatalog} save={props.savePlaylist} />}
       {tab === 'mine' && <>
         <MyPlaylists items={props.playlists} byId={props.playlistTracks} collection={tracks} {...rows} busy={props.busy}
           connected={connected} playAll={props.playCatalog} save={props.savePlaylist} remove={props.removePlaylist} openImport={props.openPlaylistImport} />

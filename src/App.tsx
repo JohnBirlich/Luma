@@ -45,7 +45,7 @@ import { clamp } from './shared/equalizer';
 import { defaultAudioQuality, isMetered } from './shared/audio-quality';
 import { dataLocale } from './shared/app-info';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
-import { stationTracks, STATION_IDS } from './shared/radio';
+import { adjacentStationId, stationTracks, STATION_IDS, tuneStation } from './shared/radio';
 import { MAX_PLAYLISTS, playlistTitle, playlistTrackIds } from './shared/luma-playlists';
 import { MAX_ONLINE_TRACKS, readOnlineTrack } from './shared/online';
 import type { OnlineTrack } from './shared/online';
@@ -245,19 +245,27 @@ export default function App() {
     if (!track) return;
     const state = queueRef.current;
     if (toggleCurrent && id === state.currentId) { toggle(); return; }
-    commit({ ...appendToQueue(state, [id]), currentId: id });
+    if (track.online?.source === 'broadcast') {
+      if (!connected) return;
+      commit(tuneStation(state, id));
+    } else commit({ ...appendToQueue(state, [id]), currentId: id });
     load(track, true);
-  }, [byId, commit, load, toggle]);
+  }, [byId, commit, connected, load, toggle]);
 
   const next = useCallback((finished = false) => {
     const state = queueRef.current;
+    const station = adjacentStationId(state.currentId, 1);
+    if (station) { if (!finished) playTrack(station); return; }
     const id = adjacentId(state, 1, finished);
     if (!id) return;
     if (id === state.currentId) seek(0);
     playTrack(id);
   }, [playTrack, seek]);
   const previous = useCallback(() => {
-    const id = adjacentId(queueRef.current, -1);
+    const state = queueRef.current;
+    const station = adjacentStationId(state.currentId, -1);
+    if (station) { playTrack(station); return; }
+    const id = adjacentId(state, -1);
     if (!id || position() > 3) seek(0);
     else playTrack(id);
   }, [playTrack, position, seek]);
@@ -284,14 +292,14 @@ export default function App() {
     };
   }, [byId, cancelTransitions, commit, playback.autoNext, playback.crossfade]);
   const mediaActions = useMemo(() => ({
-    play, pause, nexttrack: () => next(), previoustrack: previous,
+    play, pause, ...(!live || connected ? { nexttrack: () => next(), previoustrack: previous } : {}),
     stop: () => { pause(); seek(0); },
     ...(!live && {
       seekto: ({ seekTime }: MediaSessionActionDetails) => { if (seekTime !== undefined) seek(seekTime); },
       seekforward: ({ seekOffset }: MediaSessionActionDetails) => seek(seekOffset ?? playback.seekStep, true),
       seekbackward: ({ seekOffset }: MediaSessionActionDetails) => seek(-(seekOffset ?? playback.seekStep), true),
     }),
-  }), [next, previous, play, pause, seek, live, playback.seekStep]);
+  }), [next, previous, play, pause, seek, live, connected, playback.seekStep]);
   useMediaSession(current, player.playing, player.elapsed, player.duration, mediaActions, playback.publishTrack);
 
   const setVolume = useCallback((value: number) => {
@@ -392,13 +400,18 @@ export default function App() {
         event.preventDefault();
         if (!event.repeat) (presentationKind === 'karaoke' ? closePresentation : showKaraoke)();
       } else if (event.code === 'Space' || event.code === 'KeyK') { event.preventDefault(); if (!event.repeat) toggle(); }
-      else if (event.code === 'ArrowRight' || event.code === 'ArrowLeft') { event.preventDefault(); seek(event.code === 'ArrowRight' ? playback.seekStep : -playback.seekStep, true); }
-      else if (event.code === 'KeyM' && !event.repeat) mute();
+      else if (event.code === 'ArrowRight' || event.code === 'ArrowLeft') {
+        event.preventDefault();
+        const forward = event.code === 'ArrowRight';
+        if (live) {
+          if (!event.repeat) (forward ? next : previous)();
+        } else seek(forward ? playback.seekStep : -playback.seekStep, true);
+      } else if (event.code === 'KeyM' && !event.repeat) mute();
       else if (!presentationOpen && event.code === 'KeyQ' && !event.repeat) setQueueOpen((open) => !open);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [choose, mute, seek, toggle, modalOpen, presentationOpen, presentationKind, showPresentation, showKaraoke, closePresentation, current, queueOpen, widget, changeWidget, openSettings, playback.seekStep]);
+  }, [choose, mute, seek, toggle, next, previous, live, modalOpen, presentationOpen, presentationKind, showPresentation, showKaraoke, closePresentation, current, queueOpen, widget, changeWidget, openSettings, playback.seekStep]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -641,7 +654,9 @@ export default function App() {
   const closeQueue = () => setQueueOpen(false);
   const localControls: PlaybackProps = {
     hasTrack: Boolean(current), live, playing: transportPlaying, elapsed: player.elapsed, duration: player.duration,
-    shuffle: queue.beforeShuffle !== null, repeat: queue.repeat, hasNext: Boolean(adjacentId(queue, 1)), volume: preferences.volume,
+    shuffle: queue.beforeShuffle !== null, repeat: queue.repeat, volume: preferences.volume,
+    hasPrevious: live ? connected && !!adjacentStationId(queue.currentId, -1) : !!current,
+    hasNext: live ? connected && !!adjacentStationId(queue.currentId, 1) : !!adjacentId(queue, 1),
     togglePlay: toggle, toggleShuffle: () => commit(toggleShuffle(queueRef.current)), toggleRepeat: () => {
       const state = queueRef.current;
       commit({ ...state, repeat: state.repeat === 'off' ? 'all' : state.repeat === 'all' ? 'one' : 'off' });

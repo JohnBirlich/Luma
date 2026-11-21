@@ -8,7 +8,6 @@ import { musicGroups, tracksInGroup } from '../shared/mix';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
 import type { OnlineTrack } from '../shared/online';
-import { MusicSites } from './MusicSites';
 import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
 import type { CatalogSearchPreferences } from './OnlineMusic';
 import { catalogQuery } from '../data/catalog-search';
@@ -269,7 +268,6 @@ export function LibraryPage(props: LibraryPageProps) {
       </div>}
       {isSearch && <OnlineSearch key={catalogTerm} query={search} visible={props.visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
         autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />}
-      {isSearch && catalogTerm && <MusicSites key={`sites:${catalogTerm}`} query={catalogTerm} />}
     </div>
   );
 }

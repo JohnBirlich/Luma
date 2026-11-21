@@ -6,8 +6,7 @@ import { decodePreferences, encodePreferences, catalogQueueRefs } from '../src/p
 import { startQueue } from '../src/shared/queue.js';
 import { classifiedTracks, GENRES, mergeDiscoveryTracks } from '../src/shared/discovery.js';
 import { MAX_PLAYLIST_TRACKS, readLumaPlaylists } from '../src/shared/luma-playlists.js';
-import { MUSIC_SITES, musicSites, musicSiteUrl, isMusicSiteUrl } from '../src/shared/music-sites.js';
-import { stationTracks, EXTRA_STATIONS, RADIO_DIRECTORY, RADIO_LISTINGS, RADIO_ORIGINS, STATIONS, isStationPage } from '../src/shared/radio.js';
+import { adjacentStationId, tuneStation, stationTracks, EXTRA_STATIONS, RADIO_DIRECTORY, RADIO_LISTINGS, RADIO_ORIGINS, STATIONS, isStationPage } from '../src/shared/radio.js';
 import { streamUrl } from '../src/shared/audio-quality.js';
 import { decodeOpenverse, readOnlineTrack } from '../src/shared/online.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
@@ -54,7 +53,7 @@ test('legacy Music and VK launch settings open the merged Home without disturbin
 });
 
 
-test('browse matches compound genre tags, not titles, and preserves saved copies ahead of catalog matches', () => {
+test('discovery matches compound genre tags, not titles, and preserves saved copies ahead of catalog matches', () => {
   const songs = [track('a', { genres: ['хип-хоп / рэп'] }), track('b', { genres: ['Chillout; Nu Jazz'] }), track('c', { title: 'jazz' })];
   assert.deepEqual(classifiedTracks(songs, GENRES.find(({ id }) => id === 'rap')!.tags), [songs[0]]);
   assert.deepEqual(classifiedTracks(songs, GENRES.find(({ id }) => id === 'jazz')!.tags), [songs[1]]);
@@ -96,21 +95,31 @@ test('radio restores only curated ids and cannot be serialized as a song or a ca
   assert.deepEqual(stored.onlineRefs, []);
 });
 
-test('music sites expose only canonical browser URLs, never embed pages or that site’s media endpoints', () => {
-  const query = 'Синее кафе & Jazz / 夜';
-  for (const site of musicSites) {
-    const target = musicSiteUrl(site, query);
-    assert.ok(isMusicSiteUrl(target));
-    assert.ok(isMusicSiteUrl(MUSIC_SITES[site].home));
-    assert.equal(isMusicSiteUrl(`${target}#extra`), false);
+test('radio tuning follows directory order in both directions, skips browser-only stations and wraps', () => {
+  const playable = RADIO_LISTINGS.filter(({ stream }) => !!stream);
+  for (let index = 0; index < playable.length; index++) {
+    const { id } = playable[index];
+    assert.equal(adjacentStationId(id, 1), playable[(index + 1) % playable.length].id);
+    assert.equal(adjacentStationId(id, -1), playable[(index + playable.length - 1) % playable.length].id);
   }
-  assert.equal(new URL(musicSiteUrl('vk', query)).searchParams.get('q'), query);
-  assert.equal(decodeURIComponent(new URL(musicSiteUrl('mail', query)).pathname.split('/').at(-1)!), query);
-  assert.equal(new URL(musicSiteUrl('yandex', query)).searchParams.get('text'), query);
-  assert.equal(musicSiteUrl('drive', query), MUSIC_SITES.drive.home);
-  assert.equal(musicSiteUrl('mail', '..'), MUSIC_SITES.mail.home);
-  [null, 'file:///C:/music.mp3', 'https://vk.ru@elsewhere.invalid/audio?q=jazz', 'https://vk.ru/audio?q=jazz&next=https://example.invalid',
-    'https://my.mail.ru/music/download/123.mp3', 'https://music.yandex.ru/search?text=jazz&type=all'].forEach((url) => assert.equal(isMusicSiteUrl(url), false));
+  for (const id of [null, 'local', 'radio-ru-mir-far-east']) {
+    assert.equal(adjacentStationId(id, 1), null);
+    assert.equal(adjacentStationId(id, -1), null);
+  }
+});
+
+test('retuning replaces only the active radio slot and keeps music order, shuffle and repeat', () => {
+  const first = 'radio-record-record', second = 'radio-ru-pi-fm';
+  const initial = { ...startQueue(['a', 'c', 'b'], 'a', 'one'), beforeShuffle: ['a', 'b', 'c'] };
+  const tuned = tuneStation(initial, first);
+  assert.deepEqual(tuned.order, ['a', 'c', 'b', first]);
+  assert.deepEqual(tuneStation(tuned, 'radio-ru-mir-far-east'), tuned);
+  const stepped = tuneStation(tuned, second);
+  assert.deepEqual(stepped, { order: ['a', 'c', 'b', second], currentId: second, repeat: 'one', beforeShuffle: ['a', 'b', 'c', second] });
+  assert.deepEqual(tuneStation(stepped, first), tuned);
+  // Pre-existing profiles may already have the destination in the queue.
+  const legacy = startQueue(['a', first, 'b', second, 'c'], first);
+  assert.deepEqual(tuneStation(legacy, second), { ...legacy, currentId: second });
 });
 
 test('radio keeps the requested directory, regional identities and browser-only bookmarks separate', () => {

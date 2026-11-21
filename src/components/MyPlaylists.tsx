@@ -74,7 +74,7 @@ export function MyPlaylists({ items, byId, collection, currentId, playing, busy,
     {items.length > 0 ? <div className="hub-rail hub-topic-rail">{items.map((item, index) => <Tile key={item.id} title={item.title} description={t('Треков: {0}', item.trackIds.length)}
       color={['orchid', 'aqua', 'mango', 'blue'][index % 4]} symbol="♪" image={byId.get(item.trackIds[0])} open
       className={active === item.id ? 'topic-selected' : ''} onClick={() => { setActive(item.id); setAll(false); setConfirm(false); }} />)}</div> :
-      <p>{t('Создайте список из медиатеки или сохраните подборку из «Обзора».')}</p>}
+      <p>{t('Создайте список из медиатеки или сохраните подборку из «Для вас».')}</p>}
     {playlist && <section className="topic-detail" aria-label={playlist.title}>
       <header className="hub-shelf-head"><h3>{playlist.title}</h3>
         <button className="icon-button" type="button" onClick={() => setActive(undefined)} aria-label={t('Закрыть плейлист')}><X size={16} /></button></header>

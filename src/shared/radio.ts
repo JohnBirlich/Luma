@@ -1,4 +1,6 @@
 import type { Track } from './media.js';
+import { appendToQueue } from './queue.js';
+import type { QueueState } from './queue.js';
 import { RADIO_LINEUP } from './radio-lineup.js';
 
 export const RADIO_GENRES = {
@@ -62,6 +64,26 @@ const mediaPaths = STATIONS.map(({ stream }) => { const { origin, pathname } = n
 export const RADIO_ORIGINS = { images: `${recordLogos} ${somaLogos}`, media: [...new Set(mediaPaths)].join(' ') };
 export const STATION_IDS = new Set(RADIO_LISTINGS.map(({ id }) => id));
 const STATION_PAGES = new Set(RADIO_LISTINGS.map(({ page }) => page));
+const streamIndex = new Map(STATIONS.map(({ id }, index) => [id, index]));
+
+/** The tuner follows directory order, including the extras, skipping browser-only stations. */
+export function adjacentStationId(id: string | null, step: -1 | 1): string | null {
+  const index = id === null ? undefined : streamIndex.get(id);
+  if (index === undefined || STATIONS.length < 2) return null;
+  return STATIONS[(index + step + STATIONS.length) % STATIONS.length].id;
+}
+
+/** When already on radio, replace its queue slot instead of adding every station visited. */
+export function tuneStation(queue: QueueState, id: string): QueueState {
+  const current = queue.currentId;
+  if (!streamIndex.has(id) || id === current) return queue;
+  if (current === null || !streamIndex.has(current) || queue.order.includes(id)) {
+    return { ...appendToQueue(queue, [id]), currentId: id };
+  }
+  const replace = (order: string[]) => order.map((item) => item === current ? id : item);
+  return { ...queue, order: replace(queue.order), currentId: id, beforeShuffle: queue.beforeShuffle && replace(queue.beforeShuffle) };
+}
+
 export function readStationIds(value: unknown) {
   const ids = Array.isArray(value) ? value.slice(0, STATION_IDS.size).filter((id): id is string => typeof id === 'string' && STATION_IDS.has(id)) : [];
   return [...new Set(ids)];

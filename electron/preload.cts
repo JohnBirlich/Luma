@@ -16,7 +16,6 @@ const bridge: DesktopBridge = {
   chooseTracks: () => ipcRenderer.invoke('library:choose'),
   importDroppedFiles: (files) => ipcRenderer.invoke('library:drop', files.map((file) => webUtils.getPathForFile(file)).filter(Boolean)),
   removeTrack: (id) => ipcRenderer.invoke('library:remove', id),
-  openVkLink: (url) => ipcRenderer.invoke('vk:open-link', url),
   clearLegacyVkSession: () => ipcRenderer.invoke('vk:reset'),
   lyrics: { lookup: (query, refresh) => ipcRenderer.invoke('lyrics:lookup', query, refresh), local: (id) => ipcRenderer.invoke('lyrics:local', id), openEdition: (url) => ipcRenderer.invoke('lyrics:edition', url) },
   exportMp3: (track, withLyrics) => ipcRenderer.invoke('online:export-mp3', track, withLyrics),

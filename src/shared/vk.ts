@@ -79,7 +79,7 @@ export function vkShelfUrl(item: VkShelfItem) {
   return `${vkPlaylistUrl(item)}${item.shareKey ? `_${item.shareKey}` : ''}`;
 }
 
-/** The desktop bridge opens only canonical VK destinations selected by the user. */
+/** Validate the canonical destinations used by legacy VK bookmarks. */
 export function isVkExternalUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 8192) return false;
   if (value === VK_MUSIC_URL) return true;

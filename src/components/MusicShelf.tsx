@@ -13,11 +13,11 @@ export function Shelf({ title, detail, children, action }: { title: string; deta
     {children}
   </section>;
 }
-export function Tile({ title, description, color, onClick, disabled, symbol, image, className = '', open = false }: {
-  title: string; description?: string; color: string; onClick(): void; disabled?: boolean; symbol?: string; image?: Track; className?: string; open?: boolean;
+export function Tile({ title, description, color, onClick, disabled, symbol, image, expanded, className = '', open = false }: {
+  title: string; description?: string; color: string; onClick(): void; disabled?: boolean; symbol?: string; image?: Track; expanded?: boolean; className?: string; open?: boolean;
 }) {
   return <button type="button" className={`hub-tile tone-${color} ${className}`} disabled={disabled} onClick={onClick}
-    aria-label={title} title={description}>
+    aria-label={title} title={description} aria-expanded={expanded}>
     <span className="hub-tile-copy"><strong>{title}</strong>{description && <small>{description}</small>}</span>
     {image && <Artwork track={image} lazy />}{symbol && <span className="hub-tile-symbol" aria-hidden="true">{symbol}</span>}
     <span className="hub-tile-play" aria-hidden="true">{open ? <ChevronRight size={15} /> : <Play size={13} fill="currentColor" />}</span>

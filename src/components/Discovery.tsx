@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BookmarkPlus, ChevronRight, Compass, Play, Search, X } from 'lucide-react';
+import { BookmarkPlus, ChevronRight, Play, Search, X } from 'lucide-react';
 import { findOnlineTracks } from '../data/online';
 import { useText } from '../i18n/context';
 import { classifiedTracks, EDITORIAL, GENRES, hasGenre, mergeDiscoveryTracks, MOODS } from '../shared/discovery';
@@ -12,45 +12,39 @@ import { Shelf, Tile, TrackRows } from './MusicShelf';
 
 type Rows = Pick<Parameters<typeof TrackRows>[0], 'currentId' | 'playing' | 'play'>;
 interface DiscoveryProps extends Rows {
-  tracks: Track[]; recent: Track[]; related: Track[];
+  tracks: Track[]; recent: Track[]; related: Track[]; seed?: Track;
   favorites: ReadonlySet<string>; disliked: ReadonlySet<string>;
-  busy: boolean; connected: boolean; visible: boolean; initialTopic?: string;
+  busy: boolean; connected: boolean; visible: boolean;
   playAll(tracks: Track[], id?: string): boolean;
   save(title: string, tracks: readonly Track[]): boolean;
 }
 
-export function DiscoveryPreview({ tracks, open }: { tracks: Track[]; open(id?: string): void }) {
-  const t = useText();
-  return <Shelf title={t('Жанры и настроения')} action={<button type="button" className="text-button" onClick={() => open()}>{t('Показать все')}<ChevronRight size={15} /></button>}>
-    <div className="hub-rail hub-topic-rail">{[GENRES[2], MOODS[0], GENRES[1], MOODS[2]].map((item) => {
-      const matching = classifiedTracks(tracks, item.tags);
-      return <Tile key={item.id} title={t(item.title)} color={item.color} symbol={item.mark} open onClick={() => open(item.id)}
-        description={matching.length ? t('Треков: {0}', matching.length) : t('Открыть подборку')} />;
-    })}</div>
-  </Shelf>;
-}
-
 function TopicShelf({ name, detail, topics, selected, counts, open, children, limit = 6 }: {
   name: string; detail?: string; topics: readonly DiscoveryCard[]; selected?: DiscoveryCard;
-  counts: ReadonlyMap<string, Track[]>; open(topic: DiscoveryCard): void; children: ReactNode; limit?: number;
+  counts: ReadonlyMap<string, Track[]>; open(topic?: DiscoveryCard): void; children: ReactNode; limit?: number;
 }) {
   const t = useText();
   const [all, setAll] = useState(false);
   const shown = all ? topics : topics.slice(0, limit);
   const onShelf = selected && topics.some(({ id }) => id === selected.id);
   return <Shelf title={t(name)} detail={detail && t(detail)} action={topics.length > limit && <button type="button" className="text-button" aria-expanded={all}
-    onClick={() => setAll(!all)}>{t(all ? 'Свернуть список' : 'Показать все')}<ChevronRight size={15} /></button>}>
+    onClick={() => {
+      if (all && onShelf && !topics.slice(0, limit).includes(selected)) open();
+      setAll(!all);
+    }}>{t(all ? 'Свернуть список' : 'Показать все')}<ChevronRight size={15} /></button>}>
     <div className="hub-rail hub-topic-rail">{shown.map((item) => {
       const matches = counts.get(item.id) ?? [];
+      const active = selected?.id === item.id;
       return <Tile key={item.id} open title={t(item.title)} description={item.detail ? t(item.detail) : matches.length ? t('Треков: {0}', matches.length) : t('Найти в каталоге')}
-        symbol={item.mark} color={item.color} image={item.detail ? matches[0] : undefined} className={selected?.id === item.id ? 'topic-selected' : ''} onClick={() => open(item)} />;
+        symbol={item.mark} color={item.color} image={item.detail ? matches[0] : undefined} expanded={active}
+        className={active ? 'topic-selected' : ''} onClick={() => open(active ? undefined : item)} />;
     })}</div>
     {onShelf && children}
   </Shelf>;
 }
 
 function TopicDetail({ card, own, disliked, currentId, playing, play, connected, visible, busy, playAll, save, close }: Omit<DiscoveryProps,
-  'tracks' | 'recent' | 'related' | 'favorites' | 'initialTopic'> & { card: DiscoveryCard; own: Track[]; close(): void }) {
+  'tracks' | 'recent' | 'related' | 'seed' | 'favorites'> & { card: DiscoveryCard; own: Track[]; close(): void }) {
   const t = useText();
   const [catalog, setCatalog] = useState<OnlineTrack[]>();
   const [pending, setPending] = useState(false);
@@ -108,8 +102,8 @@ function TopicDetail({ card, own, disliked, currentId, playing, play, connected,
 
 export function Discovery(props: DiscoveryProps) {
   const t = useText();
-  const [selected, setSelected] = useState(props.initialTopic);
-  const { tracks, recent, related, favorites, currentId, playing, play } = props;
+  const [selected, setSelected] = useState<string>();
+  const { tracks, recent, related, seed, favorites, currentId, playing, play } = props;
   const genres = useMemo(() => {
     const extra = musicGroups(tracks, 'genre', 30).filter(({ label }) => !GENRES.some(({ tags }) => hasGenre(label, tags)));
     return [...GENRES, ...extra.map(({ id, label }): DiscoveryCard => ({ id: `local:${id}`, title: label, query: label, tags: [label], color: 'blue', mark: '♪' }))];
@@ -118,17 +112,18 @@ export function Discovery(props: DiscoveryProps) {
   const counts = useMemo(() => new Map(topics.map((card) => [card.id, classifiedTracks(tracks, card.tags)])), [topics, tracks]);
   const topic = topics.find(({ id }) => id === selected);
   const detail = topic && <TopicDetail key={topic.id} {...props} card={topic} own={counts.get(topic.id) ?? []} close={() => setSelected(undefined)} />;
-  const favoritesShelf = tracks.filter(({ id }) => favorites.has(id));
-  const picks = related.length ? related : favoritesShelf.length ? favoritesShelf : recent;
-  return <div className="browse-shelves">
-    <section className="hub-shelf browse-intro"><div className="browse-mark"><Compass size={26} /></div>
-      <div><p className="overline">{t('Обзор Luma')}</p><h2>{t('Что послушать?')}</h2>
-        <p>{t('Жанры, настроения и подборки. Luma использует теги, избранное и историю только на этом устройстве, а не рекомендации или друзей VK.')}</p></div></section>
-    <TopicShelf name="Подборки Luma" detail="Темы редакции, а не рейтинги VK." topics={EDITORIAL} counts={counts} selected={topic} open={(item) => setSelected(item.id)}>{detail}</TopicShelf>
-    {picks.length > 0 && <Shelf title={t(related.length ? 'Похоже на недавнее' : 'Из вашей коллекции')} detail={t('По вашим прослушиваниям и отметкам в Luma.')}>
-      <TrackRows tracks={picks.slice(0, 9)} currentId={currentId} playing={playing} play={play} strip />
+  const picks = useMemo(() => {
+    const starred = tracks.filter(({ id }) => favorites.has(id));
+    return (related.length ? related : starred.length ? starred : recent).slice(0, 9);
+  }, [tracks, recent, related, favorites]);
+  const selection = { counts, selected: topic, open: (item?: DiscoveryCard) => setSelected(item?.id) };
+  return <>
+    <TopicShelf name="Жанры" topics={genres} {...selection}>{detail}</TopicShelf>
+    <TopicShelf name="Настроения и занятия" topics={MOODS} {...selection}>{detail}</TopicShelf>
+    <TopicShelf name="Подборки Luma" detail="Подборки по тегам из медиатеки." topics={EDITORIAL} {...selection}>{detail}</TopicShelf>
+    {picks.length > 0 && <Shelf title={related.length && seed ? t('Похоже на «{0}»', seed.title) : t('Из вашей коллекции')}
+      detail={t('По вашим прослушиваниям и отметкам в Luma.')}>
+      <TrackRows tracks={picks} currentId={currentId} playing={playing} play={play} strip />
     </Shelf>}
-    <TopicShelf name="Жанры" topics={genres} counts={counts} selected={topic} open={(item) => setSelected(item.id)}>{detail}</TopicShelf>
-    <TopicShelf name="Настроения и занятия" topics={MOODS} counts={counts} selected={topic} open={(item) => setSelected(item.id)}>{detail}</TopicShelf>
-  </div>;
+  </>;
 }

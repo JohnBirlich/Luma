@@ -74,7 +74,7 @@ export function RadioStations({ saved, activeId, playing, loading, connected, bu
         <button type="button" data-radio-view="directory" aria-pressed={!savedOnly} onClick={() => setScope('directory')}>{t('Все станции')}</button>
         <button type="button" data-radio-view="saved" aria-pressed={savedOnly} onClick={() => setScope('saved')}>{t('Добавленные')} <span>{added.length}</span></button>
       </div>
-      <p className="hub-note">{t('Прямые эфиры вещателей. Без перемотки и скачивания. Доступность зависит от сети и станции.')}</p>
+      <p className="hub-note">{t('Кнопки «Предыдущая» и «Следующая» в плеере переключают прямые эфиры по порядку каталога. Сами эфиры не перематываются.')}</p>
       {!connected && <p className="online-offline" role="status">{t('Для эфира нужно подключение к интернету.')}</p>}
       <div className="radio-controls">
         <div className="radio-search library-search"><Search size={16} aria-hidden="true" /><input type="search" value={query} maxLength={120}
