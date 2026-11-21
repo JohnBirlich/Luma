@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-${{ github.ref }}${{ inputs.live_radio && '-live-radio' || '' }}
+  group: windows-${{ github.ref }}${{ inputs.live_radio && '-live-radio' || inputs.live_catalog && '-live-catalog' || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -44,11 +44,11 @@ jobs:
           LUMA_LIVE_RADIO: ${{ inputs.live_radio && '1' || '0' }}
           LUMA_LIVE_SERVICES: ${{ inputs.live_services && '1' || '0' }}
       - run: npm run package:win
-        if: ${{ !inputs.live_radio }}
+        if: ${{ !inputs.live_radio && !inputs.live_catalog }}
       - run: npm run test:package
-        if: ${{ !inputs.live_radio }}
+        if: ${{ !inputs.live_radio && !inputs.live_catalog }}
       - uses: actions/upload-artifact@v4
-        if: ${{ !inputs.live_radio }}
+        if: ${{ !inputs.live_radio && !inputs.live_catalog }}
         with:
           name: Luma-Player-Windows-x64
           path: release/*.exe

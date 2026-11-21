@@ -1160,50 +1160,83 @@ async function smoke() {
   }
   if (liveCatalog) {
     await session.defaultSession.clearCache();
-    const failed = [];
-    for (const source of ['ccmixter', 'audius', 'jamendo', 'wikimedia_audio', 'netlabels', 'southern_city']) {
-      // The controlled check exercised mp31. The live check confirms the requested variant really plays.
-
-      let result;
-      try {
-        await go('Главная');
-        await go('Поиск');
-        await waitFor('live search field', () => run(`!!document.querySelector('main input[type="search"]')`));
-        await fill('main input[type="search"]', ({ jamendo: 'jazz', wikimedia_audio: 'Bach chaconne', netlabels: 'Anatoly Nikulin', southern_city: 'Газ', ccmixter: 'jazz', audius: 'jazz' })[source]);
-        const target = source === 'jamendo' || source === 'wikimedia_audio' ? 'openverse' : source;
-        const resultSource = source === 'southern_city' ? 'netlabels' : source;
-        const options = await waitFor(`${source} live results`, async () => {
-          const outcome = await run(`(() => {
-            const status = document.querySelector('[data-catalog="${target}"]');
-            if (status?.dataset.state === 'error') return { error: status.textContent };
-            if (status?.dataset.state !== 'done') return null;
-            return [...document.querySelectorAll('.online-results li[data-source="${resultSource}"] .online-result-actions button:first-child')]
-              .map((button) => button.getAttribute('aria-label'));
-          })()`);
-          if (outcome?.error) throw new Error(outcome.error);
-          return outcome?.length ? outcome : undefined;
-        });
-        for (const name of options.slice(0, 3)) {
-          const selector = `.online-result-actions button[aria-label=${JSON.stringify(name)}]`;
-          // Search returned official provider URLs; ask the same audio element used by the app to decode them.
-          await click(selector);
-          const decoded = await waitFor(`${source} audio attempt`, () => run(`(() => {
-            const media = document.querySelector('${onlineAudio}');
-            return media.currentTime > .15 ? new URL(media.currentSrc).searchParams.get('format') ?? 'original' : media.error ? 'unavailable' : null;
-          })()`)).catch(() => 'timed out');
-          if (decoded === (source === 'jamendo' ? 'mp31' : 'original')) {
-            result = `live search and playback passed (${name.replace('Слушать онлайн: ', '')}, ${decoded})`;
-            break;
+    const { webRequest } = session.defaultSession;
+    const network = [];
+    // Only capture statuses and origins, never media paths, signed URLs, cookies or user data.
+    const upstream = { urls: ['https://ccmixter.org/*', 'https://api.audius.co/*', 'https://creatornode.audius.co/*'] };
+    const label = (url) => {
+      const { hostname, pathname } = new URL(url);
+      return `${hostname}${pathname.endsWith('/stream') ? '(resolve)' : pathname.includes('/cidstream/') || pathname.startsWith('/content/') ? '(media)' : '(query)'}`;
+    };
+    webRequest.onResponseStarted(upstream, ({ url, statusCode, responseHeaders }) => {
+      const mime = Object.entries(responseHeaders ?? {}).find(([key]) => key.toLowerCase() === 'content-type')?.[1]?.[0]?.split(';')[0];
+      network.push(`${label(url)} ${statusCode}${mime ? ` ${mime}` : ''}`);
+    });
+    webRequest.onBeforeRedirect(upstream, ({ url, statusCode, redirectURL }) => network.push(`${label(url)} ${statusCode} -> ${new URL(redirectURL).origin}`));
+    webRequest.onErrorOccurred(upstream, ({ url, error }) => network.push(`${label(url)} ${error}`));
+    await run(`document.addEventListener('securitypolicyviolation', event => {
+      const url = URL.parse(event.blockedURI);
+      if (url && event.violatedDirective === 'media-src') (window.catalogPolicyBlocks ??= []).push(url.origin);
+    });`);
+    const sources = [
+      ['ccmixter', 'ccmixter', 'jazz', 'ccmixter.org'], ['audius', 'audius', 'jazz', 'app'],
+      ['jamendo', 'openverse', 'jazz', 'storage.jamendo.com'], ['wikimedia_audio', 'openverse', 'Bach chaconne', 'upload.wikimedia.org'],
+      ['netlabels', 'netlabels', 'Anatoly Nikulin', 'archive.org'], ['netlabels', 'southern_city', 'Газ', 'archive.org'],
+    ];
+    const report = [];
+    try {
+      for (const [source, target, query, host] of sources) {
+        let ok = false, result;
+        try {
+          await go('Главная');
+          await go('Поиск');
+          await waitFor('live search field', () => run(`!!document.querySelector('main input[type="search"]')`));
+          await fill('main input[type="search"]', query);
+          const options = await waitFor(`${target}/${source} live results`, async () => {
+            const outcome = await run(`(() => {
+              const status = document.querySelector('[data-catalog="${target}"]');
+              if (status?.dataset.state === 'error') return { error: status.textContent };
+              if (status?.dataset.state !== 'done') return null;
+              return [...document.querySelectorAll('.online-results li[data-source="${source}"] .online-result-actions button:first-child')]
+                .map((button) => ({ aria: button.getAttribute('aria-label'), title: button.closest('li').querySelector('.online-result-copy strong').textContent }));
+            })()`);
+            if (outcome?.error) throw new Error(outcome.error);
+            return outcome;
+          });
+          const failures = [];
+          for (const { aria, title } of options.slice(0, 3)) {
+            await click(`.online-result-actions button[aria-label=${JSON.stringify(aria)}]`);
+            const decoded = await waitFor(`${target}/${source} audio attempt`, () => run(`(() => {
+              const media = document.querySelector('${onlineAudio}');
+              const url = URL.parse(media.currentSrc || media.getAttribute('src') || '');
+              if (!url || !(url.hostname === '${host}' || url.hostname.endsWith('.${host}'))
+                || navigator.mediaSession.metadata?.title !== ${JSON.stringify(title)}) return null;
+              if ('${source}' === 'audius' && !(url.protocol === 'luma:' && url.pathname.startsWith('/media/audius/'))) return null;
+              if (media.error) return { code: media.error.code };
+              if (media.currentTime > .15 && !media.paused && media.readyState >= 2) return { format: url.searchParams.get('format') ?? 'original' };
+              return null;
+            })()`)).catch(() => ({ code: 'timeout' }));
+            if (decoded.format === (source === 'jamendo' ? 'mp31' : 'original')) {
+              result = `decoded ${title} (${decoded.format})`;
+              ok = true;
+              break;
+            }
+            failures.push(`${title}: ${decoded.code ?? decoded.format}`);
           }
-        }
-        if (!result) throw new Error('catalog returned results, but audio did not play from the first three URLs');
-      } catch (error) {
-        result = error instanceof Error ? error.message : String(error);
-        failed.push(source);
+          if (!ok) throw new Error(failures.join(', ') || 'no matching results');
+        } catch (error) { result = error instanceof Error ? error.message : String(error); }
+        report.push({ source: target === 'openverse' ? source : target, ok, result });
       }
-      console.log(`::notice title=Live catalog ${source}::${result.replace(/%/g, '%25').replace(/\r?\n/g, ' ')}`);
+    } finally {
+      webRequest.onErrorOccurred(null);
+      webRequest.onBeforeRedirect(null);
+      webRequest.onResponseStarted(null);
     }
-    assert.deepEqual(failed, [], 'Live provider check (optional, depends on the network and these services)');
+    const detail = report.map(({ source, result }) => `${source}: ${result}`).join(' | ');
+    const policy = [...new Set(await run(`window.catalogPolicyBlocks ?? []`))];
+    const trace = [...new Set(network)].slice(0, 24).join(' | ');
+    console.log(`::notice title=Live catalogs::${detail.replace(/%/g, '%25').replace(/\r?\n/g, ' ')}`);
+    assert.ok(report.every(({ ok }) => ok), `Live catalog playback: ${detail}. HTTP: ${trace}. Policy blocks: ${policy.join(', ') || 'none'}.`);
   }
 }
 
