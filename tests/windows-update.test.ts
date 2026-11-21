@@ -18,6 +18,7 @@ test('stable releases and setup assets are compared numerically and scoped to th
   assert.equal(newerStableVersion('1.10.0', '1.9.99'), true);
   assert.equal(newerStableVersion('1.1.0', '1.1.0-rc.2'), true);
   assert.equal(newerStableVersion('1.1.0', '1.1.0+git-hash'), false);
+  assert.equal(newerStableVersion('1.0.0', '0.20.0'), true);
   assert.equal(newerStableVersion('1.0.0', '2.0.0'), false);
   assert.equal(newerStableVersion('1.0.0-rc.1', '0.19.0'), false);
   assert.equal(readWindowsRelease(release)?.asset, asset);

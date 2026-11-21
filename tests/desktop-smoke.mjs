@@ -22,6 +22,7 @@ import { probeRadio } from './live-radio.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
+const nextVersion = `${Number(version.split('.')[0]) + 1}.0.0`;
 const profile = await mkdtemp(join(tmpdir(), 'luma-desktop-smoke-'));
 app.setAppPath(root);
 app.setPath('appData', profile);
@@ -167,7 +168,7 @@ async function smoke() {
   }
   assert.equal(await run('window.luma.lastfm.status().then(({ enabled }) => enabled)'), false);
   assert.equal(await run('window.luma.discord.status()'), process.platform === 'win32' ? 'off' : 'unsupported');
-  assert.equal(await run('window.luma.updates.install("1.0.0")'), 'unavailable', 'a source build cannot launch an installer');
+  assert.equal(await run(`window.luma.updates.install(${JSON.stringify(nextVersion)})`), 'unavailable', 'a source build cannot launch an installer');
   assert.equal(first.artist, 'Ария');
   assert.equal(first.album, 'Живой звук');
   assert.equal(first.picture.type, 'image/jpeg');
@@ -409,7 +410,7 @@ async function smoke() {
   });
   await click('.equalizer-content .dialog-footer .primary-button');
   assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused`), true);
-  const nextVersion = '99.0.0', setupName = installerName(nextVersion);
+  const setupName = installerName(nextVersion);
   let updateLookups = 0;
   session.defaultSession.protocol.handle('https', (request) => {
     if (request.url !== LATEST_RELEASE_API) return new Response(null, { status: 404 });
