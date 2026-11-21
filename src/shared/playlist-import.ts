@@ -77,16 +77,15 @@ export function readPlaylistImport(bytes: Uint8Array, format: PlaylistFormat, fi
     lists = value.playlists.flatMap((list) => Array.isArray(list?.items) ? [draft(playlistTitle(list.name) || name, spotifyRows(list.items))] : []);
   } else {
     // Apple Music's track information is a tab-separated table in .txt, not a list of prose lines.
-    const hasTable = format === 'txt' && /\t/.test(text.split(/\r\n|\n|\r/u, 1)[0]);
+    const header = format === 'txt' ? text.trimStart().split(/\r\n|\n|\r/u, 1)[0] : '';
     let input: Iterable<ImportRow | undefined>;
     if (format === 'm3u') input = m3uRows(text);
     else if (format === 'csv') input = mapReferences(csvTracks(text));
-    else if (hasTable) {
+    else if (header.includes('\t')) {
       // Probe the header before falling back to artist<TAB>title. A malformed table is still an error.
       const table = csvTracks(text);
-      const firstLine = text.split(/\r\n|\n|\r/u, 1)[0];
       let tableHeader = true;
-      try { csvTracks(firstLine).next(); } catch { tableHeader = false; }
+      try { csvTracks(header).next(); } catch { tableHeader = false; }
       input = mapReferences(tableHeader ? table : textTracks(text));
     } else input = mapReferences(textTracks(text));
     lists = [draft(name, input)];

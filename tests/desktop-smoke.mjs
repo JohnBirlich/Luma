@@ -41,7 +41,7 @@ async function waitFor(label, check) {
 const liveCatalog = process.env.LUMA_LIVE_CATALOG === '1';
 const liveServices = process.env.LUMA_LIVE_SERVICES === '1';
 const liveRadio = process.env.LUMA_LIVE_RADIO === '1';
-const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), liveRadio ? 370_000 : (liveCatalog || liveServices) ? 260_000 : 170_000);
+const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), liveRadio ? 410_000 : (liveCatalog || liveServices) ? 260_000 : 170_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
 const cover = await readFile(join(root, 'public/artwork/afterimage.webp'));

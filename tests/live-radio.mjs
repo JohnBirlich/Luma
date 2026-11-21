@@ -2,7 +2,7 @@
 import { appendFile } from 'node:fs/promises';
 
 export async function probeRadio(run, webRequest, stations) {
-  const targets = new Set(stations.flatMap(({ stream, logo }) => logo ? [stream, logo] : [stream]));
+  const targets = new Set(stations.map(({ stream }) => stream));
   const statuses = new Map();
   webRequest.onResponseStarted({ urls: ['https://*/*'] }, ({ url, statusCode }) => {
     if (targets.has(url)) statuses.set(url, statusCode);
@@ -16,7 +16,7 @@ export async function probeRadio(run, webRequest, stations) {
         const image = logo ? new Image() : null;
         let timeout;
         try {
-          const deadline = new Promise(resolve => { timeout = setTimeout(() => resolve('timeout'), 9000); });
+          const deadline = new Promise(resolve => { timeout = setTimeout(() => resolve('timeout'), 12_000); });
           const decode = new Promise(resolve => {
             audio.addEventListener('timeupdate', () => { if (audio.currentTime > .18) resolve('decoded'); });
             audio.addEventListener('error', () => resolve('media error ' + (audio.error?.code ?? 0)), { once: true });

@@ -115,6 +115,8 @@ test('music sites expose only canonical browser URLs, never embed pages or that 
 
 test('radio keeps the requested directory, regional identities and browser-only bookmarks separate', () => {
   assert.equal(RADIO_DIRECTORY.length, 96);
+  assert.deepEqual(RADIO_DIRECTORY.slice(0, 3).map(({ name }) => name), ['Европа Плюс - Россия', 'Хит FM - Россия', 'Радио Record - Россия']);
+  assert.deepEqual(RADIO_DIRECTORY.slice(-2).map(({ name }) => name), ['Русская Волна', 'Вести FM - Россия']);
   assert.equal(new Set(RADIO_DIRECTORY.map(({ name }) => name)).size, 96);
   assert.equal(new Set(RADIO_LISTINGS.map(({ id }) => id)).size, 96 + EXTRA_STATIONS.length);
   assert.deepEqual(RADIO_DIRECTORY.filter(({ name }) => name.startsWith('Радио МИР')).map(({ name }) => name), [

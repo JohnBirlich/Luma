@@ -29,7 +29,7 @@ test('Spotify account export separates lists and ignores non-track entries and U
 });
 
 test('Apple Music UTF-16 text export and plain TXT map to the same metadata', () => {
-  const apple = Buffer.from('\uFEFFName\tArtist\tAlbum\tLocation\r\nПервый снег\tАртём\tЗима\tD:\\Users\\Test.mp3\r\n', 'utf16le');
+  const apple = Buffer.from('\uFEFF\r\nName\tArtist\tAlbum\tLocation\r\nПервый снег\tАртём\tЗима\tD:\\Users\\Test.mp3\r\n', 'utf16le');
   const [draft] = readPlaylistImport(apple, 'txt', 'Apple.txt');
   assert.deepEqual(draft.rows, [{ title: 'Первый снег', artist: 'Артём', album: 'Зима' }]);
   assert.deepEqual(parse('list.txt', 'Артём — Первый снег\nАртём\tВторой снег')[0].rows.map(({ title }) => title), ['Первый снег', 'Второй снег']);

@@ -9,3 +9,7 @@ The Russian directory follows the requested 96 stations and their order. The exi
 ## Playback verification
 
 Dispatch the Windows build with `live_radio=true` on the commit under review. This checks the actual Electron renderer decoder and shipped Content Security Policy, including an audio clock advance from each direct URL. It does not record or save media; the only report is the status/URL and optional logo dimensions. A fixture-only test is not evidence that a station is live. If an outlet changes its source, first confirm the station/region and public HTTPS URL; keep its existing ID and listening page. If the replacement is not usable in the renderer, omit its `stream` field.
+
+### Initial lineup verification
+
+73 of the 96 stations have a direct URL that decoded in at least one of the Windows runs; 23 link to the listening page only. The 11 additional Record/SomaFM channels also decoded. The [first check](https://github.com/JohnBirlich/VKX-Modded/actions/runs/44916090618) and [replacement-source check](https://github.com/JohnBirlich/VKX-Modded/actions/runs/44916626589) deliberately failed their aggregate assertion when a candidate could not be decoded; failed candidates without a successful decode are not used. The central Zvezda feed decoded in the first check and timed out in the second, so availability can still vary. These runs do not certify playback from another region or network.
