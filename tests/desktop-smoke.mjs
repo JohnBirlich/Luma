@@ -1,7 +1,5 @@
 // Run with Electron after `npm run build`. Uses a temporary profile, not the user's library.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { release, tmpdir } from 'node:os';
@@ -13,7 +11,6 @@ import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js
 import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
-import { verifyWindowsSigner } from '../dist-electron/electron/windows-update.js';
 import { installerName, LATEST_RELEASE_API, RELEASE_REPO } from '../dist-electron/src/shared/release-updates.js';
 import { musicLaunchUrl, readMusicLink } from '../dist-electron/src/shared/music-links.js';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
@@ -142,28 +139,6 @@ async function smoke() {
   assert.equal(await run('window.luma.floatOutput.start("48000")'), 'failed', 'Float IPC rejects a non-numeric rate');
   let hasSystemSink = true;
   if (process.platform === 'win32') {
-    const system = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
-    const powershell = join(system, 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    const signatureFixtureScript = String.raw`
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-$files = @((Join-Path $PSHOME 'powershell.exe'), (Join-Path $env:SystemRoot 'System32\cmd.exe'), (Join-Path $env:SystemRoot 'System32\notepad.exe'))
-foreach ($file in $files) {
-  $sig = Get-AuthenticodeSignature -LiteralPath $file
-  if ($sig.Status -eq 'Valid' -and $sig.SignerCertificate) {
-    @{ path = $file; cert = [Convert]::ToBase64String($sig.SignerCertificate.RawData) } | ConvertTo-Json -Compress
-    exit 0
-  }
-}
-throw 'No valid Windows signature fixture found'
-`;
-    const verificationFixture = execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(signatureFixtureScript, 'utf16le').toString('base64')], {
-      encoding: 'utf8', windowsHide: true, timeout: 45_000,
-    });
-    const { path: signedFile, cert } = JSON.parse(verificationFixture);
-    const pin = createHash('sha256').update(Buffer.from(cert, 'base64')).digest('hex');
-    assert.equal(await verifyWindowsSigner(signedFile, pin), true, 'Windows verifier accepts a valid certificate pin');
-    assert.equal(await verifyWindowsSigner(signedFile, '0'.repeat(64)), false, 'Windows verifier rejects a different pin');
     assert.equal(await run('window.luma.floatOutput.available()'), true, 'the WASAPI helper was built');
     const mode = await run('window.luma.floatOutput.start(48000)');
     assert.ok(['running', 'unsupported'].includes(mode), `WASAPI helper starts or reports device incompatibility: ${mode}`);

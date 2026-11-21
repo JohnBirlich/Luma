@@ -19,6 +19,9 @@ extraResources:
   - from: dist-native
     to: audio
     filter: [LumaFloat.exe]
+  - from: dist-native
+    to: security
+    filter: [LumaVerify.exe]
 win:
   icon: Assets/icon.ico
   target:

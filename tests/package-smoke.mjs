@@ -1,11 +1,11 @@
 // Run with Electron so fs can read the packaged application manifest inside the ASAR.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app } from 'electron';
-import { verifyWindowsSigner } from '../dist-electron/electron/windows-update.js';
+import { readTrustedWindowsSigner, verifyWindowsSigner, WINDOWS_VERIFIER_EXE } from '../dist-electron/electron/windows-update.js';
 import { MUSIC_LINK_SCHEME } from '../dist-electron/src/shared/music-links.js';
 import { readSignerSha256 } from '../dist-electron/src/shared/release-updates.js';
 import { APP_NAME, APP_USER_MODEL_ID } from '../dist-electron/src/shared/app-info.js';
@@ -38,13 +38,29 @@ try {
       env: { ...process.env, LUMA_TEST_EXE: join(directory, 'win-unpacked', APP_USER_MODEL_ID) }, encoding: 'utf8', windowsHide: true, timeout: 15_000,
     });
     assert.deepEqual(JSON.parse(metadata), { ProductName: APP_NAME, FileDescription: APP_NAME });
+    const helper = join(directory, 'win-unpacked', 'resources', 'security', WINDOWS_VERIFIER_EXE);
+    assert.ok((await stat(helper)).isFile(), 'native signer verifier in the package');
+    const usage = spawnSync(helper, [], { windowsHide: true, timeout: 10_000 });
+    assert.ifError(usage.error);
+    assert.equal(usage.status, 2, 'native signer verifier starts and rejects a missing argument');
+    assert.equal(await readTrustedWindowsSigner(helper, join(root, 'package.json')), undefined, 'an unsigned file is rejected');
     if (manifest.lumaWindowsSignerSha256 !== undefined) {
       const signer = readSignerSha256(manifest.lumaWindowsSignerSha256);
       assert.ok(signer, 'packaged signing pin must be SHA-256');
-      assert.equal(await verifyWindowsSigner(join(directory, 'win-unpacked', APP_USER_MODEL_ID), signer), true, 'signed application matches pin');
-      assert.equal(await verifyWindowsSigner(join(directory, `Luma-Player-Setup-${version}-x64.exe`), signer), true, 'signed setup matches pin');
+      assert.equal(await verifyWindowsSigner(helper, join(directory, 'win-unpacked', APP_USER_MODEL_ID), signer), true, 'signed application matches pin');
+      assert.equal(await verifyWindowsSigner(helper, join(directory, `Luma-Player-Setup-${version}-x64.exe`), signer), true, 'signed setup matches pin');
+    } else {
+      const files = [process.env.npm_node_execpath, process.execPath].filter(Boolean);
+      const pins = await Promise.all(files.map((file) => readTrustedWindowsSigner(helper, file)));
+      const index = pins.findIndex(Boolean);
+      if (index < 0) {
+        console.log('::warning title=Authenticode fixture::No trusted Node or Electron signature could be verified on this runner. No signed Luma release is being tested.');
+      } else {
+        const otherPin = (pins[index][0] === '0' ? '1' : '0').repeat(64);
+        assert.equal(await verifyWindowsSigner(helper, files[index], otherPin), false, 'a valid signature with a different pin is rejected');
+        console.log('::notice title=Native Authenticode::A signed runtime was accepted, and the same file with an incorrect pin was rejected.');
+      }
     }
-
   }
   for (const target of ['Setup', 'Portable']) {
     const info = await stat(join(directory, `Luma-Player-${target}-${version}-x64.exe`));

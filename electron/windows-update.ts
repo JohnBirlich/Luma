@@ -2,7 +2,7 @@ import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import { readLimitedBody } from '../src/shared/metadata-service.js';
@@ -20,27 +20,21 @@ function releaseAssetRedirect(value: string | null) {
     && /^\/github-production-release-asset(?:-[\da-f]+)?\/1463134723\/[\da-f-]{36}$/.test(url.pathname)) return url.href;
 }
 
-const checkSignature = promisify(execFile);
-const verifyScript = String.raw`
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-$info = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $env:LUMA_SIGNATURE_FILE
-if ($info.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or -not $info.SignerCertificate) { exit 1 }
-[Convert]::ToBase64String($info.SignerCertificate.RawData)
-`;
-const encodedVerify = Buffer.from(verifyScript, 'utf16le').toString('base64');
+const exec = promisify(execFile);
+export const WINDOWS_VERIFIER_EXE = 'LumaVerify.exe';
 
-export async function verifyWindowsSigner(path: string, signer: string): Promise<boolean> {
-  if (process.platform !== 'win32') return false;
+/** Uses only the packaged verifier path; missing, timed out or untrusted stays manual. */
+export async function readTrustedWindowsSigner(helper: string, path: string): Promise<string | undefined> {
+  if (process.platform !== 'win32' || !isAbsolute(helper) || !isAbsolute(path)) return;
   try {
-    // No shell or user-controlled command text; a missing verifier fails closed.
-    const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    const { stdout, stderr } = await checkSignature(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedVerify], {
-      env: { ...process.env, PSModulePath: join(dirname(powershell), 'Modules'), LUMA_SIGNATURE_FILE: path }, windowsHide: true, timeout: 30_000, maxBuffer: 32 * 1024,
-    });
-    const cert = stdout.trim();
-    return !stderr && /^[A-Za-z0-9+/]+={0,2}$/.test(cert) && createHash('sha256').update(Buffer.from(cert, 'base64')).digest('hex') === signer;
-  } catch { return false; }
+    const { stdout, stderr } = await exec(helper, [path], { windowsHide: true, timeout: 30_000, maxBuffer: 1024 });
+    const hash = stdout.trim();
+    if (!stderr && /^[a-f0-9]{64}$/.test(hash)) return hash;
+  } catch { /* A verifier error does not authorize installation. */ }
+}
+
+export async function verifyWindowsSigner(helper: string, path: string, expected: string): Promise<boolean> {
+  return /^[a-f0-9]{64}$/.test(expected) && await readTrustedWindowsSigner(helper, path) === expected;
 }
 
 async function downloadWindowsInstaller(release: WindowsRelease, path: string, signal: AbortSignal, fetcher: typeof fetch) {
@@ -93,7 +87,8 @@ export class WindowsUpdates {
   private stopped = new AbortController();
 
   constructor(private installed: string, private mode: UpdateMode, private signer: string | undefined, private temp: string,
-    private fetcher = globalThis.fetch, private verify = verifyWindowsSigner, private launch = launchInstaller, private currentExe = process.execPath) {}
+    private fetcher = globalThis.fetch, private verify: (path: string, signer: string) => Promise<boolean> = async () => false,
+    private launch = launchInstaller, private currentExe = process.execPath) {}
 
   async check(): Promise<UpdateReport> {
     try {

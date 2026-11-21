@@ -32,7 +32,7 @@ import { DesktopDiscord } from './discord-presence.js';
 import { DesktopFloatOutput } from './float-output.js';
 import { StreamCache } from './stream-cache.js';
 import { createProtocolHandler } from './protocol.js';
-import { WindowsUpdates } from './windows-update.js';
+import { verifyWindowsSigner, WINDOWS_VERIFIER_EXE, WindowsUpdates } from './windows-update.js';
 import { fetchAudius } from './audius-network.js';
 
 protocol.registerSchemesAsPrivileged([{
@@ -391,7 +391,10 @@ if (!app.requestSingleInstanceLock()) {
     const portable = !!process.env.PORTABLE_EXECUTABLE_FILE;
     const supported = process.platform === 'win32' && process.arch === 'x64' && app.isPackaged;
     const signer = supported && !portable ? readSignerSha256(JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8')).lumaWindowsSignerSha256) : undefined;
-    updates = new WindowsUpdates(info.version, !supported ? 'development' : portable ? 'portable' : signer ? 'signed' : 'manual', signer, app.getPath('temp'), (input, init) => input === LATEST_RELEASE_API ? net.fetch(input, init) : globalThis.fetch(input, init));
+    const helper = join(process.resourcesPath, 'security', WINDOWS_VERIFIER_EXE);
+    updates = new WindowsUpdates(info.version, !supported ? 'development' : portable ? 'portable' : signer ? 'signed' : 'manual',
+      signer, app.getPath('temp'), (input, init) => input === LATEST_RELEASE_API ? net.fetch(input, init) : globalThis.fetch(input, init),
+      (path, pin) => verifyWindowsSigner(helper, path, pin));
     journal = await DesktopDiagnostics.open(app.getPath('userData'), info);
     journal.main('desktop.start');
     Menu.setApplicationMenu(null);
