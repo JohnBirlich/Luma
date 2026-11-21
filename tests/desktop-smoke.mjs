@@ -1,7 +1,7 @@
 // Run with Electron after `npm run build`. Uses a temporary profile, not the user's library.
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { release, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -946,15 +946,21 @@ async function smoke() {
       assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
 
       await click('.hub-tile[aria-label="Очередь из файла"]');
-      const sharedPath = join(profile, 'fixture-share.luma.json');
+      const shareFolder = join(profile, 'Обмен плейлистами');
+      await mkdir(shareFolder);
+      const sharedPath = join(shareFolder, 'Очередь из файла.json');
       const saveShare = dialog.showSaveDialog;
       try {
+        dialog.showSaveDialog = async () => ({ canceled: true, filePath: sharedPath });
+        assert.equal(await run(`window.luma.saveSharedPlaylist({ format: 'luma-playlist', version: 1, title: 'Отмена', tracks: [{ title: 'Тест' }] })`), false);
+        assert.deepEqual(await readdir(shareFolder), [], 'cancelling Save As leaves the directory unchanged');
         dialog.showSaveDialog = async () => ({ canceled: false, filePath: sharedPath });
         await run(`void [...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Поделиться списком').click()`);
         await waitFor('playlist export writes the bounded metadata file', async () => {
           const data = await readFile(sharedPath, 'utf8').catch(() => '');
           return data && JSON.parse(data).tracks.length === 2;
         });
+        assert.deepEqual(await readdir(shareFolder), ['Очередь из файла.json'], 'export uses the exact approved filename');
         assert.ok(!(await readFile(sharedPath, 'utf8')).match(/fileName|PrivateFolder|audioUrl|artworkUrl|luma:\/\//));
       } finally { dialog.showSaveDialog = saveShare; }
       await run(`void [...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Добавить в «Любимое Luma»').click()`);
@@ -976,12 +982,14 @@ async function smoke() {
       await click('[aria-label="Резервный локальный файл"]');
       await closeSettings();
       const copyText = clipboard.writeText;
+      const realClipboard = process.platform === 'win32' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' && process.env.GITHUB_ACTIONS === 'true';
       try {
         let copied = '';
-        clipboard.writeText = (text) => { copied = text; };
+        if (!realClipboard) clipboard.writeText = (text) => { copied = text; };
         await run(`window.luma.musicLinks.copy(${JSON.stringify(`https://openverse.org/audio/${jamendoRecording.id}/`)})`);
-        assert.equal(readMusicLink(copied)?.provider, 'openverse');
-      } finally { clipboard.writeText = copyText; }
+        assert.equal(readMusicLink(realClipboard ? clipboard.readText() : copied)?.url, `https://openverse.org/audio/${jamendoRecording.id}/`);
+        if (realClipboard) console.log('::notice title=Windows clipboard::Copied a canonical music link and read it back through the system clipboard.');
+      } finally { if (realClipboard) clipboard.clear(); else clipboard.writeText = copyText; }
 
       await click('[data-home-tab="home"]');
       await waitFor('For You genres', () => run(`!!document.querySelector('[aria-label="Жанры"] .hub-tile[aria-label="Джаз"]')`));

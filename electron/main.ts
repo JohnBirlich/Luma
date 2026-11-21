@@ -137,6 +137,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     appWindow(event);
     const url = pendingMusicLink;
     pendingMusicLink = undefined;
+    if (url) logs.main('desktop.musicLinkDelivered');
     return url;
   });
   ipcMain.handle('music-link:browser', (event, value: unknown) => {

@@ -757,6 +757,7 @@ export const english: Record<string, string> = {
   "Запуск настольного Luma": "Starting the desktop app",
   "Подключён локальный протокол": "Local protocol registered",
   "Окно Luma загружено": "Luma window loaded",
+  "Музыкальная ссылка передана окну Luma": "Music link delivered to the Luma window",
   "Не удалось запустить настольный Luma": "Desktop app could not start",
   "Ошибка загрузки окна": "Window failed to load",
   "Процесс интерфейса завершился неожиданно": "Renderer closed unexpectedly",

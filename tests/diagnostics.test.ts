@@ -13,6 +13,9 @@ test('diagnostics accept only known events from the proper process and typed num
     stack: 'SECRET', url: 'https://vk.ru/?token=SECRET', code: 123,
   }, 'renderer', 124), { event: 'library.imported', at: 124, values: { ms: 133, added: 4 } });
   assert.deepEqual(logEntry('vk.failed', { code: -106 }, 'main', 123)?.values, { code: -106 });
+  assert.deepEqual(logEntry('desktop.musicLinkDelivered', { url: 'https://vk.ru/audio123_456', code: 123 }, 'main', 124),
+    { event: 'desktop.musicLinkDelivered', at: 124, values: {} });
+  assert.equal(logEntry('desktop.musicLinkDelivered', {}, 'renderer'), undefined);
 });
 
 test('local journal keeps only recent entries and tolerates damaged or stale records', () => {

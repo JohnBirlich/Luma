@@ -20,6 +20,7 @@ export const LOG_EVENTS = {
   'desktop.start': ['main', 'startup', 'info', 'Запуск настольного Luma'],
   'desktop.protocol': ['main', 'startup', 'info', 'Подключён локальный протокол'],
   'desktop.ready': ['main', 'startup', 'info', 'Окно Luma загружено', 'ms'],
+  'desktop.musicLinkDelivered': ['main', 'app', 'info', 'Музыкальная ссылка передана окну Luma'],
   'desktop.failed': ['main', 'startup', 'error', 'Не удалось запустить настольный Luma'],
   'desktop.pageFailed': ['main', 'startup', 'error', 'Ошибка загрузки окна', 'code'],
   'desktop.rendererExited': ['main', 'app', 'error', 'Процесс интерфейса завершился неожиданно', 'code'],

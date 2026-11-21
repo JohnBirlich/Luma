@@ -22,6 +22,7 @@
     "dist:win": "npm run build && npm run package:win",
     "package:win": "electron-builder --win --x64 --publish never",
     "test:package": "electron tests/package-smoke.mjs",
+    "test:installed": "node tests/installed-smoke.mjs",
     "test:desktop": "electron tests/desktop-smoke.mjs"
   },
   "dependencies": {

@@ -47,6 +47,8 @@ jobs:
         if: ${{ !inputs.live_radio && !inputs.live_catalog }}
       - run: npm run test:package
         if: ${{ !inputs.live_radio && !inputs.live_catalog }}
+      - run: npm run test:installed
+        if: ${{ !inputs.live_radio && !inputs.live_catalog }}
       - uses: actions/upload-artifact@v4
         if: ${{ !inputs.live_radio && !inputs.live_catalog }}
         with:
