@@ -120,6 +120,10 @@ async function journal(profile, label, check) {
 
 const count = (events, name) => events.filter((event) => event === name).length;
 const delivered = 'desktop.musicLinkDelivered';
+const installedFixture = (entry) => ({
+  scheme: entry.scheme, hasCommand: !!entry.command, hasInstallLocation: !!entry.install, hasUninstaller: !!entry.version,
+});
+const preflightOnly = process.argv.includes('--preflight');
 let profile, clean = false, portableProcess;
 let stage = 'isolation';
 try {
@@ -127,45 +131,50 @@ try {
   profile = join(await ps("[Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)"), APP_NAME);
   assert.ok(isAbsolute(profile) && !await exists(profile), 'requires a fresh Windows user profile without existing Luma data');
   const before = await state();
-  assert.ok(noInstall(before.user) && noInstall(before.machine) && !before.user.scheme && !before.machine.scheme, 'requires an unregistered Luma installation');
+  const registry = JSON.stringify({ user: installedFixture(before.user), machine: installedFixture(before.machine) });
+  assert.ok(noInstall(before.user) && noInstall(before.machine) && !before.user.scheme && !before.machine.scheme,
+    `requires an unregistered Luma installation: ${registry}`);
   assert.equal(await ps('@(Get-Process -Name $env:LUMA_SMOKE_APP -ErrorAction SilentlyContinue).Count'), '0', 'no installed or portable Luma is running');
-  clean = true;
+  if (preflightOnly) console.log('::notice title=Installed smoke preflight::Windows registry and profile are clear before packaging.');
+  else {
+    clean = true;
 
-  stage = 'install and real ShellExecute handoff';
-  await install();
-  await openLink(456);
-  await journal(profile, 'cold launch through Windows', (events) => count(events, 'desktop.ready') === 1 && count(events, delivered) === 1);
-  await openLink(457);
-  const warm = await journal(profile, 'warm activation through Windows', (events) => count(events, delivered) === 2);
-  assert.equal(count(warm.map(({ event }) => event), 'desktop.start'), 1, 'warm activation did not open a second app');
-  assert.ok(!warm.some(({ event }) => event === 'audio.play'), 'no autoplay through a VK link');
-  assert.ok(!JSON.stringify(warm).includes('vk.ru/audio'), 'journal does not contain the link');
-  await stopApps();
+    stage = 'install and real ShellExecute handoff';
+    await install();
+    await openLink(456);
+    await journal(profile, 'cold launch through Windows', (events) => count(events, 'desktop.ready') === 1 && count(events, delivered) === 1);
+    await openLink(457);
+    const warm = await journal(profile, 'warm activation through Windows', (events) => count(events, delivered) === 2);
+    assert.equal(count(warm.map(({ event }) => event), 'desktop.start'), 1, 'warm activation did not open a second app');
+    assert.ok(!warm.some(({ event }) => event === 'audio.play'), 'no autoplay through a VK link');
+    assert.ok(!JSON.stringify(warm).includes('vk.ru/audio'), 'journal does not contain the link');
+    await stopApps();
 
-  stage = 'reinstall and uninstall';
-  const sentinel = join(profile, 'installed-smoke-profile.txt');
-  await writeFile(sentinel, 'Profile preserved', { flag: 'wx' });
-  await install();
-  assert.equal(await readFile(sentinel, 'utf8'), 'Profile preserved');
-  await uninstall();
-  assert.equal((await state()).user.scheme, false, 'uninstall removed its own URL association');
-  assert.equal(await readFile(sentinel, 'utf8'), 'Profile preserved');
+    stage = 'reinstall and uninstall';
+    const sentinel = join(profile, 'installed-smoke-profile.txt');
+    await writeFile(sentinel, 'Profile preserved', { flag: 'wx' });
+    await install();
+    assert.equal(await readFile(sentinel, 'utf8'), 'Profile preserved');
+    await uninstall();
+    assert.equal((await state()).user.scheme, false, 'uninstall removed its own URL association');
+    assert.equal(await readFile(sentinel, 'utf8'), 'Profile preserved');
 
-  stage = 'portable';
-  portableProcess = spawn(portable, [], { env, cwd: folder, stdio: 'ignore', windowsHide: true });
-  await new Promise((resolve, reject) => { portableProcess.once('spawn', resolve); portableProcess.once('error', reject); });
-  await journal(profile, 'Portable reached its window using the existing profile', (events) => count(events, 'desktop.ready') === 2);
-  const portableState = await state();
-  assert.ok(noInstall(portableState.user) && !portableState.user.scheme, 'Portable did not create a protocol or uninstall registration');
-  await stopApps();
+    stage = 'portable';
+    portableProcess = spawn(portable, [], { env, cwd: folder, stdio: 'ignore', windowsHide: true });
+    await new Promise((resolve, reject) => { portableProcess.once('spawn', resolve); portableProcess.once('error', reject); });
+    await journal(profile, 'Portable reached its window using the existing profile', (events) => count(events, 'desktop.ready') === 2);
+    const portableState = await state();
+    assert.ok(noInstall(portableState.user) && !portableState.user.scheme, 'Portable did not create a protocol or uninstall registration');
+    await stopApps();
 
-  stage = 'uninstall respecting reassigned association';
-  await install();
-  await ps(String.raw`$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($env:LUMA_SMOKE_CLASS + '\shell\open\command', $true)
-$key.SetValue('', $env:LUMA_SMOKE_MARKER)`, { LUMA_SMOKE_MARKER: foreignCommand });
-  await uninstall();
-  assert.equal((await state()).user.command, foreignCommand, 'uninstall leaves a protocol command with a different owner alone');
-  console.log('::notice title=Installed Windows::Real Setup and Windows URL handoff (cold and warm), same-version reinstall and profile retention, Portable and uninstall ownership verified.');
+    stage = 'uninstall respecting reassigned association';
+    await install();
+    await ps(String.raw`$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($env:LUMA_SMOKE_CLASS + '\shell\open\command', $true)
+  $key.SetValue('', $env:LUMA_SMOKE_MARKER)`, { LUMA_SMOKE_MARKER: foreignCommand });
+    await uninstall();
+    assert.equal((await state()).user.command, foreignCommand, 'uninstall leaves a protocol command with a different owner alone');
+    console.log('::notice title=Installed Windows::Real Setup and Windows URL handoff (cold and warm), same-version reinstall and profile retention, Portable and uninstall ownership verified.');
+  }
 } catch (error) {
   const message = String(error.stderr || error.message).replace(/[\r\n%]/g, ' ').trim().slice(0, 950);
   console.log(`::error title=Installed smoke::${stage}: ${message}`);

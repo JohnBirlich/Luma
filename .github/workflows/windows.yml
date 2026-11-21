@@ -43,6 +43,8 @@ jobs:
           LUMA_LIVE_CATALOG: ${{ inputs.live_catalog && '1' || '0' }}
           LUMA_LIVE_RADIO: ${{ inputs.live_radio && '1' || '0' }}
           LUMA_LIVE_SERVICES: ${{ inputs.live_services && '1' || '0' }}
+      - run: npm run test:installed -- --preflight
+        if: ${{ !inputs.live_radio && !inputs.live_catalog }}
       - run: npm run package:win
         if: ${{ !inputs.live_radio && !inputs.live_catalog }}
       - run: npm run test:package
