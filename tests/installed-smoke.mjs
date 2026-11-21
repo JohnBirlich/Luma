@@ -25,7 +25,8 @@ const folder = await mkdtemp(join(process.env.RUNNER_TEMP, 'Luma installed smoke
 const temp = join(folder, 'temp');
 const installed = join(folder, 'Luma installed app');
 const exe = join(installed, APP_USER_MODEL_ID);
-const uninstaller = join(installed, `Uninstall ${APP_NAME}.exe`);
+// NSIS uses the configured executable filename, not the display name.
+const uninstaller = join(installed, `Uninstall ${APP_USER_MODEL_ID}`);
 const expectedCommand = `"${exe}" -- "%1"`;
 const foreignCommand = 'Luma CI ownership sentinel (never invoked)';
 const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
