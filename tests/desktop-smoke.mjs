@@ -888,7 +888,8 @@ async function smoke() {
     await waitFor('MacOS widget preview shows the same chrome and transport', () => run(`!!document.querySelector('.widget-sample[data-widget-layout="macos"] .transport-controls')
       && document.querySelectorAll('.widget-sample [data-widget-window]').length === 3`));
     const macWidgetBounds = window.getBounds();
-    await run(`window.macWidgetAudio = document.querySelector('audio')`);
+    // Keep the element in the renderer: Electron cannot clone a DOM node into the test process.
+    await run(`void (window.macWidgetAudio = document.querySelector('audio'))`);
     const macWidget = '.widget-mode > .desktop-widget[data-widget-layout="macos"]';
     await click('[aria-label="Виджеты рабочего стола"] button');
     await waitFor('MacOS mini-player keeps the original deck', async () => window.isAlwaysOnTop()
