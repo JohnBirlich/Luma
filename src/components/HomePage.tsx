@@ -11,7 +11,6 @@ import { musicSearchKey } from '../shared/russian';
 import { OnlineSearch } from './OnlineMusic';
 import type { CatalogSearchPreferences } from './OnlineMusic';
 import { catalogQuery } from '../data/catalog-search';
-import type { VkTracksState } from '../data/vk-tracks';
 import type { OnlineAction } from './OnlineMusic';
 import { ReleaseLink, useInstalledBuild } from './About';
 import { MusicSites } from './MusicSites';
@@ -20,15 +19,11 @@ import { Shelf, Tile, TrackRows } from './MusicShelf';
 import { Discovery, DiscoveryPreview } from './Discovery';
 import { MyPlaylists } from './MyPlaylists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
-import { VkBookmarks } from './VkBookmarks';
-import { VkTrackMatches, VkTracksShelf } from './VkTracks';
-import type { BookmarkProps } from './VkBookmarks';
 import { useVisualMotion } from '../player/useVisualMotion';
 
 const TABS = { home: 'Для вас', mine: 'Моя музыка', browse: 'Обзор', radio: 'Радио', updates: 'Обновления' } as const;
 export type HomeTab = keyof typeof TABS;
-interface HomeProps extends BookmarkProps, CatalogSearchPreferences {
-  vkTracks: VkTracksState;
+interface HomeProps extends CatalogSearchPreferences {
   tab: HomeTab;
   query: string;
   selectTab(tab: HomeTab): void;
@@ -131,7 +126,6 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       <Shelf title={t('В вашей медиатеке')}>
         {found.length ? <TrackRows {...rows} tracks={found} /> : <p className="hub-note">{t('В медиатеке нет совпадений.')}</p>}
       </Shelf>
-      <VkTrackMatches query={query} items={props.vkTracks.items} library={tracks} play={play} disabled={props.busy} open={() => selectTab('mine')} />
       <OnlineSearch key={catalogTerm} query={query} visible={visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
         autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />
       {catalogTerm && <MusicSites key={`sites:${catalogTerm}`} query={catalogTerm} />}
@@ -178,20 +172,15 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       {tab === 'mine' && <>
         <MyPlaylists items={props.playlists} byId={props.playlistTracks} collection={tracks} {...rows} busy={props.busy}
           connected={connected} playAll={props.playCatalog} save={props.savePlaylist} remove={props.removePlaylist} openImport={props.openPlaylistImport} />
-        <VkTracksShelf state={props.vkTracks} library={tracks} play={play} disabled={props.busy} lookup={(item) => {
-          setQuery([item.artist, item.title].filter(Boolean).join(' ').slice(0, 140));
-          formInput.current?.focus();
-        }} />
         <Shelf title={t('Мои треки')} action={<button type="button" className="text-button" onClick={openLibrary}>{t('Медиатека')}<ChevronRight size={15} /></button>}>
           {mine.length ? <TrackRows {...rows} tracks={mine.slice(0, 24)} /> : <p className="hub-note">{t('Добавьте аудиофайлы, чтобы начать.')}</p>}
         </Shelf>
         {!mine.length && data.demos.length > 0 && <Shelf title={t('Демоколлекция')}><TrackRows {...rows} tracks={data.demos} strip /></Shelf>}
-        <VkBookmarks covers={props.covers} editCover={props.editCover} discardCover={props.discardCover} />
       </>}
       {tab === 'radio' && <RadioStations saved={props.stationIds} activeId={currentId} loading={props.loading} playing={playing} busy={props.busy}
         connected={connected} toggleSave={props.saveStation} play={play} />}
       {tab === 'updates' && <Updates tracks={tracks} {...rows} />}
     </>}
-    <footer className="hub-footer"><Headphones size={14} />{t('Миксы Luma не используют аккаунт VK.')}</footer>
+    <footer className="hub-footer"><Headphones size={14} />{t('Для миксов Luma не нужен аккаунт.')}</footer>
   </div>;
 });

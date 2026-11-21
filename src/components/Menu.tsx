@@ -1,7 +1,7 @@
 import { useText } from '../i18n/context';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, History, Info, Music2, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bug, ChevronRight, Heart, History, Info, Music2, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
 import { About } from './About';
@@ -33,7 +33,6 @@ export function MenuGroup({ label, children }: { label: string; children: ReactN
 interface MenuPageProps {
   localCount: number;
   fullNumbers: boolean;
-  ready: boolean;
   openSettings(): void;
   openLibrary(): void;
   openFavorites(): void;
@@ -41,7 +40,6 @@ interface MenuPageProps {
   openMixes(): void;
   openDiagnostics(): void;
   openEqualizer(): void;
-  addMusic(): void;
 }
 
 export function MenuPage(props: MenuPageProps) {
@@ -65,7 +63,6 @@ export function MenuPage(props: MenuPageProps) {
             <MenuItem icon={Heart} title={t("Избранное")} detail={t("Треки, отмеченные сердцем")} select={props.openFavorites} />
             <MenuItem icon={Sparkles} title={t("Миксы")} detail={t("Подборки из медиатеки, избранного и истории")} select={props.openMixes} />
             <MenuItem icon={History} title={t("Недавно слушали")} detail={t("История воспроизведения на этом устройстве")} select={props.openRecent} />
-            <MenuItem icon={FolderOpen} title={t("Импортировать треки")} detail={t("Добавьте аудиофайлы или перетащите их в окно")} select={props.addMusic} disabled={!props.ready} />
           </MenuGroup>
           <MenuGroup label={t("Плеер")}>
             <MenuItem icon={Settings2} title={t("Настройки")} detail={t("Внешний вид, медиатека и воспроизведение")} select={props.openSettings} />

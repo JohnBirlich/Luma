@@ -151,7 +151,7 @@
 [data-layout='glass'] .settings-preview-hero { color: var(--text); }
 [data-layout='glass'] .settings-preview-controls > i { background-color: var(--glass-rim); }
 [data-layout='glass'] :is(.setting-card,.menu-page,.library-page,.diagnostics-page,.hub-shelf) :is(select,input:not([type='range'],[type='checkbox'],[type='color']),textarea) { border-color: var(--glass-rim); }
-[data-layout='glass'] :is(.setting-row select,.lastfm-form input,.hub-bookmark-form input,.hub-bookmark-form textarea,.search-field,.library-search,.online-search-field,.journal-filter select) {
+[data-layout='glass'] :is(.setting-row select,.lastfm-form input,.search-field,.library-search,.online-search-field,.journal-filter select) {
   background: #ffffffac; border-color: var(--glass-rim); border-radius: 12px;
 }
 [data-layout='glass'] .library-search:focus-within { border-color: var(--accent); }
@@ -236,7 +236,6 @@
 [data-layout='glass'] .karaoke-meta > p { color: var(--muted); }
 [data-layout='glass'] .immersive-header .karaoke-settings-toggle { color: var(--accent-light); background: var(--glass-lens); border-color: var(--glass-edge); }
 [data-layout='glass'] .karaoke-stage .immersive-queue-toggle[aria-expanded='true'] { background: var(--accent-fill); }
-[data-layout='glass'] .desktop-widget { border-radius: 23px; }
 [data-layout='glass'] .desktop-widget:not([data-widget-background='white'],[data-widget-background='paper'],[data-widget-background='liquid']) { --accent: #dce7ff; --accent-light: #e9efff; --accent-ink: #1b2852; }
 
 @media (max-width: 1079px) {
@@ -284,6 +283,93 @@
   border-color: var(--glass-edge); box-shadow: var(--glass-shadow);
 }
 [data-layout='glass'] .hub-shelf :is(.topic-detail,.playlist-editor,.music-site,.hub-chips > button:not([aria-pressed='true'])) { background: var(--glass-lens); }
+/* The macOS mini-player uses desktop window chrome, not a reduced copy of the main player. */
+.app-shell[data-layout='glass'].widget-mode { background: #e3e7ee; }
+.app-shell[data-layout='glass'].widget-mode:has(> .desktop-widget:not([data-widget-background='blur'],[data-widget-background='liquid'],[data-widget-background='white'],[data-widget-background='paper'])) { background: #1b1d28; }
+.desktop-widget[data-widget-layout='macos'] {
+  --widget-rim: #ffffff33;
+  --widget-button: #ffffff12;
+  --widget-button-hover: #ffffff24;
+  --widget-reading: color-mix(in srgb, var(--text) 82%, transparent);
+  grid-template: 25px minmax(0, 1fr) 40px 22px / clamp(46px, 21%, 88px) minmax(0, 1fr) auto;
+  gap: 4px clamp(7px, 2.8vw, 13px); padding: 7px clamp(9px, 3.5vw, 16px) 10px;
+  border: 1px solid var(--widget-rim); border-radius: 20px;
+  box-shadow: inset 0 1px 0 var(--widget-rim), inset 0 -1px 0 #12172626;
+  font-family: var(--display);
+}
+.desktop-widget[data-widget-layout='macos']:is([data-widget-background='blur'],[data-widget-background='liquid'],[data-widget-background='white'],[data-widget-background='paper']) {
+  --widget-rim: #ffffffc4; --widget-button: #ffffffad; --widget-button-hover: #fffffff0;
+  --widget-track-line: #263d6540;
+}
+.desktop-widget[data-widget-layout='macos'][data-widget-background='blur'] {
+  color-scheme: light; --text: #1c2634; --muted: #495665;
+  --accent: #405a81; --accent-light: #314a6d; --accent-ink: #fff;
+  --accent-fill: #dbe4f2; --accent-border: #839abd;
+  background: radial-gradient(ellipse at 16% -45%, #fffffff0, transparent 70%), linear-gradient(147deg, #f4f6fa, #e3e7ef 96%);
+}
+.desktop-widget[data-widget-layout='macos'][data-widget-background='blur'] .widget-backdrop { opacity: .15; filter: blur(25px) saturate(.96); }
+.desktop-widget[data-widget-layout='macos'] .widget-chrome {
+  grid-column: 1 / -1; display: grid; grid-template: 1fr / minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center; min-width: 0; gap: 4px; border: 0;
+}
+.desktop-widget[data-widget-layout='macos'] .widget-chrome > span {
+  grid-area: 1 / 2; font-size: 11px; font-weight: 640; letter-spacing: -.015em; color: var(--muted);
+}
+.desktop-widget[data-widget-layout='macos'] .widget-chrome > span svg { display: none; }
+.desktop-widget[data-widget-layout='macos'] .widget-window-buttons { grid-area: 1 / 1; justify-self: start; gap: 0; margin-left: -5px; }
+.desktop-widget[data-widget-layout='macos'] [data-widget-window] {
+  position: relative; width: 24px; height: 24px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 50%; background: none; color: #24221e;
+}
+.desktop-widget[data-widget-layout='macos'] [data-widget-window]::before {
+  content: ''; width: 12px; height: 12px; border: 1px solid #221e2629; border-radius: 50%;
+  background: var(--light-fill); box-shadow: inset 0 1px #fff6;
+}
+.desktop-widget[data-widget-layout='macos'] [data-widget-window='close'] { --light-fill: #ff605c; }
+.desktop-widget[data-widget-layout='macos'] [data-widget-window='minimize'] { --light-fill: #ffbf43; }
+.desktop-widget[data-widget-layout='macos'] [data-widget-window='restore'] { --light-fill: #32cd57; }
+.desktop-widget[data-widget-layout='macos'] [data-widget-window] svg { position: absolute; width: 9px; height: 9px; opacity: 0; stroke-width: 2.6; }
+.desktop-widget[data-widget-layout='macos'] .widget-window-buttons:is(:hover,:focus-within) svg { opacity: 1; }
+.desktop-widget[data-widget-layout='macos'] .widget-window-buttons button:hover:not(:disabled) { color: #24221e; background: transparent; }
+.desktop-widget[data-widget-layout='macos'] .widget-window-buttons button:active::before { filter: brightness(.85); }
+.desktop-widget[data-widget-layout='macos'] .widget-track { display: contents; }
+.desktop-widget[data-widget-layout='macos'] .widget-track .artwork {
+  grid-area: 2 / 1 / span 2; align-self: center; width: 100%; height: auto; aspect-ratio: 1;
+  border: 1px solid #fff6; border-radius: 13px; box-shadow: 0 5px 15px #1b223947;
+}
+.desktop-widget[data-widget-layout='macos'] .widget-copy {
+  grid-area: 2 / 2; align-self: end; gap: 3px; padding-bottom: 3px; line-height: 1.2;
+}
+.desktop-widget[data-widget-layout='macos'] .widget-copy strong { font-size: 15px; font-weight: 700; letter-spacing: -.025em; }
+.desktop-widget[data-widget-layout='macos'] .widget-copy small { font-size: 12px; }
+.desktop-widget[data-widget-layout='macos'] .volume { grid-area: 2 / 3; align-self: end; min-height: 34px; gap: 3px; color: var(--widget-reading); }
+.desktop-widget[data-widget-layout='macos'] .volume .icon-button { width: 26px; height: 28px; }
+.desktop-widget[data-widget-layout='macos'] .volume svg { width: 16px; height: 16px; }
+.desktop-widget[data-widget-layout='macos'] .volume :is(.range,.widget-sample-meter) { width: clamp(24px, 10vw, 61px); }
+.desktop-widget[data-widget-layout='macos'] .transport-controls {
+  grid-area: 3 / 2 / 4 / -1; justify-content: space-between; justify-self: start; width: min(100%, 238px); gap: 0;
+}
+.desktop-widget[data-widget-layout='macos'] :is(.icon-button,.timeline > span,.live-timeline) { color: var(--widget-reading); }
+.desktop-widget[data-widget-layout='macos'] .widget-window-buttons [data-widget-window] { color: #24221e; }
+.desktop-widget[data-widget-layout='macos'] .transport-controls .icon-button { width: 28px; height: 29px; }
+.desktop-widget[data-widget-layout='macos'] .mode-button svg { width: 15px; height: 15px; }
+.desktop-widget[data-widget-layout='macos'] .mode-button[aria-pressed='true'] { color: var(--accent-light); }
+.desktop-widget[data-widget-layout='macos'] .play-button {
+  width: 37px; height: 37px; border: 1px solid var(--widget-rim); background: var(--widget-button); color: var(--text);
+  box-shadow: 0 1px 4px #151e3624;
+}
+.desktop-widget[data-widget-layout='macos'] .play-button:hover:not(:disabled) { background: var(--widget-button-hover); color: var(--text); transform: none; }
+.desktop-widget[data-widget-layout='macos'] :is(.timeline,.live-timeline) { grid-area: 4 / 1 / 5 / -1; }
+.desktop-widget[data-widget-layout='macos'] .timeline { grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; }
+.desktop-widget[data-widget-layout='macos'] .timeline > span { font-size: 10px; }
+.desktop-widget[data-widget-layout='macos'] .range::-webkit-slider-runnable-track { height: 3px; background: linear-gradient(to right, var(--widget-reading) var(--filled), var(--widget-track-line) var(--filled)); }
+.desktop-widget[data-widget-layout='macos'] .range::-webkit-slider-thumb { width: 9px; height: 9px; background: var(--text); }
+.desktop-widget[data-widget-layout='macos'] .range::-moz-range-track { height: 3px; background: linear-gradient(to right, var(--widget-reading) var(--filled), var(--widget-track-line) var(--filled)); }
+.desktop-widget[data-widget-layout='macos'] .range::-moz-range-thumb { width: 9px; height: 9px; background: var(--text); }
+.desktop-widget[data-widget-layout='macos'].widget-sample { display: grid; height: 176px; max-width: 446px; }
+.widget-sample-meter { height: 3px; border-radius: 20px; background: linear-gradient(to right, var(--widget-reading) 24%, var(--widget-track-line) 24%); }
+.volume .widget-sample-meter { background: linear-gradient(to right, var(--widget-reading) 66%, var(--widget-track-line) 66%); }
+
 [data-layout='glass'] .station-tile {
   background: radial-gradient(ellipse at 80% 10%,color-mix(in srgb,var(--station-tint) 28%,transparent),transparent 74%),var(--glass-lens);
 }
@@ -291,7 +377,6 @@
 [data-layout='glass'] :is(.browse-mark,.hub-shelf .hub-badge,.playlist-fields input) { background: var(--glass-lens); border-color: var(--glass-edge); }
 [data-layout='glass'] .hero :is(h2,.hero-meta) { overflow-wrap: anywhere; }
 [data-layout='glass'] .hero-meta > span:not(.hero-dot) { white-space: normal; }
-[data-layout='glass'] .desktop-widget[data-widget-background='liquid'] .range { --widget-track-line: #263d6546; }
 [data-layout='glass'] .immersive-header > div:nth-child(2) { overflow-wrap: anywhere; }
 [data-layout='glass'] .immersive-meta h1, [data-layout='glass'] .karaoke-meta h1 { line-height: 1.12; }
 [data-layout='glass'] .glass-navigation button:not(.glass-sound) { border-radius: 12px; }

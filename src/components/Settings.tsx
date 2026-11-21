@@ -16,7 +16,7 @@ import { localLibrary } from '../data/library';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { ReleaseLink, useInstalledBuild } from './About';
 import { Artwork } from './Artwork';
-import { WidgetSurface } from './DesktopWidget';
+import { WidgetPreview } from './DesktopWidget';
 import { MenuGroup, MenuItem } from './Menu';
 import { VolumeControl } from './PlaybackControls';
 import type { VolumeProps } from './PlaybackControls';
@@ -327,9 +327,8 @@ export function SettingsPage(props: SettingsProps) {
                 <select value={appearance.widgetBackground} onChange={(event) => changeAppearance({ ...appearance, widgetBackground: event.currentTarget.value as WidgetBackground })}>
                   {Object.entries(WIDGET_BACKGROUNDS).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select></label>
-              <WidgetSurface track={props.previewTrack} tint={props.widgetTint} background={appearance.widgetBackground} label={t("Предпросмотр фона виджета")} preview>
-                <div className="widget-track"><Artwork track={props.previewTrack} /><div><strong>{props.previewTrack?.title ?? t("Ваша музыка")}</strong><small>{t("Предпросмотр виджета Luma")}</small></div><Play size={16} /></div>
-              </WidgetSurface>
+              <WidgetPreview macos={props.effectiveAppearance.theme === 'macos'} track={props.previewTrack}
+                tint={props.widgetTint} background={appearance.widgetBackground} />
               <div className="settings-actions">
                 {window.luma ? <button className="button outline-button" type="button" onClick={props.openWidget} title={WIDGET_SHORTCUT.label} aria-keyshortcuts={WIDGET_SHORTCUT.aria}><Monitor size={16} />{" "}{t("Открыть виджет Luma")}</button> : <span className="setting-status">{t("В приложении Windows")}</span>}
               </div>

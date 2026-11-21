@@ -117,7 +117,12 @@ test('radio keeps the requested directory, regional identities and browser-only 
   assert.equal(RADIO_DIRECTORY.length, 96);
   assert.deepEqual(RADIO_DIRECTORY.slice(0, 3).map(({ name }) => name), ['Европа Плюс - Россия', 'Хит FM - Россия', 'Радио Record - Россия']);
   assert.deepEqual(RADIO_DIRECTORY.slice(-2).map(({ name }) => name), ['Русская Волна', 'Вести FM - Россия']);
-  assert.equal(new Set(RADIO_DIRECTORY.map(({ name }) => name)).size, 96);
+  // Case, dash style, punctuation, "ё" and the standard country suffix don't make another station.
+  const stationName = (name: string) => name.normalize('NFKC').toLowerCase().replaceAll('ё', 'е')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/ россия$/u, '');
+  assert.equal(new Set(RADIO_LISTINGS.map(({ name }) => stationName(name))).size, RADIO_LISTINGS.length);
+  assert.equal(new Set(RADIO_LISTINGS.map(({ page }) => page)).size, RADIO_LISTINGS.length);
+  assert.equal(new Set(STATIONS.map(({ stream }) => stream)).size, STATIONS.length);
   assert.equal(new Set(RADIO_LISTINGS.map(({ id }) => id)).size, 96 + EXTRA_STATIONS.length);
   assert.deepEqual(RADIO_DIRECTORY.filter(({ name }) => name.startsWith('Радио МИР')).map(({ name }) => name), [
     'Радио МИР - Урал', 'Радио МИР - Дальний Восток', 'Радио МИР - Россия',

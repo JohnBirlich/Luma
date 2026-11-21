@@ -12,8 +12,6 @@ import { MusicSites } from './MusicSites';
 import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
 import type { CatalogSearchPreferences } from './OnlineMusic';
 import { catalogQuery } from '../data/catalog-search';
-import type { VkTrack } from '../shared/vk-tracks';
-import { VkTrackMatches } from './VkTracks';
 import type { OnlineAction } from './OnlineMusic';
 import type { Track } from '../shared/media';
 import type { Appearance, LibraryLayout } from '../shared/customization';
@@ -150,8 +148,6 @@ export function NowPlayingCard(props: NowPlayingProps) {
 
 interface LibraryPageProps extends CatalogSearchPreferences {
   visible: boolean;
-  vkTracks: readonly VkTrack[];
-  openVkTracks(): void;
   tracks: Track[];
   currentId: string | null;
   playing: boolean;
@@ -271,7 +267,6 @@ export function LibraryPage(props: LibraryPageProps) {
           : scopeId === 'online' ? <button type="button" className="button outline-button" onClick={props.openSearch}>{t("Открыть поиск")}{" "}<Search size={16} /></button>
           : <button type="button" className="button outline-button" onClick={props.addMusic} disabled={props.busy}><Plus size={17} />{" "}{t("Выбрать файлы")}</button>)}
       </div>}
-      {isSearch && <VkTrackMatches query={search} items={props.vkTracks} library={props.tracks} play={props.play} disabled={props.busy} open={props.openVkTracks} />}
       {isSearch && <OnlineSearch key={catalogTerm} query={search} visible={props.visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
         autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />}
       {isSearch && catalogTerm && <MusicSites key={`sites:${catalogTerm}`} query={catalogTerm} />}

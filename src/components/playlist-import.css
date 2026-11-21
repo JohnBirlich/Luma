@@ -18,8 +18,9 @@
 .playlist-import-sources > li > button { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 7px 9px;
   border-radius: 10px; border: 1px solid var(--line); background: var(--panel-bg); text-align: start; min-width: 0; }
 .playlist-import-sources > li > button:hover { border-color: var(--accent-border); background: var(--accent-fill); }
-.playlist-source-mark { width: 31px; height: 31px; display: grid; place-items: center; font: 820 16px/1 var(--display);
-  color: #151323; background: var(--source-tone); border-radius: 9px; }
+.playlist-source-mark { width: 34px; height: 34px; display: grid; place-items: center; flex: none;
+  color: var(--accent-light); background: var(--raised-bg); border: 1px solid var(--line); border-radius: 9px; }
+.playlist-source-mark img { display: block; object-fit: contain; }
 .playlist-import-sources :is(strong,small), .playlist-import-preview :is(strong,small) { display: block; overflow-wrap: anywhere; }
 .playlist-import-sources strong, .playlist-import-preview strong { font-size: 13px; line-height: 1.25; }
 .playlist-import-sources small, .playlist-import-preview small { color: var(--muted); font-size: 11px; margin-top: 2px; }

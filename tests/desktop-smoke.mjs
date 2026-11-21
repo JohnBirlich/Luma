@@ -360,6 +360,8 @@ async function smoke() {
   await waitFor('settings show package version', () => run(`document.querySelector('.settings-page .setting-card header')?.textContent.includes(${JSON.stringify(`Установлена версия ${version}.`)})`));
   await go('Меню');
   await waitFor('about directly below equalizer', () => run(`document.querySelector('.menu-page [aria-label="Эквалайзер"] + [aria-label="О приложении"]') !== null`));
+  assert.equal(await run(`!!document.querySelector('.menu-page [aria-label="Импортировать треки"]')`), false);
+  assert.ok(await run(`!!document.querySelector('.title-bar [aria-label="Добавить музыку"]')`), 'file import remains in the main toolbar');
   assert.equal(await run(`document.querySelector('.title-caption') === null && getComputedStyle(document.querySelector('.sidebar')).userSelect === 'none'`), true);
   await run(`document.querySelector('[aria-label="О приложении"]').click()`);
   await waitFor('About has package version', () => run(`document.querySelector('.about-build strong')?.textContent === ${JSON.stringify(`Версия ${version}`)}`));
@@ -480,6 +482,23 @@ async function smoke() {
   const titleQueries = [];
   const fingerprints = [];
   const legacyVk = session.fromPartition(LEGACY_VK_SESSION);
+  const legacyBookmarks = { selected: '-31_4', playlists: [{ ownerId: -31, playlistId: 4, name: 'Старая закладка', hash: 'legacy-1' }] };
+  const legacyTracks = [{ title: 'Ты здесь', artist: 'Ария', album: 'Живой звук' }, { title: 'Список VK', artist: 'Тест', album: '' }];
+  const oldVkData = (seed = false) => run(`new Promise((resolve, reject) => {
+    const key = 'luma-player:vk-playlists:v1';
+    if (${seed}) localStorage.setItem(key, JSON.stringify(${JSON.stringify(legacyBookmarks)}));
+    const request = indexedDB.open('luma-vk-tracks', 1);
+    request.onerror = () => reject(request.error);
+    request.onupgradeneeded = () => request.result.createObjectStore('lists');
+    request.onsuccess = () => {
+      const db = request.result, tx = db.transaction('lists', ${JSON.stringify(seed ? 'readwrite' : 'readonly')});
+      const list = tx.objectStore('lists');
+      if (${seed}) list.put(${JSON.stringify(legacyTracks)}, 'tracks');
+      const rows = list.get('tracks');
+      tx.oncomplete = () => { db.close(); resolve({ bookmarks: JSON.parse(localStorage.getItem(key)), tracks: rows.result }); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  })`);
   const fixtureHeaders = { 'Access-Control-Allow-Origin': '*' };
   const mp3Fixture = (id, title) => ({ ...commonsRecording, id, title, creator: 'Исполнитель', duration: 32000,
     url: `https://upload.wikimedia.org/wikipedia/commons/e/e1/${encodeURIComponent(title)}.mp3` });
@@ -641,9 +660,7 @@ async function smoke() {
     const openExternal = shell.openExternal;
     shell.openExternal = async (url) => { opened.push(url); };
     try {
-      await run(`localStorage.setItem('luma-player:vk-playlists:v1', JSON.stringify({
-        selected: '-31_4', playlists: [{ ownerId: -31, playlistId: 4, name: 'Старая закладка', hash: 'legacy-1' }],
-      }));`);
+      assert.deepEqual(await oldVkData(true), { bookmarks: legacyBookmarks, tracks: legacyTracks });
       const sessionCookie = { url: 'https://vk.ru/audio', name: 'lumaFixture', value: '1', secure: true };
       await legacyVk.cookies.set(sessionCookie);
       await session.defaultSession.cookies.set(sessionCookie);
@@ -657,6 +674,7 @@ async function smoke() {
       assert.equal(opened.length, 0);
       await fill('.hub-search input', 'Ты здесь');
       await waitFor('native search finds a local track', () => run(`document.querySelector('.hub-track strong')?.textContent === 'Ты здесь'`));
+      assert.equal(await run(`!!document.querySelector('.vk-track-matches')`), false);
       await waitFor('Home finds local and online matches despite a failed catalog', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 2
         && document.querySelector('[data-catalog="southern_city"]').dataset.state === 'error'
         && document.querySelectorAll('.online-results li').length === 2`));
@@ -672,9 +690,8 @@ async function smoke() {
       assert.equal(catalogCalls.length, 2, 'a browser destination is not a native search request');
       assert.equal(await run(`window.luma.openOnlineLink('https://example.invalid/').then(() => false, () => true)`), true);
       await click('.hub-tabs button:nth-child(2)');
-      await waitFor('existing VK bookmark migrated', () => run(`document.querySelector('.hub-bookmarks a[href="https://vk.ru/music/playlist/-31_4"]') !== null`));
-      const vkFile = '.vk-track-shelf input[type="file"]';
-      await waitFor('VK list ready to import', () => run(`document.querySelector('.vk-track-actions .outline-button')?.disabled === false`));
+      await waitFor('My Music keeps its local playlist manager', () => run(`!!document.querySelector('.playlist-import-actions button')`));
+      assert.equal(await run(`!!document.querySelector('.hub-bookmarks, .vk-track-shelf')`), false);
       const loadFile = (selector, name, body) => run(`(() => {
         const input = document.querySelector(${JSON.stringify(selector)});
         const data = new DataTransfer();
@@ -682,15 +699,6 @@ async function smoke() {
         input.files = data.files;
         input.dispatchEvent(new Event('change', { bubbles: true }));
       })()`);
-      const importVk = (name, body) => loadFile(vkFile, name, body);
-      await importVk('tracks.csv', 'title,artist,album,ignored_url\nТы здесь,Ария,Живой звук,https://example.invalid/\nСписок VK,Тест,,');
-      await waitFor('VK metadata present as a local list, independently of bookmarks', () => run(`document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length === 2
-        && document.querySelectorAll('.vk-track-shelf .vk-file-play').length === 1`));
-      await importVk('not-a-playlist.txt', 'invalid');
-      await waitFor('invalid import keeps the previous list', () => run(`!!document.querySelector('.vk-track-shelf [role="alert"]')
-        && document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length === 2`));
-      assert.equal(opened.length, 0);
-      assert.equal(catalogCalls.length, 2, 'file import does not send metadata to external catalogs');
       const importer = '.playlist-import[open]';
       const openImport = async () => {
         await run(`document.querySelector('.playlist-import-actions button:first-child').focus()`);
@@ -700,6 +708,14 @@ async function smoke() {
       const playlistFile = `${importer} input[type="file"]`;
       const beforeImport = await preferences();
       await openImport();
+      await waitFor('all seven provider logos decode locally', () => run(`(() => {
+        const dialog = document.querySelector('.playlist-import');
+        const providers = ['spotify', 'apple', 'deezer', 'youtube', 'soundcloud', 'tidal', 'yandex'];
+        return providers.every(id => {
+          const image = dialog.querySelector('[data-source="' + id + '"] .playlist-source-mark img');
+          return image?.naturalWidth > 0 && !image.alt && (image.src.startsWith('data:image/') || image.src.startsWith('luma://app/'));
+        });
+      })()`));
       await click(`${importer} [data-source="spotify"]`);
       const jsonPlaylist = JSON.stringify({ playlists: [{ name: 'Семейный список', items: [
         { track: { trackName: 'Ты здесь', artistName: 'Ария', albumName: 'Живой звук', trackUri: 'spotify:track:input-only' } },
@@ -727,25 +743,12 @@ async function smoke() {
       await waitFor('explicit save creates an ordered local playlist', async () => (await preferences()).playlists[0]?.title === 'Очередь из файла');
       assert.deepEqual((await preferences()).playlists[0].trackIds, importedIds);
       assert.deepEqual((await preferences()).queue, beforeImport.queue);
-      assert.equal(await run(`document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length`), 2);
+      assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
       assert.equal(catalogCalls.length, 2, 'playlist preview and save are local');
-      await click('.hub-bookmarks header button');
-      await fill('.hub-bookmark-form textarea', 'https://vk.com/audios-42?z=audio_playlist-42_7/Share-Key');
-      await click('.hub-bookmark-form button[type="submit"]');
-      const link = 'https://vk.ru/music/playlist/-42_7_Share-Key';
-      await waitFor('canonical share link on native shelf', () => run(`!!document.querySelector('.hub-bookmarks a[href=${JSON.stringify(link)}]')`));
-      await click(`.hub-bookmarks a[href=${JSON.stringify(link)}]`);
-      await waitFor('bookmark handed to the system browser', () => opened.length === 1);
-      assert.deepEqual(opened, [link]);
-      assert.equal(await run(`window.luma.openVkLink('https://example.invalid/').then(() => false, () => true)`), true);
-      await click('.hub-bookmarks .vk-cleanup');
-      await waitFor('old session cleanup acknowledged in the bookmarks shelf', () => run(`document.querySelector('.hub-bookmarks [role="status"]')?.textContent.includes('удалены')`));
+      await run('window.luma.clearLegacyVkSession()');
       assert.equal((await legacyVk.cookies.get({ name: 'lumaFixture' })).length, 0);
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
-      assert.equal(await run(`JSON.parse(localStorage.getItem('luma-player:vk-playlists:v1')).playlists.length`), 2);
-      await settings('Интеграции');
-      assert.equal(await run(`!!document.querySelector('.settings-page [aria-label="Закладки VK"]')`), false);
-      await closeSettings();
+      assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
 
       await click('.hub-tabs button:nth-child(3)');
       await waitFor('Browse genres', () => run(`!!document.querySelector('[aria-label="Жанры"] .hub-tile[aria-label="Джаз"]')`));
@@ -777,7 +780,12 @@ async function smoke() {
       assert.equal(radioCalls.length, 0);
       await click('.radio-search button');
       await click(`${stationSection} ${recordTile} .station-add`);
-      await waitFor('saved station appears without starting playback', () => run(`!!document.querySelector('${savedStations} ${recordTile}')`));
+      await waitFor('Record is saved without adding a second tile', () => run(`document.querySelector('${stationSection} ${recordTile} .station-add')?.getAttribute('aria-pressed') === 'true'`));
+      assert.equal(await run(`document.querySelectorAll('.radio-shelves ${recordTile}').length`), 1);
+      await click('[data-radio-view="saved"]');
+      await waitFor('Saved shows only the bookmarked station', () => run(`document.querySelectorAll('.radio-shelves .station-tile').length === 1
+        && !!document.querySelector('${savedStations} ${recordTile}')`));
+      assert.equal(radioCalls.length, 0);
       assert.deepEqual((await preferences()).stationIds, [recordStation.id]);
       const beforeRadio = await preferences();
       const beforeRadioLyrics = lyricQueries.length;
@@ -800,6 +808,7 @@ async function smoke() {
       await waitFor('stopping radio unloads the network source', () => run(`document.querySelector('${onlineAudio}').paused && !document.querySelector('${onlineAudio}').hasAttribute('src')`));
       await click('.hub-tabs button:nth-child(4)');
       await run(`Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }); window.dispatchEvent(new Event('offline'));`);
+      await click('[data-radio-view="saved"]');
       await waitFor('offline playback is unavailable without hiding saved stations', () => run(`document.querySelector('${savedStations} ${recordPlay}')?.disabled`));
       await run(`delete navigator.onLine; window.dispatchEvent(new Event('online'));`);
     } finally { shell.openExternal = openExternal; }
@@ -874,6 +883,30 @@ async function smoke() {
     await click('.glass-sound');
     await waitFor('the glass Dock opens the same EQ', () => run(`!!document.querySelector('.equalizer-dialog[open] .eq-response-path')`));
     await click('.equalizer-content .dialog-footer .primary-button');
+    await click('.settings-back');
+    await click('.settings-page [aria-label="Интеграции"]');
+    await waitFor('MacOS widget preview shows the same chrome and transport', () => run(`!!document.querySelector('.widget-sample[data-widget-layout="macos"] .transport-controls')
+      && document.querySelectorAll('.widget-sample [data-widget-window]').length === 3`));
+    const macWidgetBounds = window.getBounds();
+    await run(`window.macWidgetAudio = document.querySelector('audio')`);
+    const macWidget = '.widget-mode > .desktop-widget[data-widget-layout="macos"]';
+    await click('[aria-label="Виджеты рабочего стола"] button');
+    await waitFor('MacOS mini-player keeps the original deck', async () => window.isAlwaysOnTop()
+      && await run(`!!document.querySelector('${macWidget}') && document.querySelector('audio') === window.macWidgetAudio`));
+    assert.deepEqual(await run(`[...document.querySelectorAll('${macWidget} [data-widget-window]')].map(button => button.dataset.widgetWindow)`), ['close', 'minimize', 'restore']);
+    assert.ok(await run(`(() => {
+      const widget = document.querySelector('${macWidget}');
+      const art = widget.querySelector('.widget-track .artwork').getBoundingClientRect();
+      const transport = widget.querySelector('.transport-controls').getBoundingClientRect();
+      const seek = widget.querySelector('.timeline, .live-timeline').getBoundingClientRect();
+      return art.right < transport.left && transport.bottom <= seek.top && seek.bottom <= widget.getBoundingClientRect().bottom;
+    })()`), 'cover, transport and progress fit in the compact window');
+    await click(`${macWidget} [data-widget-window="restore"]`);
+    await waitFor('green light restores the MacOS window and existing renderer', async () => !window.isAlwaysOnTop()
+      && await run(`!document.querySelector('${macWidget}') && document.querySelector('audio') === window.macWidgetAudio`));
+    assert.deepEqual(window.getBounds(), macWidgetBounds);
+    await click('.settings-back');
+    await click('.settings-page [aria-label="Внешний вид"]');
     await select('label:has(select option[value="en"]) select', 'en');
     await waitFor('English switches Luma controls, not track metadata', () => run(`document.documentElement.lang === 'en'
       && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.settings-page h1')?.textContent === 'Appearance'`));
@@ -893,8 +926,9 @@ async function smoke() {
     assert.deepEqual((await preferences()).karaokeStyle, { size: 47, weight: 750, spacing: 20, align: 'center' });
     await go('Home');
     await click('.hub-tabs button:nth-child(2)');
-    await waitFor('VK track list persisted in the same profile', () => run(`document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length === 2
-      && document.querySelector('#vk-tracks-title')?.textContent === 'My VK tracks'`));
+    await waitFor('English My Music still has local playlists, without the old VK shelves', () => run(`!!document.querySelector('[aria-label="My playlists"]')
+      && !document.querySelector('.hub-bookmarks, .vk-track-shelf')`));
+    assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
     await click('.title-settings');
     await waitFor('English settings index', () => run(`!!document.querySelector('.settings-page [aria-label="Appearance"]')`));
     await click('.settings-page [aria-label="Appearance"]');
@@ -931,8 +965,8 @@ async function smoke() {
     session.defaultSession.protocol.unhandle('https');
     await legacyVk.clearStorageData();
   }
-  console.log('::notice title=Catalogs and VK lists::Debounced parallel catalog search, a partial failure on Home, local VK file import and profile persistence verified.');
-  console.log('Desktop smoke: monitor fullscreen; compact widget restores bounds; Apple/WASM; metered MP3; lyrics export; browser VK bookmarks and isolated legacy reset.');
+  console.log('::notice title=Catalogs and playlists::Parallel catalog search, offline playlist import icons and preview, no VK shelves, and preservation of legacy profile data verified.');
+  console.log('Desktop smoke: monitor fullscreen; both widget layouts restore bounds and reuse audio; Apple/WASM; metered MP3; lyrics export; isolated legacy reset.');
   if (liveServices) {
     const suggestions = await run(`window.luma.recognition.search('Madam Broshkina', 'ru-RU')`);
     assert.ok(suggestions.some(({ title }) => title === 'Мадам Брошкина'), 'live Apple Music transliteration lookup');

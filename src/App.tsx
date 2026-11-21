@@ -30,7 +30,6 @@ import { demoTracks } from './data/demos';
 import { connectionState, recordDiagnostic, subscribeConnection } from './data/diagnostics';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
-import { useVkTracks } from './data/vk-tracks';
 import type { TrackDetails } from './data/track-details';
 import { useMediaSession } from './player/mediaSession';
 import { activeOnlineRefs, catalogQueueRefs, readPreferences, rememberTrack, savePreferences } from './player/preferences';
@@ -104,7 +103,6 @@ export default function App() {
   const { urls: covers, update: updateCover } = useCoverArt();
   const [detailsId, setDetailsId] = useState<string>();
   const { details, update: updateDetails } = useTrackDetails();
-  const vkTracks = useVkTracks();
   const [queueOpen, setQueueOpen] = useState(() => window.matchMedia('(min-width: 1080px)').matches);
   const [dropActive, setDropActive] = useState(false);
   const [notice, setNotice] = useState<Notice>();
@@ -617,8 +615,6 @@ export default function App() {
     setHomeTab(tab); setHomeQuery('');
     scrollArea.current?.scrollTo({ top: 0 });
   }, []);
-  const openVkTracks = useCallback(() => { navigate('player'); selectHomeTab('mine'); }, [navigate, selectHomeTab]);
-  const discardCover = useCallback((key: string) => { void updateCover(key); }, [updateCover]);
   const openEqualizer = () => setShowEqualizer(true);
   const toggleQueue = () => setQueueOpen((open) => !open);
   const changeAppearance = (appearance: Appearance) => setPreferences((data) => ({ ...data, appearance }));
@@ -681,12 +677,12 @@ export default function App() {
         <div key={basePage} className="page-body" hidden={widget || page === 'settings'}>
         {basePage === 'player' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
           <HomePage tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
-            tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab} vkTracks={vkTracks}
+            tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={page === 'player' && !widget && !modalOpen && !presentationOpen}
             busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
-            covers={covers} editCover={setCoverTarget} discardCover={discardCover} openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose}
+            openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose}
             nowPlaying={<NowPlayingCard track={current} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
               playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
               count={queue.order.length} toggle={toggle}
@@ -697,12 +693,12 @@ export default function App() {
               ? <LyricsPanel key={current.id} state={lyrics} elapsed={player.elapsed} clock={player.playing ? position : undefined} demo={current.demo} /> : undefined} />
           </Suspense> :
           basePage === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :
-          basePage === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers} ready={ready && !working}
-            openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={openMixes} openDiagnostics={() => navigate('diagnostics')} openEqualizer={openEqualizer} addMusic={choose} /> :
+          basePage === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers}
+            openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={openMixes} openDiagnostics={() => navigate('diagnostics')} openEqualizer={openEqualizer} /> :
           basePage === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} disliked={dislikedIds} recent={recent} fullNumbers={appearance.fullNumbers}
             playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :
           <LibraryPage key={`${basePage}:${libraryScope}`} initialScope={basePage === 'library' ? libraryScope : 'all'} fullNumbers={appearance.fullNumbers} tracks={basePage === 'favorites' ? favorites : basePage === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
-            visible={page === basePage && !widget && !modalOpen && !presentationOpen} vkTracks={vkTracks.items} openVkTracks={openVkTracks}
+            visible={page === basePage && !widget && !modalOpen && !presentationOpen}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             mode={basePage === 'favorites' || basePage === 'search' || basePage === 'recent' ? basePage : 'library'} favorites={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
             chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openHome={() => navigate('player')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
@@ -730,7 +726,7 @@ export default function App() {
         <QueuePanel active={current} upcoming={upcoming} count={queued.length} fullNumbers={appearance.fullNumbers} duration={queued.reduce((sum, track) => sum + track.duration, 0)} playing={player.playing}
           close={closeQueue} play={(id) => playTrack(id, true)} remove={removeQueued} move={(from, to) => commit(moveUpcoming(queueRef.current, from, to))} goToLibrary={goToLibrary} />
       </>}
-      {widget ? <DesktopWidget track={current} tint={sampledTone} background={appearance.widgetBackground} controls={localControls} pending={widgetPending} restore={() => { void changeWidget(false); }} />
+      {widget ? <DesktopWidget macos={glass} track={current} tint={sampledTone} background={appearance.widgetBackground} controls={localControls} pending={widgetPending} restore={() => { void changeWidget(false); }} />
       : <PlayerBar {...localControls} track={current} classic={!glass && appearance.classicDock}
         goToPlayer={() => { navigate('player'); scrollArea.current?.scrollTo({ top: 0 }); }} openPresentation={showPresentation} openKaraoke={showKaraoke} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
       {presentationKind && current && !widget && <FullscreenPlayer {...localControls} karaoke={karaokeOpen} lyrics={lyrics} clock={player.playing ? position : undefined}

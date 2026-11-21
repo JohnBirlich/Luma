@@ -1,23 +1,29 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, FileUp, ListMusic, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, FileText, FileUp, ListMusic, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { MAX_PLAYLIST_TRACKS, playlistTitle } from '../shared/luma-playlists';
 import type { Track } from '../shared/media';
 import { IMPORT_STATUS, MAX_PLAYLIST_IMPORT_BYTES, playlistImportFormat, previewPlaylist, readPlaylistImport } from '../shared/playlist-import';
 import type { PlaylistDraft } from '../shared/playlist-import';
+import spotify from '../assets/playlist-sources/spotify.svg';
+import appleMusic from '../assets/playlist-sources/apple-music.svg';
+import deezer from '../assets/playlist-sources/deezer.svg';
+import youtubeMusic from '../assets/playlist-sources/youtube-music.svg';
+import soundcloud from '../assets/playlist-sources/soundcloud.svg';
+import tidal from '../assets/playlist-sources/tidal.svg';
+import yandexMusic from '../assets/playlist-sources/yandex-music.png';
 import './playlist-import.css';
 
 const sources = [
-  { id: 'spotify', name: 'Spotify', mark: 'S', tint: '#49d583', hint: 'Playlist*.json / CSV / TXT' },
-  { id: 'apple', name: 'Apple Music', mark: '♪', tint: '#fa7089', hint: 'TXT / CSV' },
-  { id: 'deezer', name: 'Deezer', mark: 'D', tint: '#bda0ff', hint: 'CSV / TXT' },
-  { id: 'youtube', name: 'YouTube Music', mark: '▶', tint: '#fa7878', hint: 'CSV / TXT' },
-  { id: 'soundcloud', name: 'SoundCloud', mark: '☁', tint: '#ff985f', hint: 'CSV / TXT' },
-  { id: 'tidal', name: 'Tidal', mark: '◆', tint: '#8ad7e8', hint: 'CSV / TXT' },
-  { id: 'yandex', name: 'Яндекс Музыка', mark: 'Я', tint: '#ffd467', hint: 'CSV / TXT' },
-  { id: 'file', name: 'Другой сервис или список', mark: '≡', tint: '#aeadff', hint: 'CSV / TXT' },
-  { id: 'm3u', name: 'Плейлист из M3U', mark: '♫', tint: '#a9c6ff', hint: 'M3U / M3U8' },
+  { id: 'spotify', name: 'Spotify', logo: spotify, hint: 'Playlist*.json / CSV / TXT' },
+  { id: 'apple', name: 'Apple Music', logo: appleMusic, hint: 'TXT / CSV' },
+  { id: 'deezer', name: 'Deezer', logo: deezer, hint: 'CSV / TXT' },
+  { id: 'youtube', name: 'YouTube Music', logo: youtubeMusic, hint: 'CSV / TXT' },
+  { id: 'soundcloud', name: 'SoundCloud', logo: soundcloud, hint: 'CSV / TXT' },
+  { id: 'tidal', name: 'Tidal', logo: tidal, hint: 'CSV / TXT' },
+  { id: 'yandex', name: 'Яндекс Музыка', logo: yandexMusic, hint: 'CSV / TXT' },
+  { id: 'file', name: 'Другой сервис или список', icon: FileText, hint: 'CSV / TXT' },
+  { id: 'm3u', name: 'Плейлист из M3U', icon: ListMusic, hint: 'M3U / M3U8' },
 ] as const;
 type ImportSource = typeof sources[number];
 const PAGE_SIZE = 10;
@@ -94,7 +100,8 @@ export function PlaylistImport({ collection, save, close }: {
         <p>{t('Выберите источник и откройте экспорт плейлиста. Luma сопоставит его с вашими локальными треками.')}</p>
         <ul className="playlist-import-sources">{sources.map((item) => <li key={item.id}>
           <button type="button" data-source={item.id} onClick={() => setSource(item)}>
-            <span className="playlist-source-mark" style={{ '--source-tone': item.tint } as CSSProperties} aria-hidden="true">{item.mark}</span>
+            <span className="playlist-source-mark" aria-hidden="true">{'logo' in item
+              ? <img src={item.logo} width={24} height={24} alt="" draggable={false} /> : <item.icon size={19} />}</span>
             <span><strong>{t(item.name)}</strong><small>{item.hint}</small></span><ChevronRight size={17} aria-hidden="true" />
           </button></li>)}</ul>
       </>}

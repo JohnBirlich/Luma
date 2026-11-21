@@ -13,7 +13,7 @@ function StationLogo({ station }: { station: RadioListing }) {
     <img src={station.logo} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setFailed(true)} />}</div>;
 }
 
-const modes = { all: 'Все станции', native: 'В Luma', browser: 'В браузере' } as const;
+const modes = { all: 'Любой способ', native: 'В Luma', browser: 'В браузере' } as const;
 const searchable = (text: string) => musicSearchKey(text).replace(/[-–—]+/g, ' ');
 const nativeCount = RADIO_DIRECTORY.filter(({ stream }) => stream).length;
 
@@ -22,17 +22,20 @@ export function RadioStations({ saved, activeId, playing, loading, connected, bu
   toggleSave(id: string): void; play(id: string, toggle?: boolean): void;
 }) {
   const t = useText();
+  const [scope, setScope] = useState<'directory' | 'saved'>('directory');
   const [genre, setGenre] = useState<keyof typeof RADIO_GENRES>('all');
   const [mode, setMode] = useState<keyof typeof modes>('all');
   const [query, setQuery] = useState('');
   const terms = searchable(query).split(' ').filter(Boolean);
   const added = RADIO_LISTINGS.filter(({ id }) => saved.has(id));
+  const savedOnly = scope === 'saved';
   function matches(station: RadioListing) {
     return (genre === 'all' || station.genre === genre) && (mode === 'all' || (mode === 'native') === Boolean(station.stream))
       && terms.every((term) => searchable(station.name).includes(term));
   }
-  const directory = RADIO_DIRECTORY.filter(matches);
-  const extras = EXTRA_STATIONS.filter(matches);
+  const stations = (savedOnly ? added : RADIO_DIRECTORY).filter(matches);
+  const extras = savedOnly ? [] : EXTRA_STATIONS.filter(matches);
+  const heading = savedOnly ? 'radio-added' : 'radio-stations';
 
   function tiles(stations: readonly RadioListing[]) {
     return <ul className="station-grid">{stations.map((station) => {
@@ -62,12 +65,15 @@ export function RadioStations({ saved, activeId, playing, loading, connected, bu
     })}</ul>;
   }
   return <div className="radio-shelves">
-    <section className="hub-shelf" aria-labelledby="radio-added"><header className="hub-shelf-head"><h2 id="radio-added"><Radio size={18} />{t('Добавленные')}</h2>
-      <span className="hub-badge">{added.length}</span></header>
-      {added.length ? tiles(added) : <p className="hub-note">{t('Нажмите «+» на карточке станции, чтобы она появилась здесь.')}</p>}
-    </section>
-    <section className="hub-shelf" aria-labelledby="radio-stations"><header className="hub-shelf-head"><div><h2 id="radio-stations">{t('Радиостанции')}</h2>
-      <p>{t('{0} в Luma · {1} в браузере', nativeCount, RADIO_DIRECTORY.length - nativeCount)}</p></div><span className="hub-badge">{RADIO_DIRECTORY.length}</span></header>
+    <section className="hub-shelf" aria-labelledby={heading}>
+      <header className="hub-shelf-head"><div><h2 id={heading}>{t(savedOnly ? 'Добавленные' : 'Радиостанции')}</h2>
+        {!savedOnly && <p>{t('{0} в Luma · {1} в браузере', nativeCount, RADIO_DIRECTORY.length - nativeCount)}</p>}</div>
+        <span className="hub-badge">{savedOnly ? added.length : RADIO_DIRECTORY.length}</span>
+      </header>
+      <div className="radio-views" role="group" aria-label={t('Списки радиостанций')}>
+        <button type="button" data-radio-view="directory" aria-pressed={!savedOnly} onClick={() => setScope('directory')}>{t('Все станции')}</button>
+        <button type="button" data-radio-view="saved" aria-pressed={savedOnly} onClick={() => setScope('saved')}>{t('Добавленные')} <span>{added.length}</span></button>
+      </div>
       <p className="hub-note">{t('Прямые эфиры вещателей. Без перемотки и скачивания. Доступность зависит от сети и станции.')}</p>
       {!connected && <p className="online-offline" role="status">{t('Для эфира нужно подключение к интернету.')}</p>}
       <div className="radio-controls">
@@ -81,9 +87,10 @@ export function RadioStations({ saved, activeId, playing, loading, connected, bu
           {Object.entries(RADIO_GENRES).map(([id, label]) => <option value={id} key={id}>{t(label)}</option>)}
         </select>
       </div>
-      {directory.length > 0 && tiles(directory)}
+      {stations.length > 0 && tiles(stations)}
       {extras.length > 0 && <div className="station-extras"><h3>{t('Каналы Record и SomaFM')}</h3>{tiles(extras)}</div>}
-      {!directory.length && !extras.length && <p role="status">{t('По этому запросу нет станций.')}</p>}
+      {!stations.length && !extras.length && <p className="hub-note" role="status">{t(savedOnly && !added.length
+        ? 'Нажмите «+» на карточке станции, чтобы она появилась здесь.' : 'По этому запросу нет станций.')}</p>}
     </section>
   </div>;
 }
