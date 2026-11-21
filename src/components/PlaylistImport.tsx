@@ -117,7 +117,7 @@ export function PlaylistImport({ collection, save, close }: {
     try {
       if (file.size > MAX_PLAYLIST_IMPORT_BYTES) throw new Error('Выберите файл плейлиста размером до 2 МБ.');
       const format = provider.id === 'luma' && /\.json$/i.test(file.name) ? 'luma-json' : playlistImportFormat(file.name);
-        const allowed = provider.id === 'm3u' ? format === 'm3u' : provider.id === 'luma' ? format === 'luma-json'
+      const allowed = provider.id === 'm3u' ? format === 'm3u' : provider.id === 'luma' ? format === 'luma-json'
         : format === 'csv' || format === 'txt' || (format === 'spotify-json' && provider.id === 'spotify');
       if (!format || !allowed) {
         throw new Error('Формат не подходит для выбранного источника.');

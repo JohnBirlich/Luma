@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, powerMonitor, protocol, safeStorage, session, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APP_NAME, APP_USER_MODEL_ID, RELEASES_URL } from '../src/shared/app-info.js';
 import { WIDGET_SHORTCUT } from '../src/shared/customization.js';
@@ -391,7 +391,7 @@ if (!app.requestSingleInstanceLock()) {
     const portable = !!process.env.PORTABLE_EXECUTABLE_FILE;
     const supported = process.platform === 'win32' && process.arch === 'x64' && app.isPackaged;
     const signer = supported && !portable ? readSignerSha256(JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8')).lumaWindowsSignerSha256) : undefined;
-    const helper = join(process.resourcesPath, 'security', WINDOWS_VERIFIER_EXE);
+    const helper = join(dirname(process.execPath), WINDOWS_VERIFIER_EXE);
     updates = new WindowsUpdates(info.version, !supported ? 'development' : portable ? 'portable' : signer ? 'signed' : 'manual',
       signer, app.getPath('temp'), (input, init) => input === LATEST_RELEASE_API ? net.fetch(input, init) : globalThis.fetch(input, init),
       (path, pin) => verifyWindowsSigner(helper, path, pin));

@@ -409,10 +409,25 @@ async function smoke() {
   });
   await click('.equalizer-content .dialog-footer .primary-button');
   assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused`), true);
-  await run(`document.querySelector('.title-settings').click()`);
-  await waitFor('settings page', () => run(`!!document.querySelector('.settings-page [aria-label="Обновления приложения"]')`));
-  await run(`document.querySelector('.settings-page [aria-label="Обновления приложения"]').click()`);
-  await waitFor('settings show package version', () => run(`document.querySelector('.settings-page .setting-card header')?.textContent.includes(${JSON.stringify(`Установлена версия ${version}.`)})`));
+  const nextVersion = '99.0.0', setupName = installerName(nextVersion);
+  let updateLookups = 0;
+  session.defaultSession.protocol.handle('https', (request) => {
+    if (request.url !== LATEST_RELEASE_API) return new Response(null, { status: 404 });
+    updateLookups++;
+    return Response.json({ tag_name: `v${nextVersion}`, draft: false, prerelease: false, assets: [{ name: setupName, state: 'uploaded', size: 1234,
+      browser_download_url: `https://github.com/${RELEASE_REPO}/releases/download/v${nextVersion}/${setupName}`, digest: `sha256:${'b'.repeat(64)}` }] });
+  });
+  try {
+    await run(`document.querySelector('.title-settings').click()`);
+    await waitFor('settings page', () => run(`!!document.querySelector('.settings-page [aria-label="Обновления приложения"]')`));
+    await run(`document.querySelector('.settings-page [aria-label="Обновления приложения"]').click()`);
+    await waitFor('settings show package version', () => run(`document.querySelector('.settings-page .setting-card header')?.textContent.includes(${JSON.stringify(`Установлена версия ${version}.`)})`));
+    const report = await run('window.luma.updates.check()');
+    assert.deepEqual(report, { state: 'available', mode: 'development', version: nextVersion, bytes: 1234 });
+    await waitFor('latest release is detected without installing from a development build', () => run(`document.querySelector('.settings-page .update-status')?.textContent.includes('Доступна версия ${nextVersion}.')
+      && ![...document.querySelectorAll('.settings-page .update-status button')].some(button => button.textContent.includes('Скачать и установить'))`));
+    assert.equal(updateLookups, 1, 'settings and an explicit check reuse the same release request');
+  } finally { session.defaultSession.protocol.unhandle('https'); }
   await go('Меню');
   const vkEntry = '.sidebar-shortcuts [aria-label="Эквалайзер из боковой панели"] + a[aria-label="Зайти в VK"]';
   const externalOpens = [];
@@ -598,11 +613,6 @@ async function smoke() {
   session.defaultSession.protocol.handle('https', async (request) => {
     if (offlineFixture) return new Response(null, { status: 503 });
     const url = new URL(request.url);
-    if (url.href === LATEST_RELEASE_API) {
-      const next = '99.0.0', name = installerName(next);
-      return Response.json({ tag_name: `v${next}`, draft: false, prerelease: false, assets: [{ name, state: 'uploaded', size: 1234,
-        browser_download_url: `https://github.com/${RELEASE_REPO}/releases/download/v${next}/${name}`, digest: `sha256:${'b'.repeat(64)}` }] });
-    }
     if (url.origin === 'https://itunes.apple.com' && url.pathname === '/search') {
       const term = url.searchParams.get('term');
       titleQueries.push(term);
@@ -841,10 +851,6 @@ async function smoke() {
         return expected.every((title, index) => headings.filter(h => h === title).length === 1 &&
           (index === 0 || headings.indexOf(title) > headings.indexOf(expected[index - 1]))) && !headings.includes('Жанры и настроения');
       })()`));
-      await click('[data-home-tab="updates"]');
-      await waitFor('latest release is detected without installing from a development build', () => run(`document.querySelector('.hub-version .update-status')?.textContent.includes('Доступна версия 99.0.0.')
-        && ![...document.querySelectorAll('.hub-version .update-status button')].some(button => button.textContent.includes('Скачать и установить'))`));
-      await click('[data-home-tab="home"]');
       const homeImport = '.hub-top-actions [data-playlist-import]';
       assert.deepEqual(await run(`[...document.querySelectorAll('.hub-top-actions button')].map(button => [button.textContent.trim(), button.getAttribute('aria-label')])`),
         [['', 'Добавить музыку'], ['', 'Импорт из сервисов'], ['', 'Открыть музыкальную ссылку'], ['', 'Миксы Luma']]);

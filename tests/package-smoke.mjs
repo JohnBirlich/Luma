@@ -38,7 +38,7 @@ try {
       env: { ...process.env, LUMA_TEST_EXE: join(directory, 'win-unpacked', APP_USER_MODEL_ID) }, encoding: 'utf8', windowsHide: true, timeout: 15_000,
     });
     assert.deepEqual(JSON.parse(metadata), { ProductName: APP_NAME, FileDescription: APP_NAME });
-    const helper = join(directory, 'win-unpacked', 'resources', 'security', WINDOWS_VERIFIER_EXE);
+    const helper = join(directory, 'win-unpacked', WINDOWS_VERIFIER_EXE);
     assert.ok((await stat(helper)).isFile(), 'native signer verifier in the package');
     const usage = spawnSync(helper, [], { windowsHide: true, timeout: 10_000 });
     assert.ifError(usage.error);
@@ -47,6 +47,7 @@ try {
     if (manifest.lumaWindowsSignerSha256 !== undefined) {
       const signer = readSignerSha256(manifest.lumaWindowsSignerSha256);
       assert.ok(signer, 'packaged signing pin must be SHA-256');
+      assert.equal(await verifyWindowsSigner(helper, helper, signer), true, 'the verifier is also signed in a signed package');
       assert.equal(await verifyWindowsSigner(helper, join(directory, 'win-unpacked', APP_USER_MODEL_ID), signer), true, 'signed application matches pin');
       assert.equal(await verifyWindowsSigner(helper, join(directory, `Luma-Player-Setup-${version}-x64.exe`), signer), true, 'signed setup matches pin');
     } else {
