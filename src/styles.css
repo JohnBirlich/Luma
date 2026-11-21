@@ -649,6 +649,8 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .menu-item { display: flex; align-items: center; text-align: left; min-width: 0; gap: 11px; padding: 10px 12px; min-height: 58px; border: 0; border-radius: 9px; background: transparent; }
 .menu-item + .menu-item { border-top: 1px solid #ffffff11; }
 .menu-item:hover:not(:disabled) { background: var(--hover-bg); }
+.menu-link { color: var(--text); text-decoration: none; }
+.menu-link-status:not(:empty) { display: block; margin-top: 4px; }
 .menu-item-icon { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 9px; color: var(--accent-light); background: var(--accent-fill); }
 .menu-item-copy { display: grid; flex: 1; gap: 4px; min-width: 0; }
 .menu-item-copy strong { font-size: 13px; font-weight: 680; }
@@ -701,6 +703,9 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .hero-style-center .hero-meta, .hero-style-center .hero-actions-row { justify-content: center; }
 .hero-style-center .hero-scrim { background: linear-gradient(0deg, #100d19f1, #17112138 72%, #17112120); }
 .hero-style-center .hero-actions-row { margin-top: 14px; }
+.hero:is([data-effect='prism'], [data-effect='spectrum'], [data-effect='notes'], [data-effect='mix-flow']):not(.hero-style-center) > .hero-scrim {
+  background: linear-gradient(90deg, #100d17c7, #100d1766 37%, #100d170a 75%), linear-gradient(0deg, #0e0b154d, transparent 43%);
+}
 
 .scene-dialog { width: min(678px, calc(100% - 26px)); }
 .scene-dialog-preview { position: relative; isolation: isolate; display: flex; align-items: center; min-height: 104px; gap: 11px; padding: 12px 14px; border: 1px solid #ffffff27; border-radius: 10px; background: radial-gradient(ellipse at 74% 15%, var(--preview-tone, var(--accent)), var(--stage-bg) 79%); margin-bottom: 15px; overflow: hidden; }
@@ -739,6 +744,7 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .scene-strength .range { width: 100%; }
 .scene-options + .setting-row { margin-top: 12px; border-top: 1px solid #ffffff19; }
 .settings-preview-has-effect > img { opacity: .74; mask-image: linear-gradient(90deg, transparent, #000b 77%); }
+.settings-preview-hero:is([data-effect='prism'], [data-effect='spectrum'], [data-effect='notes']) > img { opacity: .18; }
 .settings-preview-center { justify-items: center; text-align: center; padding-top: 10px; }
 .settings-preview-center > .settings-preview-center-art { width: 56px; height: 56px; border: 1px solid #ffffff25; border-radius: 6px; }
 @container (max-width: 480px) {
@@ -1265,6 +1271,10 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .immersive-stage > .immersive-backdrop.artwork-fallback { display: none; }
 .immersive-stage[data-effect='cover']:not(.karaoke-stage) > .immersive-scrim { background: linear-gradient(90deg, #110b1c42, #110b1ca1 59%, #100c17bd), linear-gradient(0deg, #0b0a17d8, transparent 36%, #0b0a1759 75%, #0b0a17bc); }
 .immersive-cover .immersive-scrim { background: linear-gradient(0deg, #0c0916ea, #0c09166b 72%, #0c0916c9), linear-gradient(100deg, #120d196b, #0f0b18ac 63%); }
+/* Keep these drawn scenes visible beyond the transport scrim used for album art. */
+.immersive-stage:is([data-effect='prism'], [data-effect='spectrum'], [data-effect='notes'], [data-effect='mix-flow']):not(.karaoke-stage) > .immersive-scrim {
+  background: linear-gradient(0deg, #100c19a0, #140e1b08 38%, #140e1b12 70%, #130e1ca6), linear-gradient(90deg, #0f0b1644, transparent 46%, #0f0b1638);
+}
 .immersive-cover .immersive-art { width: min(100%, 53dvh, 470px); }
 .immersive-center .immersive-main:not(.immersive-with-queue) { width: min(100%, 540px); grid-template-columns: minmax(0, 1fr); gap: clamp(12px, 2dvh, 21px); padding-block: clamp(12px, 2.5dvh, 28px); }
 .immersive-center .immersive-main:not(.immersive-with-queue) .immersive-content { gap: clamp(11px, 2dvh, 21px); }

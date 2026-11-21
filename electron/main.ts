@@ -23,7 +23,7 @@ import { isMetadataPage } from '../src/shared/recognition.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
 import { isStationPage } from '../src/shared/radio.js';
-import { LEGACY_VK_SESSION } from '../src/shared/vk.js';
+import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { DesktopFloatOutput } from './float-output.js';
 import { StreamCache } from './stream-cache.js';
@@ -104,6 +104,17 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.on('lastfm:record', (event, data: unknown) => {
     try { appWindow(event); } catch { return; }
     void lastfm.record(data);
+  });
+  ipcMain.handle('vk:open-music', async (event) => {
+    appWindow(event);
+    // The browser owns any sign-in. No URL, session or credentials cross this bridge.
+    try {
+      await shell.openExternal(VK_MUSIC_URL);
+      logs.main('vk.browserOpened');
+    } catch {
+      logs.main('vk.browserFailed');
+      throw new Error('Could not open VK Music in the browser');
+    }
   });
   ipcMain.handle('vk:reset', async (event) => {
     appWindow(event);

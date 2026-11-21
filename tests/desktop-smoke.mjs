@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, screen, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
 import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
-import { LEGACY_VK_SESSION } from '../dist-electron/src/shared/vk.js';
+import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
@@ -297,6 +297,15 @@ async function smoke() {
   console.log(`::notice title=Native fullscreen::Electron fullscreen reached ${display.bounds.width}×${display.bounds.height} monitor bounds; button, Esc, and host exit passed.`);
   await click('.scene-open');
   await waitFor('scene dialog reopens', () => run(`!!document.querySelector('.scene-dialog[open]')`));
+  for (const [label, effect] of [['Спектр', 'spectrum'], ['Ноты', 'notes']]) {
+    await click(`.scene-choice[aria-label="${label}"]`);
+    await waitFor(`${label} previews on a bounded canvas`, () => run(`(() => {
+      const backdrop = document.querySelector('.scene-dialog-preview .scene-${effect}');
+      const canvas = backdrop?.querySelector('canvas');
+      return canvas && canvas.width * canvas.height > 0 && canvas.width * canvas.height <= 134400
+        && (${JSON.stringify(effect)} !== 'spectrum' || !backdrop.classList.contains('scene-moving'));
+    })()`));
+  }
   if (!await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`)) {
     await click('.scene-choice[aria-label="Волны"]');
     const clip = await waitFor('silent sea loop decodes from the app protocol', () => run(`(() => {
@@ -320,13 +329,21 @@ async function smoke() {
   await click('.immersive-karaoke-toggle');
   await click('.immersive-tools button[aria-label="Оформление полноэкранного плеера"]');
   await waitFor('fullscreen scene dialog', () => run(`!!document.querySelector('.scene-dialog[open]')`));
-  await click('.scene-choice[aria-label="Сияние"]');
+  await click('.scene-choice[aria-label="Переливы Luma"]');
+  await waitFor('Luma Flow previews and saves while the full-screen player updates', async () => (await preferences()).appearance.effect === 'mix-flow'
+    && await run(`!!document.querySelector('.scene-dialog-preview .scene-mix-flow .mix-flow-light') && !!document.querySelector('.immersive-stage > .scene-mix-flow')`));
   await click('.scene-dialog .primary-button');
   await click('.immersive-karaoke-toggle');
-  await waitFor('karaoke uses the selected non-cover scene with only the foreground art', () => run(`!!document.querySelector('.karaoke-stage > .scene-aurora')
+  await waitFor('karaoke uses the selected non-cover scene with only the foreground art', () => run(`!!document.querySelector('.karaoke-stage > .scene-mix-flow')
     && !!document.querySelector('.karaoke-track .artwork') && !document.querySelector('.karaoke-stage > :is(.scene-cover,.immersive-backdrop)')`));
   await click('.immersive-collapse');
   await waitFor('fullscreen exits after switching modes', async () => !window.isFullScreen() && await run(`!document.querySelector('.immersive-player')`));
+  assert.ok(await run(`(() => {
+    const visual = (selector) => getComputedStyle(document.querySelector(selector + ' .mix-flow-light'));
+    const player = visual('.hero'), banner = visual('.hub-hero');
+    return player.backgroundImage !== 'none' && player.backgroundImage === banner.backgroundImage
+      && player.animationName === banner.animationName && !document.querySelector('.hero .scene-liquid');
+  })()`), 'the banner and Now Playing share the same CSS effect, distinct from Liquid Glass');
 
   assert.equal(await run(`document.querySelector('.home-now [aria-label="Эквалайзер"]')`), null);
   await click('.sidebar [aria-label="Эквалайзер из боковой панели"]');
@@ -359,7 +376,33 @@ async function smoke() {
   await run(`document.querySelector('.settings-page [aria-label="Обновления приложения"]').click()`);
   await waitFor('settings show package version', () => run(`document.querySelector('.settings-page .setting-card header')?.textContent.includes(${JSON.stringify(`Установлена версия ${version}.`)})`));
   await go('Меню');
-  await waitFor('about directly below equalizer', () => run(`document.querySelector('.menu-page [aria-label="Эквалайзер"] + [aria-label="О приложении"]') !== null`));
+  const vkEntry = '.menu-page [aria-label="Эквалайзер"] + a[aria-label="Зайти в VK"]';
+  const externalOpens = [];
+  const systemBrowser = shell.openExternal;
+  shell.openExternal = async (url) => {
+    externalOpens.push(url);
+    if (externalOpens.length === 1) throw new Error('fixture browser unavailable');
+  };
+  try {
+    await waitFor('VK sign-in directly below equalizer', () => run(`!!document.querySelector('${vkEntry}')`));
+    assert.deepEqual(await run(`(() => {
+      const link = document.querySelector('${vkEntry}');
+      return [link.href, link.target, link.rel, link.nextElementSibling.getAttribute('aria-label')];
+    })()`), [VK_MUSIC_URL, '_blank', 'noopener noreferrer', 'О приложении']);
+    assert.match(await run(`document.querySelector('${vkEntry} small').textContent`), /в браузере, без синхронизации/);
+    assert.deepEqual(externalOpens, [], 'rendering the row does not make a VK request');
+    const appUrl = window.webContents.getURL();
+    await click(vkEntry);
+    await waitFor('browser launch failure is explained next to the link', () => run(`document.querySelector('${vkEntry} [role="status"]').textContent.includes('Не удалось открыть VK')`));
+    await click(vkEntry);
+    await waitFor('VK handed to the browser on retry', () => externalOpens.length === 2);
+    assert.deepEqual(externalOpens, [VK_MUSIC_URL, VK_MUSIC_URL]);
+    assert.equal(window.webContents.getURL(), appUrl);
+    assert.equal(BrowserWindow.getAllWindows().length, 1);
+    assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused`), true);
+    assert.ok(await run(`window.luma.diagnostics.snapshot().then(({entries}) => ['vk.browserFailed', 'vk.browserOpened'].every(name => entries.some(({event}) => event === name)))`));
+  } finally { shell.openExternal = systemBrowser; }
+  console.log('::notice title=VK handoff::The link opens only the official site in the system browser on request; failure and retry pass without a new Electron window.');
   assert.equal(await run(`!!document.querySelector('.menu-page [aria-label="Импортировать треки"]')`), false);
   assert.ok(await run(`!!document.querySelector('.title-bar [aria-label="Добавить музыку"]')`), 'file import remains in the main toolbar');
   assert.equal(await run(`document.querySelector('.title-caption') === null && getComputedStyle(document.querySelector('.sidebar')).userSelect === 'none'`), true);
@@ -685,7 +728,7 @@ async function smoke() {
       assert.equal(catalogCalls[1].searchParams.get('q'), 'Ты здесь');
       assert.equal(opened.length, 0, 'no browser tab from automatic searches');
       assert.equal(await run(`!!document.querySelector('.music-sites, .music-site-grid')`), false);
-      for (const url of ['https://example.invalid/', 'https://vk.ru/audio?q=jazz', 'https://my.mail.ru/music', 'https://music.yandex.ru/']) {
+      for (const url of ['https://example.invalid/', VK_MUSIC_URL, 'https://vk.ru/audio?q=jazz', 'https://my.mail.ru/music', 'https://music.yandex.ru/']) {
         assert.equal(await run(`window.luma.openOnlineLink(${JSON.stringify(url)}).then(() => false, () => true)`), true);
       }
       assert.deepEqual(await run(`[...document.querySelectorAll('.hub-tabs button')].map(button => button.textContent)`),
@@ -954,6 +997,7 @@ async function smoke() {
     window.webContents.reload();
     await reloaded;
     await waitFor('English and MacOS survive a renderer restart', () => run(`document.documentElement.lang === 'en' && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.app-shell').dataset.theme === 'macos'`));
+    assert.equal((await preferences()).appearance.effect, 'mix-flow', 'the selected scene restores after a renderer restart');
     assert.deepEqual((await preferences()).equalizer, editedEq, 'parametric filters restore after a renderer restart');
     assert.deepEqual((await preferences()).stationIds, [recordStation.id], 'saved radio restores after a renderer restart');
     assert.ok((await preferences()).playlists.some(({ title }) => title === 'Джаз'), 'playlist restores after a renderer restart');

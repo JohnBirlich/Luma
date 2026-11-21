@@ -77,59 +77,83 @@ export function drawAurora(ctx: CanvasRenderingContext2D, w: number, h: number, 
   ctx.restore();
 }
 
-export const SPECTRUM_STEPS = 38;
-export const SPECTRUM_DEPTH = 12;
-export const BAND_STARTS = Array.from({ length: SPECTRUM_STEPS + 1 }, (_, i) => Math.max(2, Math.floor(2 * 230 ** (i / SPECTRUM_STEPS))));
+export const SPECTRUM_STEPS = 48;
+export const SPECTRUM_DEPTH = 10;
+const bandStarts = Array.from({ length: SPECTRUM_STEPS + 1 }, (_, i) => Math.floor(420 ** (i / SPECTRUM_STEPS)));
 export type SpectrumFrames = Float32Array[];
-function ambientBand(i: number, t: number) {
-  const u = i / (SPECTRUM_STEPS - 1);
-  return .08 + .49 * Math.exp(-((u - .24) ** 2) * 14) * (.75 + .25 * Math.sin(u * 23 + t * 2.2))
-    + .33 * Math.exp(-((u - .72) ** 2) * 65) * (.68 + .32 * Math.cos(u * 26 - t * 1.8));
-}
-export function spectrumFrames(): SpectrumFrames {
-  return Array.from({ length: SPECTRUM_DEPTH }, (_, d) => Float32Array.from({ length: SPECTRUM_STEPS }, (_, i) => ambientBand(i, -d * .25)));
-}
-export function advanceSpectrum(frames: SpectrumFrames, t: number, bins?: Uint8Array) {
+export const spectrumFrames = (): SpectrumFrames => Array.from({ length: SPECTRUM_DEPTH }, () => new Float32Array(SPECTRUM_STEPS));
+export const flattenSpectrum = (frames: SpectrumFrames) => frames.forEach((row) => row.fill(0));
+
+interface SpectrumSample { time: number; kick: number; bins?: Uint8Array }
+
+/** Time-based attack/release. With playback stopped, every ridge eases in place to a flat line. */
+export function advanceSpectrum(frames: SpectrumFrames, dt: number, sample?: SpectrumSample) {
+  const release = Math.exp(-8 * dt);
+  if (!sample) {
+    for (const row of frames) for (let i = 0; i < row.length; i++) {
+      const value = row[i] * release;
+      row[i] = value > .002 ? value : 0;
+    }
+    return;
+  }
+  const { time, kick, bins } = sample;
   const previous = frames[0], row = frames.pop()!;
+  const attack = 1 - Math.exp(-22 * dt);
   for (let i = 0; i < SPECTRUM_STEPS; i++) {
-    let target = ambientBand(i, t);
+    const u = i / (SPECTRUM_STEPS - 1);
+    let target: number;
     if (bins) {
       let peak = 0, total = 0;
-      const end = Math.max(BAND_STARTS[i] + 1, BAND_STARTS[i + 1]);
-      for (let bin = BAND_STARTS[i]; bin < end; bin++) { peak = Math.max(peak, bins[bin]); total += bins[bin]; }
-      target = .048 + .91 * ((peak * .65 + .35 * total / (end - BAND_STARTS[i])) / 255) ** 1.45;
+      const from = bandStarts[i], end = Math.max(from + 1, bandStarts[i + 1]);
+      for (let bin = from; bin < end; bin++) {
+        const value = bins[bin] ?? 0;
+        peak = Math.max(peak, value); total += value;
+      }
+      const band = ((.55 * peak + .45 * total / (end - from)) / 255) ** 1.48;
+      const accent = Math.exp(-18 * (u - .26) ** 2) * kick * .23;
+      target = Math.min(1, band * .91 + accent);
+    } else {
+      // Decorative motion for the preview or when no audio analyser is available.
+      target = .08 + .22 * Math.sin(Math.PI * u) ** 2 * (.73 + .27 * Math.sin(u * 16 - time * 2.2))
+        + .09 * Math.sin(u * 9 + time * 1.4) ** 2;
     }
-    row[i] = previous[i] + (target - previous[i]) * (target > previous[i] ? .62 : .28);
+    row[i] = previous[i] + (target - previous[i]) * (target > previous[i] ? attack : 1 - release);
   }
   frames.unshift(row);
 }
 
+export function spectrumSpan(depth: number): readonly [number, number] {
+  return [.018 + .036 * depth, .987 - .031 * depth];
+}
+
 export function drawSpectrum(ctx: CanvasRenderingContext2D, w: number, h: number, frames: SpectrumFrames) {
-  const colors = ctx.createLinearGradient(w * .05, 0, w * .94, 0);
-  colors.addColorStop(0, '#f786ff'); colors.addColorStop(.36, '#aa9cfa'); colors.addColorStop(.65, '#4ce6ff'); colors.addColorStop(1, '#baffdf');
-  const y = (i: number, d: number) => h * (.89 - .49 * d - frames[Math.round(d * (SPECTRUM_DEPTH - 1))][i] * (.67 - .40 * d));
-  const x = (i: number, d: number) => w * (.047 + .24 * d + i / (SPECTRUM_STEPS - 1) * (.906 - .41 * d));
-  // Far slices first; their filled areas are lightly veiled by the foreground ridges.
-  for (let row = SPECTRUM_DEPTH - 1; row >= 0; row--) {
-    const d = row / (SPECTRUM_DEPTH - 1), base = h * (.89 - .49 * d);
-    const fill = ctx.createLinearGradient(0, base - h * .48, 0, base);
-    fill.addColorStop(0, '#547af19c'); fill.addColorStop(1, '#17163431');
-    const ridge = new Path2D();
-    ridge.moveTo(x(0, d), y(0, d));
-    for (let i = 1; i < SPECTRUM_STEPS; i++) ridge.lineTo(x(i, d), y(i, d));
-    const shape = new Path2D(ridge); shape.lineTo(x(SPECTRUM_STEPS - 1, d), base); shape.lineTo(x(0, d), base); shape.closePath();
-    ctx.fillStyle = fill; ctx.fill(shape);
-    ctx.globalAlpha = (.96 - .65 * d) * .23; ctx.strokeStyle = colors; ctx.lineWidth = Math.max(2, h * .013 * (1 - .5 * d)); ctx.stroke(ridge);
-    ctx.globalAlpha = .95 - .68 * d; ctx.lineWidth = Math.max(.65, h * .0033 * (1 - .5 * d)); ctx.stroke(ridge);
-  }
-  ctx.globalAlpha = .28; ctx.strokeStyle = '#a4b3fa'; ctx.lineWidth = .75; ctx.beginPath();
-  for (let i = 0; i < SPECTRUM_STEPS; i += 3) {
-    ctx.moveTo(x(i, 0), h * .91);
-    for (let row = 1; row < SPECTRUM_DEPTH; row++) {
-      const d = row / (SPECTRUM_DEPTH - 1); ctx.lineTo(x(i, d), h * (.91 - .49 * d));
+  const light = ctx.createLinearGradient(0, 0, w, 0);
+  light.addColorStop(0, '#a26cfa'); light.addColorStop(.26, '#fba5f8'); light.addColorStop(.55, '#a4b9ff');
+  light.addColorStop(.81, '#63ecff'); light.addColorStop(1, '#a7ffd8');
+  ctx.save(); ctx.strokeStyle = light; ctx.lineCap = 'round'; ctx.globalCompositeOperation = 'screen';
+  for (let row = frames.length - 1; row >= 0; row--) {
+    const depth = row / (frames.length - 1), base = h * (.91 - .53 * depth);
+    const shape = frames[row];
+    const [start, end] = spectrumSpan(depth);
+    const step = w * (end - start) / (SPECTRUM_STEPS - 1), offset = start * w;
+    const y = (i: number) => {
+      const u = i / (SPECTRUM_STEPS - 1);
+      const smooth = .6 * shape[i] + .2 * (shape[Math.max(0, i - 1)] + shape[Math.min(SPECTRUM_STEPS - 1, i + 1)]);
+      return base - h * (.52 - .24 * depth) * smooth * (.65 + .35 * Math.sin(Math.PI * u));
+    };
+    ctx.beginPath(); ctx.moveTo(offset, y(0));
+    let here = y(0);
+    for (let i = 1; i < SPECTRUM_STEPS; i++) {
+      const next = y(i);
+      ctx.quadraticCurveTo(offset + (i - 1) * step, here, offset + (i - .5) * step, (here + next) * .5);
+      here = next;
     }
+    ctx.lineTo(end * w, here);
+    const core = Math.max(1, h * (.0055 - .0021 * depth));
+    ctx.globalAlpha = .19 - .08 * depth; ctx.lineWidth = core * 4; ctx.stroke();
+    ctx.globalAlpha = .93 - .41 * depth; ctx.lineWidth = core; ctx.stroke();
   }
-  ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 export function drawOrbits(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
@@ -174,108 +198,142 @@ export function drawOrbits(ctx: CanvasRenderingContext2D, w: number, h: number, 
   rings(true); moons(true);
 }
 
-// Trace white light through an equilateral-ish glass wedge in its local XY plane.
-// The same pose projects the extruded faces and every optical path into the scene.
-type P = [number, number];
-type V = [number, number, number];
-const wedge: P[] = [[0,-1.02],[.99,.64],[-.99,.64]];
-const cross = (a: P, b: P) => a[0] * b[1] - a[1] * b[0];
-const sub = (a: P, b: P): P => [a[0] - b[0], a[1] - b[1]];
-const along = (p: P, d: P, s: number): P => [p[0] + d[0] * s, p[1] + d[1] * s];
-function hit(p: P, d: P) {
-  let nearest: { p: P; n: P; distance: number } | undefined;
-  for (let i = 0; i < 3; i++) {
-    const a = wedge[i], edge = sub(wedge[(i + 1) % 3], a), offset = sub(a, p);
-    const scale = cross(d, edge);
-    if (Math.abs(scale) < .0001) continue;
-    const distance = cross(offset, edge) / scale, u = cross(offset, d) / scale;
-    if (u < 0 || u > 1 || distance < .0001 || (nearest && distance >= nearest.distance)) continue;
-    const len = Math.hypot(...edge);
-    nearest = { p: along(p, d, distance), n: [edge[1] / len, -edge[0] / len], distance };
-  }
-  return nearest;
-}
-function bend(d: P, n: P, ratio: number): P | undefined {
-  const cos = -(d[0] * n[0] + d[1] * n[1]), k = 1 - ratio * ratio * (1 - cos * cos);
-  if (k < 0) return;
-  return along([ratio * d[0], ratio * d[1]], n, ratio * cos - Math.sqrt(k));
-}
-const indices = [1.445, 1.463, 1.481, 1.497, 1.514, 1.531];
-const rayColors = ['ff5679', 'ffac62', 'fff094', '72ffb1', '63caff', 'bd85ff'];
-const emitter: P = [-3.8, .67], incoming: P = [Math.cos(-.19), Math.sin(-.19)];
-const entrance = hit(emitter, incoming)!;
-const paths = indices.map((index) => {
-  const inside = bend(incoming, entrance.n, 1 / index)!;
-  const exit = hit(entrance.p, inside)!;
-  return { exit: exit.p, out: bend(inside, [-exit.n[0], -exit.n[1]], index) };
-});
-const vertices: V[] = [-.33, .33].flatMap((depth) => wedge.map(([x, y]): V => [x, y, depth]));
-const faces = [[0,1,2],[3,4,5],[0,3,4,1],[1,4,5,2],[2,5,3,0]];
+type Point = [number, number];
+type Vector = [number, number, number];
+// A square base and a single apex, viewed from above and to one side. No animated pose.
+const baseCorners: readonly Vector[] = [[-.9,.6,-.9],[.9,.6,-.9],[.9,.6,.9],[-.9,.6,.9]];
+const yaw = .58, pitch = -.24;
+const aim = [Math.cos(yaw), Math.sin(yaw), Math.cos(pitch), Math.sin(pitch)] as const;
 
+export function pyramidProjection(w: number, h: number) {
+  const [cy, sy, cp, sp] = aim;
+  const size = Math.min(h * .46, w * .247);
+  const x0 = w * (w / h > 1.45 ? .66 : .57), y0 = h * .49;
+  function project([x, y, z]: Vector): Point {
+    const depth = z * cy - x * sy;
+    const zoom = 1 + .078 * (y * sp + depth * cp);
+    return [x0 + size * zoom * (x * cy + z * sy), y0 + size * zoom * (y * cp - depth * sp)];
+  }
+  return { apex: project([0,-.94,0]), base: baseCorners.map(project), size };
+}
+
+function triangle(ctx: CanvasRenderingContext2D, a: Point, b: Point, c: Point) {
+  ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.lineTo(...c); ctx.closePath();
+}
+
+const rayColors = ['ff799b', 'ffb879', 'ffe69a', '8af4bc', '7cddff', 'c5a6ff'];
 export function drawPrism(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, kick: number) {
-  const size = Math.min(h * .43, w * .27);
-  const yaw = .39 + t * .34, pitch = -.25 + Math.sin(t * .27) * .22, roll = Math.sin(t * .41) * .31;
-  const cx = w * .63, cy = h * .48;
-  function project([x, y, z]: V): V {
-    const a = x * Math.cos(yaw) + z * Math.sin(yaw), q = z * Math.cos(yaw) - x * Math.sin(yaw);
-    const b = y * Math.cos(pitch) - q * Math.sin(pitch), depth = y * Math.sin(pitch) + q * Math.cos(pitch);
-    // Near-orthographic rays avoid perspective discontinuities outside the visible scene.
-    const zoom = 1 + Math.max(-1.2, Math.min(1.2, depth)) * .12;
-    return [cx + size * zoom * (a * Math.cos(roll) - b * Math.sin(roll)), cy + size * zoom * (a * Math.sin(roll) + b * Math.cos(roll)), depth];
+  const { apex, base: [left, , right, ridge], size } = pyramidProjection(w, h);
+  const light = .85 + .10 * Math.sin(t * .96) + .13 * kick;
+  const shadow = ctx.createRadialGradient(apex[0], ridge[1] + size * .16, 0, apex[0], ridge[1] + size * .16, size * 1.7);
+  shadow.addColorStop(0, '#546fe44d'); shadow.addColorStop(.55, '#493f9952'); shadow.addColorStop(1, '#211a5100');
+  ctx.save();
+  ctx.fillStyle = shadow; ctx.fillRect(0, ridge[1] - size * .4, w, h - ridge[1] + size * .4);
+
+  const cool = ctx.createLinearGradient(...apex, ...left);
+  cool.addColorStop(0, '#bde9fcba'); cool.addColorStop(.4, '#538bdd52'); cool.addColorStop(1, '#567ccead');
+  const warm = ctx.createLinearGradient(...ridge, ...apex);
+  warm.addColorStop(0, '#ab8bf9c8'); warm.addColorStop(.42, '#867bd06b'); warm.addColorStop(.76, '#54abc150'); warm.addColorStop(1, '#d4f4ffc9');
+  triangle(ctx, apex, left, ridge); ctx.fillStyle = cool; ctx.fill();
+  triangle(ctx, apex, ridge, right); ctx.fillStyle = warm; ctx.fill();
+
+  function ray(from: Point, to: Point, color: string, outside: boolean) {
+    const beam = ctx.createLinearGradient(...from, ...to);
+    beam.addColorStop(0, `#${color}${outside ? 'ff' : 'a0'}`);
+    beam.addColorStop(1, `#${color}${outside ? '08' : 'f8'}`);
+    ctx.strokeStyle = beam;
+    ctx.beginPath(); ctx.moveTo(...from); ctx.lineTo(...to);
+    ctx.lineWidth = Math.max(2.4, size * .057); ctx.globalAlpha = light * .24; ctx.stroke();
+    ctx.lineWidth = Math.max(.9, size * .0125); ctx.globalAlpha = light * .89; ctx.stroke();
   }
-  function ray(from: V, to: V, color: string, fade = true) {
-    const gradient = ctx.createLinearGradient(from[0], from[1], to[0], to[1]);
-    gradient.addColorStop(0, `#${color}ff`); gradient.addColorStop(.35, `#${color}b8`); gradient.addColorStop(1, `#${color}${fade ? '00' : 'ff'}`);
-    ctx.strokeStyle = gradient; ctx.beginPath(); ctx.moveTo(from[0], from[1]); ctx.lineTo(to[0], to[1]);
-    for (const [width, alpha] of [[.15,.10],[.055,.28],[.013,.95]]) {
-      ctx.lineWidth = Math.max(.65, size * width); ctx.globalAlpha = alpha * (.85 + .15 * kick); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-  }
-  const projected = vertices.map(project);
-  const ordered = faces.map((face, i) => ({ points: face.map((j) => projected[j]), i }))
-    .sort((a, b) => a.points.reduce((sum, v) => sum + v[2], 0) / a.points.length - b.points.reduce((sum, v) => sum + v[2], 0) / b.points.length);
-  function face({ points, i }: typeof ordered[number], near: boolean) {
-    const wash = ctx.createLinearGradient(cx - size, cy - size, cx + size, cy + size);
-    wash.addColorStop(0, i < 2 ? '#a7edffbf' : '#cfbaff9e'); wash.addColorStop(.43, i < 2 ? '#4a9ccf25' : '#7776c841'); wash.addColorStop(1, '#a1f4ff70');
-    ctx.beginPath(); points.forEach(([x, y], j) => j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath();
-    ctx.fillStyle = wash; ctx.globalAlpha = near ? .75 : .43; ctx.fill();
-    ctx.strokeStyle = near ? '#d8faffc9' : '#90c1fc57'; ctx.lineWidth = Math.max(.8, size * .013); ctx.stroke(); ctx.globalAlpha = 1;
-  }
-  const point = ([x, y]: P) => project([x, y, .018]);
-  ordered.slice(0, 2).forEach((f) => face(f, false));
-  ctx.save(); ctx.globalCompositeOperation = 'screen';
-  const entry = point(entrance.p);
-  ray(entry, point(along(entrance.p, incoming, -4.5)), 'd8ffff');
-  paths.forEach(({ exit, out }, i) => {
-    const end = point(exit);
-    ray(entry, end, rayColors[i], false);
-    if (out) ray(end, point(along(exit, out, 4.6)), rayColors[i]);
+  const facetPoint = (a: Point, b: Point, weights: readonly [number, number, number]): Point => [
+    apex[0] * weights[0] + a[0] * weights[1] + b[0] * weights[2],
+    apex[1] * weights[0] + a[1] * weights[1] + b[1] * weights[2],
+  ];
+  const entry = facetPoint(left, ridge, [.36,.50,.14]);
+  const exit = facetPoint(ridge, right, [.29,.13,.58]);
+  ctx.globalCompositeOperation = 'screen';
+  ray(entry, [-.08 * w, entry[1] + .12 * h], 'bdf8ff', true);
+  ray(entry, exit, 'dce9ff', false);
+  rayColors.forEach((color, i) => {
+    const spread = (i / (rayColors.length - 1) - .52) * h * .37;
+    ray([exit[0], exit[1] + size * .007 * i], [w * 1.07, exit[1] - .10 * h + spread], color, true);
   });
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+
+  // One silhouette and a central ridge make the pyramid readable in a tiny preview as well.
+  ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(...apex); ctx.lineTo(...left); ctx.lineTo(...ridge); ctx.lineTo(...right); ctx.closePath();
+  ctx.lineWidth = Math.max(.8, size * .016); ctx.strokeStyle = '#dcf7ffd6'; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(...apex); ctx.lineTo(...ridge);
+  ctx.lineWidth = Math.max(.62, size * .012); ctx.strokeStyle = '#e9e1ffca'; ctx.stroke();
+  ctx.fillStyle = '#effcff'; dot(ctx, ...apex, Math.max(.65, size * .014));
   ctx.restore();
-  ordered.slice(2).forEach((f) => face(f, true));
 }
 
-const notes = Array.from({ length: 18 }, (_, i) => ({ x: .27 + random() * .71, y: random(), phase: random() * tau, speed: .042 + random() * .042, type: i % 3, size: .62 + random() * .58 }));
+const noteColors = ['#f1c4ff', '#a9ebff', '#ffe0ae', '#d2ceff'];
+const notes = Array.from({ length: 17 }, (_, i) => ({
+  start: i / 17, phase: random() * tau, speed: .085 + random() * .034, lane: (i % 5) - 2,
+  type: i % 3, size: .70 + random() * .46, color: noteColors[i % noteColors.length],
+}));
+
+/** Quarter note, eighth note and a beamed pair; draw glyphs instead of relying on font coverage. */
+function noteGlyph(ctx: CanvasRenderingContext2D, type: number) {
+  function head(x: number, y: number) {
+    ctx.beginPath(); ctx.ellipse(x, y, .201, .131, -.34, 0, tau); ctx.fill();
+  }
+  function stem(x: number, y: number, end: number) {
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, end); ctx.stroke();
+  }
+  ctx.lineWidth = .080;
+  if (type === 2) {
+    head(-.34,.40); stem(-.171,.37,-.43);
+    head(.25,.23); stem(.419,.20,-.59);
+    ctx.beginPath(); ctx.moveTo(-.211,-.44); ctx.lineTo(.459,-.61);
+    ctx.lineTo(.459,-.445); ctx.lineTo(-.211,-.275); ctx.closePath(); ctx.fill();
+    return;
+  }
+  head(-.10, .37); stem(.069, .34, -.51);
+  if (type === 1) {
+    ctx.beginPath(); ctx.moveTo(.044,-.52); ctx.bezierCurveTo(.12,-.31,.49,-.29,.35,.075);
+    ctx.bezierCurveTo(.37,-.18,.18,-.19,.044,-.33); ctx.closePath(); ctx.fill();
+  }
+}
+
 export function drawNotes(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, energy: number) {
-  ctx.lineCap = 'round';
   const unit = Math.min(w, h);
-  for (let line = 0; line < 5; line++) {
-    ctx.beginPath(); ctx.moveTo(w * .25, h * (.85 + line * .023));
-    ctx.bezierCurveTo(w * .55,h * (.18 + line * .034),w * .83,h * (.85 - line * .026),w * 1.07,h * (.08 + line * .03));
-    ctx.strokeStyle = '#c5adff36'; ctx.lineWidth = Math.max(.65, unit * .002); ctx.stroke();
+  const x = (p: number) => w * (.11 + p * .95);
+  const y = (p: number) => h * (.88 - p * .65 + .101 * Math.sin(p * tau - 1.2));
+  const gap = Math.max(3, Math.min(h * .034, w * .028));
+  const noteSize = Math.min(unit * .109, w * .071);
+  const paper = ctx.createLinearGradient(x(0), 0, x(1), 0);
+  paper.addColorStop(0, '#ad9df800'); paper.addColorStop(.32, '#ad9df875');
+  paper.addColorStop(.69, '#8bdafca0'); paper.addColorStop(1, '#eccbfa1a');
+  ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = paper;
+  for (let line = -2; line <= 2; line++) {
+    const dy = line * gap;
+    ctx.beginPath(); ctx.moveTo(x(0), y(0) + dy);
+    for (let i = 1; i <= 38; i++) { const p = i / 38; ctx.lineTo(x(p), y(p) + dy); }
+    ctx.globalAlpha = line === 0 ? .83 : .60; ctx.lineWidth = Math.max(.74, unit * .0032); ctx.stroke();
   }
-  for (const { x, y, phase, speed, type, size } of notes) {
-    const p = fract(y + t * speed), scale = unit * size * (.024 + p * .031) * (1 + energy * .14);
-    const hue = type === 0 ? '#ffd1fb' : type === 1 ? '#a7e7ff' : '#ece2ff';
-    ctx.save(); ctx.translate(w * (x + .06 * Math.sin(phase + p * 5)), h * (1.07 - p * 1.19)); ctx.rotate(Math.sin(phase + t * .5) * .28 - .14);
-    ctx.scale(scale, scale); ctx.globalAlpha = (.53 + .38 * Math.sin(p * Math.PI)) * Math.min(1, p * 8, (1 - p) * 8);
-    ctx.strokeStyle = ctx.fillStyle = hue; ctx.lineWidth = .082;
-    ctx.beginPath(); ctx.ellipse(-.1,.43,.215,.145,-.35,0,tau);
-    if (type === 1) ctx.stroke(); else ctx.fill();
-    ctx.beginPath(); ctx.moveTo(.10,.40); ctx.lineTo(.10,-.49);
-    if (type > 0) ctx.quadraticCurveTo(.25,-.32,.32,-.21);
-    if (type === 2) { ctx.moveTo(.10,-.32); ctx.quadraticCurveTo(.22,-.16,.29,-.045); }
-    ctx.stroke(); ctx.restore();
+
+  for (const note of notes) {
+    const p = fract(note.start + t * note.speed);
+    const px = x(p), py = y(p) + gap * (note.lane * .84 + .46 * Math.sin(note.phase + t * 1.12));
+    const depth = .71 + .39 * Math.sin(p * Math.PI);
+    const scale = Math.max(3.4, noteSize * note.size * depth * (1 + energy * .11));
+    const fade = Math.min(1, p * 7, (1 - p) * 7);
+    ctx.save(); ctx.translate(px, py); ctx.rotate(Math.sin(note.phase + t * .54) * .13 - .095);
+    ctx.scale(scale, scale); ctx.globalAlpha = fade * (.58 + .29 * depth);
+    ctx.fillStyle = ctx.strokeStyle = note.color;
+    ctx.shadowColor = note.color; ctx.shadowBlur = Math.min(14, scale * (.37 + energy * .16));
+    noteGlyph(ctx, note.type); ctx.restore();
+    if (note.type !== 2) {
+      ctx.fillStyle = note.color; ctx.globalAlpha = fade * (.22 + energy * .26);
+      dot(ctx, px - scale * 1.04, py + scale * .20, Math.max(.65, scale * .042));
+      dot(ctx, px + scale * .71, py - scale * .63, Math.max(.5, scale * .028));
+    }
   }
+  ctx.restore();
 }

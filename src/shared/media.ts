@@ -67,6 +67,7 @@ export interface DesktopBridge {
   chooseTracks(): Promise<ImportResult>;
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
+  openVkMusic(): Promise<void>;
   clearLegacyVkSession(): Promise<void>;
   lyrics: { lookup(query: LyricsQuery, refresh?: boolean): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null>; openEdition(url: string): Promise<void> };
   exportMp3(track: OnlineTrack, saveLyrics: boolean): Promise<Mp3ExportResult>;

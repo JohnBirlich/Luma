@@ -22,9 +22,9 @@ const EFFECTS = [
   { id: 'aurora', label: 'Сияние', description: 'Зелёные и лиловые шторы северного сияния', icon: Sparkles },
   { id: 'waves', label: 'Волны', description: 'Морской прибой в сумерках', icon: Waves },
   { id: 'stars', label: 'Звёзды', description: 'Звёздная пыль и мягкий параллакс', icon: Sparkles },
-  { id: 'spectrum', label: 'Спектр', description: 'Неоновый рельеф частот', icon: AudioLines },
+  { id: 'spectrum', label: 'Спектр', description: 'Длинные линии в ритме трека', icon: AudioLines },
   { id: 'orbits', label: 'Орбиты', description: 'Планета, кольца и спутники', icon: Orbit },
-  { id: 'prism', label: 'Призма', description: 'Объёмная призма и дисперсия луча', icon: Triangle },
+  { id: 'prism', label: 'Призма', description: 'Стеклянная пирамида и цветные лучи', icon: Triangle },
   { id: 'pulse', label: 'Импульс', description: 'Кольца в ритме баса', icon: Activity },
   { id: 'nebula', label: 'Туманность', description: 'Глубокая туманность и параллакс звёзд', icon: Wind },
   { id: 'horizon', label: 'Неон', description: 'Линии горизонта и синтвейв', icon: Sunset },
@@ -33,8 +33,9 @@ const EFFECTS = [
   { id: 'rain', label: 'Дождь', description: 'Капли и круги на мокрой улице', icon: CloudRain },
   { id: 'solar', label: 'Солнечный ветер', description: 'Корональный свет, потоки плазмы и искры', icon: Sun },
   { id: 'meteors', label: 'Метеоры', description: 'Падающие звёзды и следы', icon: Telescope },
-  { id: 'notes', label: 'Ноты', description: 'Светящиеся ноты в потоке', icon: Music2 },
+  { id: 'notes', label: 'Ноты', description: 'Светящиеся ноты на волнистом стане', icon: Music2 },
   { id: 'liquid', label: 'Жидкое стекло', description: 'Переливы света в стекле', icon: Droplets },
+  { id: 'mix-flow', label: 'Переливы Luma', description: 'Тот же фон, что у «Слушать микс Luma»', icon: Wind },
 ] as const;
 
 export interface SceneOptionsProps { appearance: Appearance; change(value: Appearance): void }
@@ -87,7 +88,8 @@ export function NowPlayingDialog({ appearance, change, close, tint, track, playi
           <button type="button" className="icon-button" aria-label={t("Закрыть оформление")} title={t("Закрыть")} onClick={dismiss}><X size={20} /></button>
         </header>
         <div className={`scene-dialog-preview scene-preview-${appearance.hero}`} style={{ '--preview-tone': tint } as CSSProperties} aria-hidden="true">
-          <SceneBackground effect={appearance.effect} track={track} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} sample={appearance.audioReactive && playing ? sample : undefined} />
+          <SceneBackground effect={appearance.effect} track={track} strength={appearance.effectStrength} tempo={appearance.effectTempo} visible={appearance.motion}
+            animate={appearance.motion && (appearance.effect !== 'spectrum' || playing)} sample={appearance.audioReactive && playing ? sample : undefined} />
           {appearance.hero === 'vinyl' ? <VinylRecord className="scene-preview-record" track={track} animate={appearance.motion && playing} />
             : <Artwork track={track} imageUrl={appearance.hero === 'blur' || (appearance.hero === 'cover' && appearance.effect !== 'cover') ? track?.backdropUrl : undefined} className="scene-preview-art" />}
           <div className="scene-preview-copy"><p className="overline">{t("Предпросмотр")}</p><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>

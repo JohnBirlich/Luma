@@ -67,8 +67,8 @@ test('legacy layouts remain unchanged; effect intensity and favorite IDs are val
   assert.equal(options.appearance.compactSidebar, true);
 });
 
-test('new audio-reactive scenes persist without replacing old settings', () => {
-  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'cover', 'off']) {
+test('scene choices persist without replacing old settings', () => {
+  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'notes', 'liquid', 'mix-flow', 'cover', 'off']) {
     const prefs = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl', effect, effectStrength: 0.6, motion: false }, volume: 0.17 }));
     assert.equal(prefs.appearance.effect, effect);
     assert.equal(prefs.appearance.hero, 'vinyl');

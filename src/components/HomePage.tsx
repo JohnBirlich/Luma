@@ -18,7 +18,7 @@ import { Shelf, Tile, TrackRows } from './MusicShelf';
 import { Discovery } from './Discovery';
 import { MyPlaylists } from './MyPlaylists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
-import { useVisualMotion } from '../player/useVisualMotion';
+import { SceneBackground } from './SceneBackground';
 
 const TABS = { home: 'Для вас', mine: 'Моя музыка', radio: 'Радио', updates: 'Обновления' } as const;
 export type HomeTab = keyof typeof TABS;
@@ -71,7 +71,6 @@ function Updates({ tracks, play, currentId, playing }: Pick<HomeProps, 'tracks' 
 }
 
 export const HomePage = memo(function HomePage(props: HomeProps) {
-  const liquid = useVisualMotion(props.visible && props.motion);
   const t = useText();
   const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary } = props;
   const { tab, query, setQuery, selectTab } = props;
@@ -135,7 +134,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
     </> : <>
       {tab === 'home' && <>
         <div className="hub-lead">{props.nowPlaying}<section className="hub-hero" aria-labelledby="hub-mix-title">
-          <div className={`hub-liquid${liquid ? ' hub-liquid-moving' : ''}`} aria-hidden="true" />
+          <SceneBackground effect="mix-flow" strength={1} animate={props.motion} visible={visible && props.motion} />
           <div className="hub-hero-inner"><p className="overline hub-hero-kicker"><AudioLines size={14} /> {t('Музыка Luma')} <span /> {demoMix ? t('Демоколлекция') : t('На этом устройстве')}</p>
             <h2 id="hub-mix-title">{t('Слушать микс Luma')}</h2>
             <p>{demoMix ? t('Попробуйте плеер на встроенной коллекции.') : t('Подборка из вашей музыки, избранного и истории.')}</p>

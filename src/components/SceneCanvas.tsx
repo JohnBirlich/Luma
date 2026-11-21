@@ -3,7 +3,7 @@ import { initialBeat, sampleBeat } from '../shared/beat';
 import type { ReadSpectrum } from '../player/useAudio';
 import { compactScene, sceneBufferSize, sceneFps } from '../shared/scene-budget';
 
-import { advanceSpectrum, drawAurora, drawNotes, drawOrbits, drawPrism, drawSpectrum, drawStars, seeded, spectrumFrames } from './scene-art';
+import { advanceSpectrum, drawAurora, drawNotes, drawOrbits, drawPrism, drawSpectrum, drawStars, flattenSpectrum, seeded, spectrumFrames } from './scene-art';
 import { CANVAS_EFFECTS, coastSpeed } from '../shared/scene-motion';
 import type { CanvasEffect } from '../shared/scene-motion';
 
@@ -174,7 +174,7 @@ function drawPulse(ctx: CanvasRenderingContext2D, w: number, h: number, onsets: 
   ctx.globalAlpha = 1;
 }
 
-/** Keep the scene clock across transport changes. Only pulse and meteor coast on pause. */
+/** Keep the scene clock across transport changes and only run animations for a visible surface. */
 export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
   effect: CanvasEffect; playing: boolean; enabled: boolean; tempo: number; sample?: ReadSpectrum;
 }) {
@@ -203,11 +203,14 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
       if (!w || !h) return;
       ctx.clearRect(0, 0, w, h);
       elapsed += dt;
-      const live = runtime.current.playing && runtime.current.enabled && runtime.current.sample?.(bins);
+      const { playing: active, enabled: canMove, sample: read } = runtime.current;
+      const live = dt > 0 && active && canMove && read?.(bins);
       const onset = live ? sampleBeat(beat, bins, elapsed) : false;
       if (!live && dt) beat.kick *= Math.exp(-dt * 8);
-      if (effect === 'spectrum' && terrain) {
-        if (dt > 0 && velocity) advanceSpectrum(terrain, t, live ? bins : undefined);
+      if (terrain) {
+        if (!canMove || (!active && !velocity)) flattenSpectrum(terrain);
+        else if (dt > 0) advanceSpectrum(terrain, dt, live ? { time: t, bins, kick: beat.kick }
+          : active && !read ? { time: t, kick: 0 } : undefined);
         drawSpectrum(ctx, w, h, terrain);
       } else if (effect === 'pulse' && pulseHalo) {
         if (onset || (!live && runtime.current.playing && Math.floor(t / 1.25) !== Math.floor((t - dt * velocity / runtime.current.tempo) / 1.25))) onsets.push(t);

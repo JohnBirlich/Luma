@@ -44,26 +44,7 @@
 .hub-search .icon-button { height: 27px; width: 27px; }
 .hub-hero { display: flex; align-items: end; min-width: 0; position: relative; isolation: isolate; overflow: hidden; border: 1px solid #ffffff21; border-radius: 16px; min-height: 186px;
   background: radial-gradient(ellipse at 50% 120%, #362f4b 0%, #1e1d2c 60%, #191923); }
-.hub-liquid { position: absolute; z-index: -2; inset: -32% -12%; pointer-events: none; transform-origin: 50% 53%;
-  background:
-    radial-gradient(ellipse 54% 44% at 32% 9%, #111121 12%, #14203370 57%, transparent 70%),
-    radial-gradient(ellipse 42% 35% at 28% 36%, #90305aa8 0%, #63265c6b 40%, transparent 75%),
-    radial-gradient(ellipse 34% 47% at 44% 76%, #41e0b568, #127a908c 37%, transparent 82%),
-    radial-gradient(ellipse 34% 43% at 67% 46%, #349eff89, #3846a89e 49%, transparent 81%),
-    radial-gradient(ellipse 36% 44% at 82% 64%, color-mix(in srgb, var(--accent) 72%, transparent), color-mix(in srgb, var(--accent) 21%, #20243f 45%) 38%, transparent 78%),
-    conic-gradient(from 39deg at 38% 62%, #1c273c 2%, #2f103b 17%, #1f172c 29%, #36317a 40%, #123149 61%, #192036 81%, #1c273c 99%); }
-.hub-liquid::before, .hub-liquid::after { content: ''; position: absolute; pointer-events: none; border-radius: 48% 52% 63% 37%; }
-.hub-liquid::before { inset: 14% 6% 21% 7%; transform: rotate(-10deg); opacity: .48;
-  background: radial-gradient(ellipse at 56% 11%, transparent 37%, #b2e3f53b 42%, #8fa9ffac 47%, #b6a1ff14 51%, transparent 59%); }
-.hub-liquid::after { inset: 25% 18% 14% 9%; transform: rotate(11deg); opacity: .55;
-  background: radial-gradient(ellipse at 34% 90%, transparent 32%, #dac6ff2e 38%, #c283ff5a 50%, #7dd4fa2e 56%, transparent 68%); }
-.hub-liquid-moving { animation: mix-liquid-flow 22s ease-in-out infinite alternate; }
-@keyframes mix-liquid-flow {
-  0% { transform: translate3d(-3%, -8%, 0) rotate(-7deg) scale(1.07, 1.08) skewY(-3deg); }
-  48% { transform: translate3d(3%, 3%, 0) rotate(4deg) scale(1.20, .92) skewY(3deg); }
-  100% { transform: translate3d(-2%, 8%, 0) rotate(-4deg) scale(1.04, 1.18) skewY(-2deg); }
-}
-@media (prefers-reduced-motion: reduce) { .hub-liquid-moving { animation: none; } }
+.hub-hero > .scene-mix-flow { z-index: -2; }
 .hub-hero::before { content: ''; position: absolute; z-index: -1; inset: 0; background: radial-gradient(ellipse at 50% 49%,#13101b4a 18%, transparent 62%),linear-gradient(0deg,#120d1b90, #1815220d 68%); }
 .hub-hero-inner { text-align: left; padding: clamp(18px, 3vw, 34px); display: grid; justify-items: start; gap: 9px; width: 100%; }
 .hub-hero-kicker { display: flex; gap: 7px; align-items: center; color: #e4dbf5; letter-spacing: .1em; flex-wrap: wrap; }

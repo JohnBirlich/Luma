@@ -2,8 +2,8 @@ import type { BackgroundEffect } from './customization.js';
 
 /** Values mark effects that decelerate after a transport pause, then stop painting. */
 export const CANVAS_EFFECTS = {
-  aurora: false, stars: false, spectrum: false, orbits: false, prism: false,
-  pulse: true, rain: false, fireworks: false, solar: false, meteors: true, notes: false,
+  aurora: false, stars: false, spectrum: true, orbits: false, prism: false,
+  pulse: true, rain: false, fireworks: false, solar: false, meteors: true, notes: true,
 } as const;
 export type CanvasEffect = keyof typeof CANVAS_EFFECTS;
 export const isCanvasEffect = (id: BackgroundEffect): id is CanvasEffect => Object.hasOwn(CANVAS_EFFECTS, id);

@@ -56,6 +56,7 @@ export const SceneBackground = memo(function SceneBackground({ effect, track, st
     {effect === 'horizon' && <><i className="scene-neon-sun" /><i className="scene-neon-floor" /><i className="scene-neon-light" /></>}
     {effect === 'kaleidoscope' && <div className="scene-chromatic"><i /><i /></div>}
     {effect === 'liquid' && <div className="scene-liquid-light" />}
+    {effect === 'mix-flow' && <div className="mix-flow-light" />}
     {effect === 'rain' && <i className="rain-glass-beads" />}
   </div>;
 });

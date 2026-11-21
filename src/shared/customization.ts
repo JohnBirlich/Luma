@@ -15,7 +15,7 @@ export const ACCENTS = [
 ] as const;
 
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
-export const BACKGROUND_EFFECTS = ['off', 'cover', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors', 'notes', 'liquid'] as const;
+export const BACKGROUND_EFFECTS = ['off', 'cover', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors', 'notes', 'liquid', 'mix-flow'] as const;
 export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
 export const START_PAGES = ['player', 'library', 'local', 'search'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;

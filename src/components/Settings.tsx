@@ -78,9 +78,9 @@ function ThemePreview({ appearance, track, tint }: { appearance: Appearance; tra
       <div className="settings-preview-heading"><p className="overline">{t("Предпросмотр")}</p><span>{t(THEMES[appearance.theme].name)}</span></div>
       <div className="settings-preview-window" aria-hidden="true">
         <div className="settings-preview-chrome"><AudioLines size={13} /><span>Luma Player</span><i /><i /><i /></div>
-        <div className={`settings-preview-hero settings-preview-${appearance.hero}${appearance.effect !== 'off' ? ' settings-preview-has-effect' : ''}`} style={{ '--sample-tone': tint, '--scene-tone': tint } as CSSProperties}>
-          <SceneBackground effect={appearance.effect} track={track} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} />
-          {appearance.effect !== 'cover' && picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
+        <div data-effect={appearance.effect} className={`settings-preview-hero settings-preview-${appearance.hero}${appearance.effect !== 'off' ? ' settings-preview-has-effect' : ''}`} style={{ '--sample-tone': tint, '--scene-tone': tint } as CSSProperties}>
+          <SceneBackground effect={appearance.effect} track={track} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} visible={appearance.motion} />
+          {appearance.effect !== 'cover' && appearance.effect !== 'mix-flow' && picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
           {appearance.hero === 'center' && <Artwork track={track} className="settings-preview-center-art" />}
           {appearance.hero === 'vinyl' && <VinylRecord className="settings-preview-record" track={track} animate={appearance.motion} />}
           <div><small>{t("СЕЙЧАС ИГРАЕТ")}</small><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
