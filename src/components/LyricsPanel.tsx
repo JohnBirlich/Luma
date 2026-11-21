@@ -11,8 +11,8 @@ import { KaraokeTextSettings } from './KaraokeTextSettings';
 
 const SOURCE_NAMES = { auto: 'Авто', local: 'Из файла', attached: 'Открытый файл', lrclib: 'LRCLIB', edition: 'Викитека' } as const;
 
-const TimedText = memo(function TimedText({ lines, elapsed, clock, follow, layout }: {
-  lines: LyricLine[]; elapsed: number; clock?: () => number; follow: boolean; layout?: KaraokeStyle;
+const TimedText = memo(function TimedText({ lines, elapsed, clock, follow, layout, seek }: {
+  lines: LyricLine[]; elapsed: number; clock?: () => number; follow: boolean; layout?: KaraokeStyle; seek?(seconds: number): void;
 }) {
   const t = useText();
   const scroll = useRef<HTMLDivElement>(null);
@@ -43,12 +43,14 @@ const TimedText = memo(function TimedText({ lines, elapsed, clock, follow, layou
   }, [current, lines, follow, layout]);
   return <div className="lyrics-scroll lyrics-timed" ref={scroll} tabIndex={0} role="region" aria-label={t('Строки песни')}>
     {lines.map(({ time, text }, index) => <p key={`${time}-${index}`} ref={index === current ? line : undefined}
-      aria-current={index === current ? 'true' : undefined} data-past={index < current || undefined}>{text || '\u00a0'}</p>)}
+      aria-current={index === current ? 'true' : undefined} data-past={index < current || undefined}>
+      {text && seek ? <button className="lyric-line-seek" type="button" title={t('Перейти к строке')} onClick={() => seek(time)}>{text}</button> : text || '\u00a0'}
+    </p>)}
   </div>;
 });
 
-export function LyricsPanel({ state, elapsed, clock, karaoke, demo = false }: {
-  state: TrackLyrics; elapsed: number; clock?: () => number; karaoke?: { style: KaraokeStyle; change(style: KaraokeStyle): void; tools: HTMLElement | null }; demo?: boolean;
+export function LyricsPanel({ state, elapsed, clock, seek, karaoke, demo = false }: {
+  state: TrackLyrics; elapsed: number; clock?: () => number; seek?(seconds: number): void; karaoke?: { style: KaraokeStyle; change(style: KaraokeStyle): void; tools: HTMLElement | null }; demo?: boolean;
 }) {
   const t = useText();
   const id = useId();
@@ -82,7 +84,7 @@ export function LyricsPanel({ state, elapsed, clock, karaoke, demo = false }: {
     </header>
     {karaoke?.tools && createPortal(<KaraokeTextSettings style={karaoke.style} change={karaoke.change} state={state} versions={versions}
       hasTiming={lines.length > 0} follow={follow} setFollow={setFollow} openFile={openFile} removeAttachment={state.clear} />, karaoke.tools)}
-    {lines.length > 0 ? <TimedText lines={lines} elapsed={elapsed} clock={clock} follow={follow} layout={karaoke?.style} />
+    {lines.length > 0 ? <TimedText lines={lines} elapsed={elapsed} clock={clock} follow={follow} layout={karaoke?.style} seek={seek} />
       : lyrics?.plain ? <div className="lyrics-scroll lyrics-plain" tabIndex={0} role="region" aria-label={t('Текст песни')}>{lyrics.plain}</div>
       : <div className="lyrics-empty">
         <Music2 size={24} aria-hidden="true" />

@@ -1,4 +1,5 @@
 import type { Track } from './media.js';
+import { recordingKey } from './recording-match.js';
 import { cleanTrackText, musicSearchKey } from './russian.js';
 
 /** Metadata only. Never carry service URLs, paths, or credentials. */
@@ -17,7 +18,7 @@ export function readRecordingReference(value: unknown): RecordingReference | und
 // Basenames are matched without removing punctuation, whitespace, or Cyrillic distinctions.
 export const basenameKey = (name: string) => name.normalize('NFC').toLowerCase();
 
-export const recordingKey = ({ title, artist }: Pick<RecordingReference, 'title' | 'artist'>) => JSON.stringify([musicSearchKey(title), musicSearchKey(artist)]);
+export { recordingKey };
 function* delimitedRows(text: string, separator: string) {
   let row: string[] = [], field = '';
   let quoted = false, closed = false;

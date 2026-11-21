@@ -14,7 +14,7 @@ function audiusTrack(data: unknown): OnlineTrack | undefined {
     || row.parental_warning_type || (Array.isArray(row.allowed_api_keys) ? row.allowed_api_keys.length > 0 : row.allowed_api_keys != null)
     || typeof row.permalink !== 'string' || !row.permalink.startsWith('/')) return;
   // Ignore the distributed-node URLs and signed stream values embedded in search results.
-  return readOnlineTrack({ id: `audius-${row.id}`, title: row.title, artist: user.name || user.handle, duration: row.duration,
+  return readOnlineTrack({ id: `audius-${row.id}`, title: row.title, artist: user.name || user.handle, duration: row.duration, isrc: row.isrc,
     genres: [row.genre], audioUrl: audiusMediaUrl(row.id), online: { source: 'audius', page: `https://audius.co${row.permalink}` },
   });
 }

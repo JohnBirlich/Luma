@@ -14,7 +14,8 @@ import type { LastFmIssue, LastFmStatus } from '../shared/lastfm';
 import type { StreamCacheInfo } from '../shared/stream-cache';
 import { localLibrary } from '../data/library';
 import { DEFAULT_ARTWORK_URL } from '../data/artwork';
-import { ReleaseLink, useInstalledBuild } from './About';
+import { UpdatesPanel } from './UpdatesPanel';
+import { useInstalledBuild } from './About';
 import { Artwork } from './Artwork';
 import { WidgetPreview } from './DesktopWidget';
 import { MenuGroup, MenuItem } from './Menu';
@@ -22,6 +23,10 @@ import { VolumeControl } from './PlaybackControls';
 import type { VolumeProps } from './PlaybackControls';
 import { NowPlayingOptions } from './NowPlayingOptions';
 import { SceneBackground } from './SceneBackground';
+import { DiscordSettings } from './DiscordSettings';
+import type { DiscordPreferences } from '../shared/discord-presence';
+import { SleepTimer } from './SleepTimer';
+import type { SleepMinutes } from '../shared/sleep-timer';
 import { VinylRecord } from './VinylRecord';
 
 
@@ -29,8 +34,7 @@ function ReleaseSettings() {
   const t = useText();
   const info = useInstalledBuild();
   return <SettingCard title={t("Версия Luma")} detail={info ? t("Установлена версия {0}.", info.version) : info === null ? t("Не удалось прочитать версию.") : t("Читаем версию сборки…")}>
-    <p className="setting-body-copy">{t("На GitHub доступны примечания к версиям, установщик и portable. Загрузка и установка запускаются вручную.")}</p>
-    <div className="settings-actions"><ReleaseLink className="button outline-button" /></div>
+    <UpdatesPanel />
   </SettingCard>;
 }
 
@@ -108,6 +112,12 @@ interface SettingsProps {
   autoLyrics: boolean;
   exportLyrics: boolean;
   playback: PlaybackPreferences;
+  sleepDeadline?: number;
+  changeSleepTimer(minutes?: SleepMinutes): void;
+  localFallback: boolean;
+  toggleLocalFallback(): void;
+  discord: DiscordPreferences;
+  changeDiscord(options: DiscordPreferences): void;
   showDemos: boolean;
   libraryReady: boolean;
   previewTrack: Track | null;
@@ -288,9 +298,12 @@ export function SettingsPage(props: SettingsProps) {
             <FloatSettings requested={props.nativeFloat} status={props.floatStatus} change={props.changeFloat} />
           </>}
           {section?.id === 'playback' && <>
+            <SettingCard title={t('Таймер сна')}><SleepTimer deadline={props.sleepDeadline} change={props.changeSleepTimer} /></SettingCard>
             <SettingCard title={t("Воспроизведение в Luma")}>
               <ToggleRow title={t("Аудиоэффекты")} detail={t("Применять параметрический эквалайзер к файлам и демотрекам.")} enabled={props.eqEnabled} change={props.toggleEffects} />
               <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openEqualizer} aria-haspopup="dialog">{t("Настроить эквалайзер")}</button></div>
+              <ToggleRow title={t('Резервный локальный файл')} detail={t('Если онлайн-источник не играет, использовать один файл с тем же ISRC, названием, исполнителем и близкой длительностью. Сам плейлист не изменится.')}
+                enabled={props.localFallback} change={props.toggleLocalFallback} />
               <ToggleRow title={t("Автозапуск")} detail={t("Начать воспроизведение локального трека при запуске Luma. Онлайн-потоки автоматически не запускаются.")} enabled={playback.autoPlay} change={() => changePlayback({ ...playback, autoPlay: !playback.autoPlay })} />
               <ToggleRow title={t("Следующий трек автоматически")} detail={t("Если выключено, плеер остановится в конце. Повтор одного трека действует отдельно.")} enabled={playback.autoNext} change={() => changePlayback({ ...playback, autoNext: !playback.autoNext })} />
               <label className="setting-row select-row"><span><strong>{t("Кроссфейд")}</strong><small>{t("Плавный переход при автосмене между двумя файлами. Для онлайн-потоков и повтора одного трека не применяется.")}</small></span>
@@ -322,6 +335,7 @@ export function SettingsPage(props: SettingsProps) {
             <ToggleRow title={t("Показывать уведомления об успехе")} detail={t("Сообщения об импорте, очереди и сохранении. Ошибки видны всегда.")} enabled={playback.successNotices} change={() => changePlayback({ ...playback, successNotices: !playback.successNotices })} />
           </SettingCard>}
           {section?.id === 'integrations' && <>
+            <SettingCard title="Discord Rich Presence"><DiscordSettings options={props.discord} change={props.changeDiscord} /></SettingCard>
             <SettingCard title={t("Виджеты рабочего стола")} detail={t("Компактный плеер поверх окон Windows. Продолжает то же воспроизведение; полноразмерное окно можно вернуть кнопкой или Esc.")}>
               <label className="setting-row select-row"><span><strong>{t("Фон")}</strong><small>{t("Применяется к компактному плееру.")}</small></span>
                 <select value={appearance.widgetBackground} onChange={(event) => changeAppearance({ ...appearance, widgetBackground: event.currentTarget.value as WidgetBackground })}>

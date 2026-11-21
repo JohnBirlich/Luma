@@ -3,6 +3,7 @@ import type { ImportResult, Track } from '../shared/media';
 import type { LibrarySource } from './library';
 import { recordDiagnostic } from './diagnostics';
 
+import { readIsrc } from '../shared/recording-match';
 import { readAudioFormat } from '../shared/audio-quality';
 import { readLocalLyrics } from '../shared/lyrics';
 import type { AudioFormat } from '../shared/audio-quality';
@@ -75,7 +76,7 @@ function makeEntry(record: StoredTrack, persisted: boolean): SessionEntry {
   const info = textVersion === 1 ? { title, artist, album, duration, genres: readGenres(genres) } : trackInfo(title, record, duration);
   return {
     persisted, record,
-    track: { id, ...info, fileName: sourceName(record.signature), format: readAudioFormat(record.format), embeddedLyrics: readLocalLyrics(record.embeddedLyrics)?.plain, audioUrl: URL.createObjectURL(audio), artworkUrl: artwork && URL.createObjectURL(artwork) },
+    track: { id, ...info, isrc: readIsrc(record.isrc), fileName: sourceName(record.signature), format: readAudioFormat(record.format), embeddedLyrics: readLocalLyrics(record.embeddedLyrics)?.plain, audioUrl: URL.createObjectURL(audio), artworkUrl: artwork && URL.createObjectURL(artwork) },
   };
 }
 

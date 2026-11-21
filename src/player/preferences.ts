@@ -1,3 +1,6 @@
+import { readDiscordPreferences } from '../shared/discord-presence';
+import type { DiscordPreferences } from '../shared/discord-presence';
+import { readSearchHistory } from '../shared/search-history';
 import { readStationIds, STATION_IDS } from '../shared/radio';
 import { readLumaPlaylists } from '../shared/luma-playlists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
@@ -29,6 +32,9 @@ export interface Preferences {
   autoLyrics: boolean;
   karaokeStyle: KaraokeStyle;
   autoCatalogSearch: boolean;
+  searchHistory: string[];
+  localFallback: boolean;
+  discord: DiscordPreferences;
   exportLyrics: boolean;
   queue?: QueueState;
   resumeRepeat: Repeat;
@@ -46,7 +52,7 @@ const KEY = 'luma-player:v1';
 export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
-  playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, exportLyrics: false,
+  playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: '', enabled: false }, exportLyrics: false,
   resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
 };
 const persistentIds = (ids: readonly string[]) => ids.filter((id) => !sessionCatalogId(id));
@@ -91,6 +97,9 @@ export function decodePreferences(value: string | null): Preferences {
       autoLyrics: data.autoLyrics === true,
       karaokeStyle: readKaraokeStyle(data.karaokeStyle),
       autoCatalogSearch: data.autoCatalogSearch !== false,
+      searchHistory: readSearchHistory(data.searchHistory),
+      localFallback: data.localFallback === true,
+      discord: readDiscordPreferences(data.discord),
       exportLyrics: data.exportLyrics === true,
       resumeRepeat, resumeShuffle,
       equalizer: readEqualizer(data.equalizer),

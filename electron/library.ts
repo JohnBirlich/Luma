@@ -4,6 +4,7 @@ import { basename, extname, isAbsolute, join } from 'node:path';
 import { parseFile } from 'music-metadata';
 import { lyricsFromTags, MAX_LYRIC_FILE, readLocalLyrics } from '../src/shared/lyrics.js';
 import { audioMime, emptyImport, readGenres, trackInfo, usableArtwork } from '../src/shared/media.js';
+import { readIsrc } from '../src/shared/recording-match.js';
 import { readAudioFormat } from '../src/shared/audio-quality.js';
 import type { AudioFormat } from '../src/shared/audio-quality.js';
 import type { ImportResult, Track } from '../src/shared/media.js';
@@ -62,13 +63,13 @@ export class DesktopLibrary {
   }
 
   list(): Track[] {
-    return this.entries.map(({ id, path, title, artist, album, duration, coverExtension, textVersion, genres, format }) => {
+    return this.entries.map(({ id, path, title, artist, album, duration, coverExtension, textVersion, genres, format, isrc }) => {
       const tags = { title, artist, album };
       const tagsGenres = readGenres(genres);
       // Old profiles are repaired for display without rewriting their metadata or changing track IDs.
       const info = textVersion === 1 ? { ...tags, duration, ...(tagsGenres && { genres: tagsGenres }) } : trackInfo(basename(path), tags, duration);
       return {
-        id, ...info, fileName: basename(path), format: readAudioFormat(format), audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
+        id, ...info, isrc: readIsrc(isrc), fileName: basename(path), format: readAudioFormat(format), audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
         artworkUrl: coverExtension ? `${APP_ORIGIN}/media/cover/${id}` : undefined,
       };
     });

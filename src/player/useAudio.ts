@@ -26,7 +26,7 @@ interface Transition {
   next(current: Track): Track | undefined;
   advance(id: string): void;
 }
-interface Deck { audio: HTMLAudioElement; track: Track; listening?: ListeningClock }
+interface Deck { audio: HTMLAudioElement; track: Track; listening?: ListeningClock; requested?: boolean }
 function markListening(deck: Deck) {
   if (!window.luma?.lastfm || deck.audio.paused || deck.listening) return;
   deck.listening = ListeningClock.start(deck.track, Math.floor(Date.now() / 1000));
@@ -105,7 +105,7 @@ function unload(audio: HTMLAudioElement) {
   if (audio.getAttribute('src')) { audio.removeAttribute('src'); audio.load(); }
 }
 
-export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQuality, nativeFloat: boolean, ended: RefObject<() => void>, trackStarted: (id: string) => void, transition: RefObject<Transition>) {
+export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQuality, nativeFloat: boolean, ended: RefObject<() => void>, trackStarted: (id: string) => void, transition: RefObject<Transition>, recover: RefObject<(track: Track) => boolean>) {
   const ref = useRef<HTMLAudioElement>(null);
   const blendRef = useRef<HTMLAudioElement>(null);
   const streamRef = useRef<HTMLAudioElement>(null);
@@ -126,6 +126,12 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
   const errorText = useCallback(() => active.current?.track.online?.source === 'broadcast'
     ? 'Не удалось подключиться к эфиру. Повторите попытку или откройте сайт станции.' : active.current?.track.online
     ? 'Источник не воспроизводит этот трек. Проверьте сеть или откройте страницу записи.' : unavailable, []);
+
+  const recoverSource = useCallback((deck: Deck) => {
+    if (active.current !== deck || !deck.requested || !deck.track.online || deck.track.online.source === 'broadcast') return false;
+    deck.requested = false;
+    return recover.current(deck.track);
+  }, [recover]);
 
   useEffect(() => {
     settings.current = { volume, eq, quality };
@@ -251,16 +257,18 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
         },
         durationchange: ({ track }) => setSnapshot((previous) => ({ ...previous, duration: length(audio, track) })),
         ended: (deck) => {
+          deck.requested = false;
           deck.listening = undefined;
           cancelTransitions();
           setSnapshot((previous) => ({ ...previous, playing: false, loading: false }));
           if (deck.track.online?.source !== 'broadcast') ended.current();
           else unload(audio);
         },
-        error: () => {
+        error: (deck) => {
           if (!audio.error) return;
           cancelTransitions();
           recordDiagnostic('audio.error', { code: audio.error.code });
+          if (recoverSource(deck)) return;
           setSnapshot((previous) => ({ ...previous, playing: false, loading: false, error: errorText() }));
         },
       };
@@ -279,13 +287,14 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
       if (native.current) void native.current.close().then(() => mixer?.context.close()).catch(() => {});
       else if (mixer) void mixer.context.close().catch(() => {});
     };
-  }, [advanceSmoothly, cancelTransitions, ended, errorText, trackStarted]);
+  }, [advanceSmoothly, cancelTransitions, ended, errorText, recoverSource, trackStarted]);
 
   const play = useCallback(async () => {
     const intent = ++playIntent.current;
     const deck = active.current;
     if (!deck) return;
     const { audio, track } = deck;
+    deck.requested = true;
     if (track.online) {
       const hasSource = !!audio.getAttribute('src') && !audio.error;
       const retryOffline = hasSource && audio.paused && !navigator.onLine && !audio.src.startsWith('luma:');
@@ -299,6 +308,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
             ? await window.luma.streamCache.url(track).catch(() => null) : null;
           if (intent !== playIntent.current || active.current !== deck) return;
           if (!cached && !navigator.onLine && !hasSource) {
+            if (recoverSource(deck)) return;
             setSnapshot((previous) => ({ ...previous, playing: false, loading: false, error: 'Устройство вне сети. Для онлайн-треков нужно подключение.' }));
             return;
           }
@@ -338,17 +348,20 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
       if (intent !== playIntent.current || version !== token.current || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
       unload(audio);
       recordDiagnostic('audio.error', { code: 0 });
+      if (recoverSource(deck)) return;
       setSnapshot({ ...stopped, duration: track.duration, error: track.online?.source === 'broadcast' ? errorText() : 'Источник не ответил вовремя. Повторите попытку или откройте страницу записи.' });
     }, 15_000) : undefined;
     void audio.play().catch((error: unknown) => {
       if (intent !== playIntent.current || version !== token.current || (error instanceof DOMException && error.name === 'AbortError')) return;
       const autoplayBlocked = error instanceof DOMException && error.name === 'NotAllowedError';
       recordDiagnostic(autoplayBlocked ? 'audio.blocked' : 'audio.error', { code: audio.error?.code ?? 0 });
+      if (autoplayBlocked) deck.requested = false;
+      else if (recoverSource(deck)) return;
       setSnapshot((previous) => ({
         ...previous, playing: false, loading: false, error: autoplayBlocked ? 'Нажмите «Воспроизвести», чтобы начать.' : errorText(),
       }));
     }).finally(() => window.clearTimeout(deadline));
-  }, [errorText]);
+  }, [errorText, recoverSource]);
 
   const load = useCallback((track: Track | null, autoplay = false) => {
     const previous = active.current;
@@ -380,6 +393,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     pendingOnline.current = null;
     cancelTransitions();
     const deck = active.current;
+    if (deck) deck.requested = false;
     if (deck?.track.online?.source === 'broadcast') {
       unload(deck.audio);
       setSnapshot(stopped);
@@ -402,7 +416,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     const duration = length(deck.audio, deck.track);
     if (duration <= 0) return;
     const time = clamp(relative ? deck.audio.currentTime + seconds : seconds, 0, duration);
-    deck.audio.currentTime = time;
+    try { deck.audio.currentTime = time; } catch { return; }
     setSnapshot((previous) => ({ ...previous, elapsed: time }));
   }, [cancelTransitions]);
   const position = useCallback(() => active.current?.track.online?.source === 'broadcast' ? 0 : active.current?.audio.currentTime ?? 0, []);

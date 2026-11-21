@@ -6,11 +6,12 @@ import { release, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, screen, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, screen, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
 import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
+import { musicLaunchUrl, readMusicLink } from '../dist-electron/src/shared/music-links.js';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
 import { audiusRecording, creatorStream, storageStream } from './fixtures/public-catalogs.mjs';
@@ -51,7 +52,7 @@ const broken = join(profile, 'Без обложки.mp3');
 await writeFile(join(profile, 'Ты здесь.lrc'), '[00:00.00] Локальная строка\n[00:01.25] Следующая строка');
 await writeFile(join(profile, 'Ты здесь.lyrics.txt'), 'Простой текст локальной записи');
 await writeFile(tagged, taggedMp3(sample, {
-  title: 'Òû çäåñü', artist: 'Àðèÿ', album: 'Æèâîé çâóê', picture: { mime: 'image/webp', data: cover },
+  title: 'Òû çäåñü', artist: 'Àðèÿ', album: 'Æèâîé çâóê', isrc: 'USABC1200001', picture: { mime: 'image/webp', data: cover },
 }));
 await writeFile(broken, taggedMp3(sample, {
   title: "Ty Zdes'", picture: { mime: 'image/png', data: Buffer.from('89504e470d0a1a0a', 'hex') },
@@ -60,6 +61,8 @@ try {
   const library = await DesktopLibrary.open(join(profile, 'Luma Player'));
   const { added } = await library.importPaths([tagged, broken]);
   assert.equal(added.length, 2);
+  const localTagged = library.list().find(({ id }) => id === added[0]);
+  assert.equal(localTagged.isrc, 'USABC1200001');
   // An upgraded library has no format fields. Find the fixture by ID: realpath can expand Windows short names.
   const libraryFile = join(profile, 'Luma Player', 'library.json');
   const index = JSON.parse(await readFile(libraryFile, 'utf8'));
@@ -68,6 +71,10 @@ try {
   delete legacyEntry.format;
   await writeFile(libraryFile, JSON.stringify(index));
 } catch (error) { fail(error); }
+const indexedLocal = (await DesktopLibrary.open(join(profile, 'Luma Player'))).list().find(({ fileName }) => fileName === 'Ты здесь.mp3');
+const groupedJamendo = { ...jamendoRecording, id: 'f1a70211-e1f3-48a9-834b-b196122c5bc1', title: indexedLocal.title,
+  creator: indexedLocal.artist, duration: Math.round(indexedLocal.duration * 1000), audio_set: { title: indexedLocal.album }, isrc: indexedLocal.isrc,
+  foreign_landing_url: 'https://www.jamendo.com/track/3111002', url: 'https://prod-1.storage.jamendo.com/?trackid=3111002&format=mp32' };
 const warnings = [];
 app.on('web-contents-created', (_event, contents) => {
   contents.on('console-message', (event) => {
@@ -158,6 +165,8 @@ async function smoke() {
     console.log(`::notice title=WASAPI Float probe::Driver result for stereo 48 kHz Float32 on the runner: ${mode}.`);
   }
   assert.equal(await run('window.luma.lastfm.status().then(({ enabled }) => enabled)'), false);
+  assert.equal(await run('window.luma.discord.status()'), process.platform === 'win32' ? 'off' : 'unsupported');
+  assert.equal(await run('window.luma.updates.install("1.0.0")'), 'unavailable', 'a source build cannot launch an installer');
   assert.equal(first.artist, 'Ария');
   assert.equal(first.album, 'Живой звук');
   assert.equal(first.picture.type, 'image/jpeg');
@@ -169,8 +178,23 @@ async function smoke() {
   })()`);
   assert.deepEqual(dimensions, [384, 384]);
   await waitFor('sidecar LRC has priority over plain lyrics', () => run(`document.querySelector('.lyrics-scroll [aria-current="true"]')?.textContent === 'Локальная строка'`));
-  await run(`(() => { document.querySelector('audio').currentTime = 1.5; })()`);
+  await click('.lyrics-scroll p:nth-child(2) .lyric-line-seek');
+  await waitFor('clicking a timed line seeks on the audio deck', () => run(`Math.abs(document.querySelector('audio').currentTime - 1.25) < .05`));
   await waitFor('seek updates the highlighted line', () => run(`document.querySelector('.lyrics-scroll [aria-current="true"]')?.textContent === 'Следующая строка'`));
+  await click('.hero-action');
+  await waitFor('audio is playing before the sleep timer', () => run(`!document.querySelector('audio').paused`));
+  await click('.sleep-timer-open');
+  await waitFor('sleep timer is reachable from now playing', () => run(`!!document.querySelector('.sleep-timer button')`));
+  await click('.sleep-timer button:first-child');
+  await waitFor('timer has an in-session deadline', () => run(`document.querySelector('.sleep-timer button')?.textContent === 'Отменить таймер'`));
+  await run(`(() => {
+    const original = Date.now;
+    Date.now = () => original() + 6 * 60_000;
+    try { window.dispatchEvent(new Event('focus')); } finally { Date.now = original; }
+  })()`);
+  await waitFor('an expired timer pauses playback and clears itself', () => run(`document.querySelector('audio').paused && document.querySelector('.sleep-timer button')?.textContent === '5 мин'`));
+  await closeSettings();
+  await run(`(() => { document.querySelector('audio').currentTime = 1.5; })()`);
   await run(`(() => {
     const field = document.querySelector('.lyrics-card input[type="file"]');
     const file = new DataTransfer();
@@ -204,6 +228,10 @@ async function smoke() {
     seek.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
   await waitFor('karaoke seek changes the active line', () => run(`document.querySelector('.karaoke-lyrics [aria-current="true"]')?.textContent === 'Локальная строка'`));
+  await click('.karaoke-lyrics .lyrics-scroll p:nth-child(2) .lyric-line-seek');
+  await waitFor('karaoke line click uses the same deck', () => run(`window.testKaraokeAudio === document.querySelector('audio') && Math.abs(window.testKaraokeAudio.currentTime - 1.25) < .05`));
+  await click('.karaoke-lyrics .lyrics-scroll p:first-child .lyric-line-seek');
+  await run(`(() => { window.testKaraokeAudio.currentTime = .5; })()`);
   await run(`[...document.querySelectorAll('.karaoke-sources button')].find((item) => item.textContent === 'Добавить свой текст…').click()`);
   await waitFor('text editor receives focus', () => run(`document.activeElement?.matches('.karaoke-custom textarea')`));
   await fill('.karaoke-custom textarea', '[00:00.10] Своя строка\n[00:02.00] Ещё одна строка');
@@ -591,7 +619,8 @@ async function smoke() {
     }
     if (url.origin === 'https://api.openverse.org' && url.pathname.startsWith('/v1/audio/')) {
       catalogCalls.push(url);
-      const rows = url.searchParams.get('q') === 'fixture-mp3' ? [synced, plain]
+      const rows = url.searchParams.get('q') === 'Живой звук' ? [groupedJamendo]
+        : url.searchParams.get('q') === 'fixture-mp3' ? [synced, plain]
         : url.searchParams.get('source') === 'jamendo' ? [jamendoRecording] : [jamendoRecording, commonsRecording];
       return Response.json(url.pathname === '/v1/audio/' ? { results: rows } : [...rows, synced, plain].find((item) => url.pathname.endsWith(`/${item.id}/`)), { headers: fixtureHeaders });
     }
@@ -784,6 +813,8 @@ async function smoke() {
       const homeSearchStart = catalogCalls.length;
       const homeAudiusStart = audiusCalls.length;
       await fill('.hub-search input', 'Ты здесь');
+      await run(`(() => { document.querySelector('.hub-search input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true })); })()`);
+      await waitFor('explicit queries are kept on the device', async () => (await preferences())?.searchHistory?.[0] === 'Ты здесь');
       await waitFor('native search finds a local track', () => run(`document.querySelector('.hub-track strong')?.textContent === 'Ты здесь'`));
       assert.equal(await run(`!!document.querySelector('.vk-track-matches')`), false);
       await waitFor('Home finds local and online matches despite a failed catalog', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 3
@@ -807,7 +838,22 @@ async function smoke() {
       })()`));
       const homeImport = '.hub-top-actions [data-playlist-import]';
       assert.deepEqual(await run(`[...document.querySelectorAll('.hub-top-actions button')].map(button => [button.textContent.trim(), button.getAttribute('aria-label')])`),
-        [['', 'Добавить музыку'], ['', 'Импорт из сервисов'], ['', 'Миксы Luma']]);
+        [['', 'Добавить музыку'], ['', 'Импорт из сервисов'], ['', 'Открыть музыкальную ссылку'], ['', 'Миксы Luma']]);
+      await click('[data-open-music-link]');
+      await waitFor('link dialog accepts pasted links', () => run(`!!document.querySelector('.music-link-dialog[open]')`));
+      await fill('.music-link-dialog input', 'https://music.yandex.ru/album/42/track/51?utm_source=fixture');
+      await click('.music-link-dialog button[type="submit"]');
+      await waitFor('Yandex track is recognized inside Luma', () => run(`!!document.querySelector('.music-link-target[data-provider="yandex"]')`));
+      assert.equal(opened.length, 0, 'parsing never opens the source');
+      await click('.music-link-dialog header button');
+      const vkLink = readMusicLink('https://vk.com/audio?z=audio_playlist-31_4%2FaShare');
+      app.emit('second-instance', {}, [process.execPath, '--', musicLaunchUrl(vkLink)]);
+      await waitFor('Windows handoff queues a VK playlist in the existing app', () => run(`!!document.querySelector('.music-link-dialog[open] [data-provider="vk"]')`));
+      assert.equal(opened.length, 0);
+      await click('.music-link-dialog .music-link-target a');
+      assert.deepEqual(opened.splice(0), [vkLink.url]);
+      await click('.music-link-dialog header button');
+      assert.equal(await run(`window.luma.musicLinks.openBrowser('https://example.invalid/').then(() => false, () => true)`), true);
       await run(`document.querySelector('${homeImport}').focus()`);
       await click(homeImport);
       await waitFor('Home shortcut opens the service picker', () => run(`!!document.querySelector('.playlist-import[open] [data-source="apple"]')`));
@@ -851,6 +897,15 @@ async function smoke() {
       await loadFile(playlistFile, 'Playlist1.json', jsonPlaylist);
       await waitFor('playlist import previews one match, one duplicate and one missing track', () => run(`!!document.querySelector('.playlist-match[data-status="match"]')
         && !!document.querySelector('.playlist-match[data-status="duplicate"]') && !!document.querySelector('.playlist-match[data-status="unmatched"]')`));
+      await click(`${importer} .playlist-import-preview li:first-child summary`);
+      await select(`${importer} .playlist-import-preview li:first-child select`, 'skip');
+      await waitFor('skipping the first match frees the later duplicate', () => run(`document.querySelector('.playlist-import-preview li:first-child .playlist-match')?.dataset.status === 'skipped'
+        && document.querySelector('.playlist-import-preview li:nth-child(2) .playlist-match')?.dataset.status === 'match'`));
+      await click(`${importer} .playlist-import-preview li:nth-child(3) summary`);
+      await fill(`${importer} .playlist-import-preview li:nth-child(3) input`, 'Без обложки.mp3');
+      const otherId = await waitFor('row search offers an explicit alternative from the library', () => run(`document.querySelector('.playlist-import-preview li:nth-child(3) select option[value^="id:"]')?.value`));
+      await select(`${importer} .playlist-import-preview li:nth-child(3) select`, otherId);
+      await waitFor('choosing an alternative marks a reviewed row', () => run(`document.querySelector('.playlist-import-preview li:nth-child(3) .playlist-match')?.dataset.status === 'chosen'`));
       assert.deepEqual((await preferences()).playlists, beforeImport.playlists);
       await click(`${importer} .playlist-import-head button`);
       await waitFor('cancel restores focus without saving', () => run(`!document.querySelector('.playlist-import') && document.activeElement?.matches('.playlist-import-actions button:first-child')`));
@@ -874,6 +929,44 @@ async function smoke() {
       assert.equal((await legacyVk.cookies.get({ name: 'lumaFixture' })).length, 0);
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
       assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
+
+      await click('.hub-tile[aria-label="Очередь из файла"]');
+      const sharedPath = join(profile, 'fixture-share.luma.json');
+      const saveShare = dialog.showSaveDialog;
+      try {
+        dialog.showSaveDialog = async () => ({ canceled: false, filePath: sharedPath });
+        await run(`void [...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Поделиться списком').click()`);
+        await waitFor('playlist export writes the bounded metadata file', async () => {
+          const data = await readFile(sharedPath, 'utf8').catch(() => '');
+          return data && JSON.parse(data).tracks.length === 2;
+        });
+        assert.ok(!(await readFile(sharedPath, 'utf8')).match(/fileName|PrivateFolder|audioUrl|artworkUrl|luma:\/\//));
+      } finally { dialog.showSaveDialog = saveShare; }
+      await run(`void [...document.querySelectorAll('.topic-detail button')].find(item => item.textContent === 'Добавить в «Любимое Luma»').click()`);
+      await waitFor('explicit seeding affects just Luma favorites', async () => (await preferences()).favorites.filter((id) => importedIds.includes(id)).length === importedIds.length);
+      await fill('.hub-search input', 'Живой звук');
+      await waitFor('one recording row prefers the local file and exposes the verified online alternative', () => run(`!!document.querySelector('.online-results > li[data-source="file"] .recording-sources')
+        && document.querySelectorAll('.online-results > li').length === 1 && !document.querySelector('.hub-track')`));
+      await click('.recording-sources summary');
+      assert.equal(await run(`!!document.querySelector('.recording-sources[open] li[data-source="jamendo"] .online-credit')`), true);
+      await settings('Воспроизведение');
+      await click('[aria-label="Резервный локальный файл"]');
+      await closeSettings();
+      await waitFor('the grouped row returns after settings', () => run(`!!document.querySelector('.recording-sources summary')`));
+      await click('.recording-sources summary');
+      await click('.recording-sources li[data-source="jamendo"] button:first-child');
+      await waitFor('a failed alternate stream falls back only to the verified local ID', async () => (await preferences()).queue.currentId === indexedLocal.id
+        && await run(`!document.querySelector('audio').paused && !document.querySelector('.online-results > li[data-source="jamendo"]')`));
+      await settings('Воспроизведение');
+      await click('[aria-label="Резервный локальный файл"]');
+      await closeSettings();
+      const copyText = clipboard.writeText;
+      try {
+        let copied = '';
+        clipboard.writeText = (text) => { copied = text; };
+        await run(`window.luma.musicLinks.copy(${JSON.stringify(`https://openverse.org/audio/${jamendoRecording.id}/`)})`);
+        assert.equal(readMusicLink(copied)?.provider, 'openverse');
+      } finally { clipboard.writeText = copyText; }
 
       await click('[data-home-tab="home"]');
       await waitFor('For You genres', () => run(`!!document.querySelector('[aria-label="Жанры"] .hub-tile[aria-label="Джаз"]')`));

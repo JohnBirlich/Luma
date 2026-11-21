@@ -1,6 +1,7 @@
 import { readGenres } from './media.js';
 import type { Track } from './media.js';
 import { cleanTrackText } from './russian.js';
+import { readIsrc } from './recording-match.js';
 
 export const OPENVERSE_API = 'https://api.openverse.org/v1/audio/';
 const OPENVERSE_ORIGIN = new URL(OPENVERSE_API).origin;
@@ -141,8 +142,9 @@ export function readOnlineTrack(value: unknown): OnlineTrack | undefined {
   if (!openverse && row.id !== normalizedId && row.id !== undefined) return;
   const art = openverse ? webUrl(row.artworkUrl) : undefined;
   const cover = art?.origin === OPENVERSE_ORIGIN && art.pathname === `/v1/audio/${id}/thumb/` ? art.origin + art.pathname : undefined;
+  const isrc = readIsrc(row.isrc);
   return {
-    id: normalizedId, title: name, artist: title(row.artist, 'Неизвестный исполнитель'), album: title(row.album, ONLINE_SOURCES[source]),
+    id: normalizedId, ...(isrc && { isrc }), title: name, artist: title(row.artist, 'Неизвестный исполнитель'), album: title(row.album, ONLINE_SOURCES[source]),
     duration: typeof row.duration === 'number' && Number.isFinite(row.duration) ? Math.max(0, Math.min(86400, row.duration)) : 0,
     audioUrl: media, artworkUrl: cover, genres: readGenres(row.genres),
     online: { source, page: page.href, license: license.label, licenseUrl: license.url },
@@ -153,7 +155,7 @@ export function decodeOpenverse(data: unknown): OnlineTrack | undefined {
   const row = catalogObject(data);
   if ((row.source !== 'jamendo' && row.source !== 'wikimedia_audio') || typeof row.id !== 'string' || row.mature === true || (row.category && row.category !== 'music')) return;
   return readOnlineTrack({
-    id: `ov-${row.id}`, title: row.title, artist: row.creator, album: catalogObject(row.audio_set).title,
+    id: `ov-${row.id}`, isrc: row.isrc, title: row.title, artist: row.creator, album: catalogObject(row.audio_set).title,
     duration: typeof row.duration === 'number' ? row.duration / 1000 : 0, genres: row.genres,
     audioUrl: row.url, artworkUrl: row.thumbnail,
     online: { source: row.source, page: row.foreign_landing_url, licenseUrl: row.license_url },

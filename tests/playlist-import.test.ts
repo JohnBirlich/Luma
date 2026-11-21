@@ -74,3 +74,17 @@ test('M3U does not guess when filename and metadata identify different local tra
   assert.equal(previewPlaylist(mix, [tagged, byNameOnly]).rows[0].status, 'ambiguous');
   assert.deepEqual(previewPlaylist(mix, [tagged, { ...byNameOnly, title: tagged.title }]).items.map(({ id }) => id), ['preferred-file']);
 });
+
+test('manual import picks only known usable entries, can skip a match and preserves file order across edits', () => {
+  const [draft] = parse('list.txt', 'Артём — Первый снег\nАртём — Второй снег\nАртём — Незнакомый');
+  const a = local(), b = local('live', { album: 'Вживую' }), c = local('second', { title: 'Второй снег' });
+  const files = [a, b, c, local('demo', { demo: true })];
+  const before = previewPlaylist(draft, files);
+  assert.deepEqual(before.rows[0].candidates, [a, b]);
+  assert.equal(before.rows[0].status, 'ambiguous');
+  const picks = new Map<number, string | null>([[0, b.id], [1, null], [2, c.id]]);
+  const edited = previewPlaylist(draft, files, picks);
+  assert.deepEqual(edited.items, [b, c]);
+  assert.deepEqual(edited.rows.map(({ status }) => status), ['chosen', 'skipped', 'chosen']);
+  assert.deepEqual(previewPlaylist(draft, [...files, local('audius-aaa')], new Map([[0, 'audius-aaa'], [1, 'demo'], [2, 'invented']])).items, []);
+});

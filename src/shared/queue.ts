@@ -25,6 +25,13 @@ export function appendToQueue(queue: QueueState, ids: string[]): QueueState {
   };
 }
 
+/** Replace the current queue slot without duplicating the fallback elsewhere in the queue. */
+export function replaceCurrent(queue: QueueState, expected: string, replacement: string): QueueState {
+  if (queue.currentId !== expected || expected === replacement || !queue.order.includes(expected)) return queue;
+  const replace = (ids: string[]) => ids.filter((id) => id !== replacement).map((id) => id === expected ? replacement : id);
+  return { ...queue, currentId: replacement, order: replace(queue.order), beforeShuffle: queue.beforeShuffle && replace(queue.beforeShuffle) };
+}
+
 export function removeFromQueue(queue: QueueState, id: string): QueueState {
   const index = queue.order.indexOf(id);
   if (index < 0) return queue;

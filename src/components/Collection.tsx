@@ -1,6 +1,6 @@
 import { useText } from '../i18n/context';
 import { useMemo, useState, useSyncExternalStore } from 'react';
-import { Cloud, CloudOff, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, MicVocal, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, Trash2, X } from 'lucide-react';
+import { Cloud, CloudOff, Clock3, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, MicVocal, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, Share2, Trash2, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { formatCount } from '../shared/customization';
@@ -9,6 +9,8 @@ import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
 import { sessionCatalogId } from '../shared/online';
 import type { OnlineTrack } from '../shared/online';
+import { SearchHistory } from './SearchHistory';
+import type { SearchHistoryProps } from './SearchHistory';
 import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
 import type { CatalogSearchPreferences } from './OnlineMusic';
 import { catalogQuery } from '../data/catalog-search';
@@ -77,6 +79,9 @@ interface NowPlayingProps {
   favorite: boolean;
   toggleFavorite(id: string): void;
   readSpectrum: ReadSpectrum;
+  openSleepTimer(): void;
+  sleepActive: boolean;
+  shareTrack(track: Track): void;
   openAppearance(): void;
   openPresentation(): void;
   openKaraoke(): void;
@@ -107,6 +112,10 @@ export function NowPlayingCard(props: NowPlayingProps) {
         <h2 id="home-now-title">{t("Сейчас играет")}</h2>
         <div className="page-actions">
           <button type="button" className="button outline-button scene-open" onClick={props.openAppearance} aria-label={t("Оформление экрана «Сейчас играет»")} title={t("Оформление")} aria-haspopup="dialog"><Palette size={17} /></button>
+          <button type="button" className="button outline-button sleep-timer-open" onClick={props.openSleepTimer} aria-pressed={props.sleepActive}
+            aria-label={t('Таймер сна')} title={t('Таймер сна')}><Clock3 size={17} /></button>
+          {track && !track.demo && track.online?.source !== 'broadcast' && !sessionCatalogId(track.id) && <button type="button" className="button outline-button"
+            onClick={() => props.shareTrack(track)} aria-label={t('Поделиться треком')} title={t('Поделиться треком')}><Share2 size={16} /></button>}
           {track && !track.demo && !track.online && <button type="button" className="button outline-button track-details-button" onClick={() => props.editDetails(track.id)}
             aria-label={t("Редактировать данные трека")} title={t("Редактировать данные трека")} aria-haspopup="dialog"><Pencil size={16} /></button>}
           {track && track.online?.source !== 'broadcast' && track.online?.source !== 'audius' && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
@@ -146,7 +155,7 @@ export function NowPlayingCard(props: NowPlayingProps) {
   );
 }
 
-interface LibraryPageProps extends CatalogSearchPreferences {
+interface LibraryPageProps extends CatalogSearchPreferences, SearchHistoryProps {
   visible: boolean;
   tracks: Track[];
   currentId: string | null;
@@ -203,6 +212,30 @@ export function LibraryPage(props: LibraryPageProps) {
   const catalogTerm = isSearch ? catalogQuery(search) : '';
   const results = useMemo(() => term ? indexed.filter(({ text }) => text.includes(term)).map(({ track }) => track) : isSearch ? [] : scope, [scope, indexed, term, isSearch]);
   const isList = props.layout === 'list';
+  const libraryResults = (items: Track[]) => <>
+      {(!isSearch || items.length > 0) && <div className="library-caption">
+        <div><Disc3 size={16} />{trackCount(items.length, props.fullNumbers, t.language)}</div>
+        <div className="library-actions">
+          <button className="text-button library-play-all" onClick={() => { if (isSearch) props.rememberSearch(search); props.playAll(items); }} type="button" aria-label={t("Воспроизвести все")} title={t("Воспроизвести все")} disabled={!items.length}>
+            <Play size={14} fill="currentColor" /> <span>{t("Воспроизвести все")}</span>
+          </button>
+          <div className="layout-toggle" role="group" aria-label={t("Вид медиатеки")}>
+            <button className="icon-button" type="button" aria-pressed={isList} aria-label={t("Списком")} title={t("Списком")} onClick={() => props.changeLayout('list')}><List size={17} /></button>
+            <button className="icon-button" type="button" aria-pressed={!isList} aria-label={t("Плиткой")} title={t("Плиткой")} onClick={() => props.changeLayout('grid')}><LayoutGrid size={16} /></button>
+          </div>
+        </div>
+      </div>}
+      {items.length ? <div className={isList ? 'track-list' : 'track-grid library-grid'}>
+        {items.map((track) => <TrackCard key={track.id} track={track} active={track.id === props.currentId} playing={props.playing} row={isList}
+          play={(id) => { if (isSearch) props.rememberSearch(search); props.play(id); }} add={props.add} editCover={props.editCover} editDetails={props.editDetails} remove={props.remove} favorite={props.favorites.has(track.id)} toggleFavorite={props.toggleFavorite} disliked={props.disliked.has(track.id)} toggleDislike={props.toggleDislike} />)}
+      </div> : isSearch && term && !results.length ? <p className="search-local-empty">{t("В медиатеке нет совпадений.")}</p> : !isSearch && <div className="empty-library">
+        <div>{isRecent ? <History size={27} /> : isFavorites ? <Heart size={27} /> : scopeId === 'online' ? <Cloud size={27} /> : <Music2 size={27} />}</div><h2>{term ? t("Ничего не нашлось") : isRecent ? t("История пока пуста") : isFavorites ? t("Сохраните любимые треки") : scopeId === 'online' ? t("Нет сохранённых онлайн-треков") : t("Здесь будет ваша музыка")}</h2>
+        <p>{term ? t("Попробуйте поискать по части названия или имени исполнителя.") : isRecent ? t("Прослушанные треки появятся здесь, если в настройках включена история.") : isFavorites ? t("Нажмите на сердце рядом с треком или на экране «Сейчас играет».") : scopeId === 'online' ? t("Найдите запись в онлайн-поиске или вставьте ссылку Openverse выше.") : t("Перетащите аудиофайлы в окно или выберите их на компьютере.")}</p>
+        {!term && (isFavorites || isRecent ? <button type="button" className="button outline-button" onClick={props.goToLibrary}>{t("Открыть медиатеку")}{" "}<ArrowRight size={16} /></button>
+          : scopeId === 'online' ? <button type="button" className="button outline-button" onClick={props.openSearch}>{t("Открыть поиск")}{" "}<Search size={16} /></button>
+          : <button type="button" className="button outline-button" onClick={props.addMusic} disabled={props.busy}><Plus size={17} />{" "}{t("Выбрать файлы")}</button>)}
+      </div>}
+  </>;
   return (
     <div className="page library-page">
       <header className="page-header">
@@ -236,6 +269,7 @@ export function LibraryPage(props: LibraryPageProps) {
         <div className="library-search">
           <Search size={18} />
           <input type="search" placeholder={t("Трек, исполнитель, альбом или жанр…")} aria-label={t(isSearch ? "Поиск музыки" : "Поиск по медиатеке")} maxLength={140} value={search}
+            onKeyDown={(event) => { if (isSearch && event.key === 'Enter' && !composing && !event.nativeEvent.isComposing) props.rememberSearch(search); }}
             onChange={(event) => setSearch(event.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} />
           {search && <button className="icon-button" type="button" onClick={() => setSearch('')} aria-label={t("Очистить поиск")}><X size={16} /></button>}
         </div>
@@ -245,30 +279,12 @@ export function LibraryPage(props: LibraryPageProps) {
         </button>}
       </div>
       {isSearch && <div className="search-scope"><span>{t(props.autoCatalogSearch ? 'Медиатека и онлайн-каталоги' : 'Поиск в медиатеке')}</span><button className="text-button" type="button" onClick={props.openHome}><Radio size={14} />{" "}{t("Вернуться на главную")}</button></div>}
-      {(!isSearch || results.length > 0) && <div className="library-caption">
-        <div><Disc3 size={16} />{trackCount(results.length, props.fullNumbers, t.language)}</div>
-        <div className="library-actions">
-          <button className="text-button library-play-all" onClick={() => props.playAll(results)} type="button" aria-label={t("Воспроизвести все")} title={t("Воспроизвести все")} disabled={!results.length}>
-            <Play size={14} fill="currentColor" /> <span>{t("Воспроизвести все")}</span>
-          </button>
-          <div className="layout-toggle" role="group" aria-label={t("Вид медиатеки")}>
-            <button className="icon-button" type="button" aria-pressed={isList} aria-label={t("Списком")} title={t("Списком")} onClick={() => props.changeLayout('list')}><List size={17} /></button>
-            <button className="icon-button" type="button" aria-pressed={!isList} aria-label={t("Плиткой")} title={t("Плиткой")} onClick={() => props.changeLayout('grid')}><LayoutGrid size={16} /></button>
-          </div>
-        </div>
-      </div>}
-      {results.length ? <div className={isList ? 'track-list' : 'track-grid library-grid'}>
-        {results.map((track) => <TrackCard key={track.id} track={track} active={track.id === props.currentId} playing={props.playing} row={isList}
-          play={props.play} add={props.add} editCover={props.editCover} editDetails={props.editDetails} remove={props.remove} favorite={props.favorites.has(track.id)} toggleFavorite={props.toggleFavorite} disliked={props.disliked.has(track.id)} toggleDislike={props.toggleDislike} />)}
-      </div> : isSearch && term ? <p className="search-local-empty">{t("В медиатеке нет совпадений.")}</p> : !isSearch && <div className="empty-library">
-        <div>{isRecent ? <History size={27} /> : isFavorites ? <Heart size={27} /> : scopeId === 'online' ? <Cloud size={27} /> : <Music2 size={27} />}</div><h2>{term ? t("Ничего не нашлось") : isRecent ? t("История пока пуста") : isFavorites ? t("Сохраните любимые треки") : scopeId === 'online' ? t("Нет сохранённых онлайн-треков") : t("Здесь будет ваша музыка")}</h2>
-        <p>{term ? t("Попробуйте поискать по части названия или имени исполнителя.") : isRecent ? t("Прослушанные треки появятся здесь, если в настройках включена история.") : isFavorites ? t("Нажмите на сердце рядом с треком или на экране «Сейчас играет».") : scopeId === 'online' ? t("Найдите запись в онлайн-поиске или вставьте ссылку Openverse выше.") : t("Перетащите аудиофайлы в окно или выберите их на компьютере.")}</p>
-        {!term && (isFavorites || isRecent ? <button type="button" className="button outline-button" onClick={props.goToLibrary}>{t("Открыть медиатеку")}{" "}<ArrowRight size={16} /></button>
-          : scopeId === 'online' ? <button type="button" className="button outline-button" onClick={props.openSearch}>{t("Открыть поиск")}{" "}<Search size={16} /></button>
-          : <button type="button" className="button outline-button" onClick={props.addMusic} disabled={props.busy}><Plus size={17} />{" "}{t("Выбрать файлы")}</button>)}
-      </div>}
-      {isSearch && <OnlineSearch key={catalogTerm} query={search} visible={props.visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
-        autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />}
+      {isSearch ? <>
+        <SearchHistory history={props.searchHistory} select={(value) => { setSearch(value); props.rememberSearch(value); }} clear={props.clearSearchHistory} />
+        <OnlineSearch key={catalogTerm} query={search} visible={props.visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
+          library={results} playLibrary={props.play} remember={props.rememberSearch} renderLibrary={libraryResults}
+          autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />
+      </> : libraryResults(results)}
     </div>
   );
 }

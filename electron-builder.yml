@@ -25,6 +25,7 @@ win:
     - nsis
     - portable
 nsis:
+  include: Assets/installer.nsh
   # Preserve the upgrade/uninstall identity of app.lumaplayer.desktop.
   guid: 05d31eca-e044-513b-8c10-678775f8445d
   shortcutName: Luma Player

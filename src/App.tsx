@@ -18,6 +18,7 @@ import { MixesPage } from './components/Mixes';
 import { OnlineCredit } from './components/OnlineMusic';
 import type { HomeTab } from './components/HomePage';
 import type { OnlineAction } from './components/OnlineMusic';
+import { MusicLinkDialog } from './components/MusicLinkDialog';
 import { MenuPage } from './components/Menu';
 import { NowPlayingDialog } from './components/NowPlayingOptions';
 import { PlayerBar } from './components/PlayerBar';
@@ -28,11 +29,15 @@ import { TrackDetailsEditor } from './components/TrackDetailsEditor';
 import { useCoverArt } from './data/cover-art';
 import { demoTracks } from './data/demos';
 import { connectionState, recordDiagnostic, subscribeConnection } from './data/diagnostics';
+import { saveSharedPlaylist } from './data/playlist-share';
+import { musicLaunchUrl, readMusicLink } from './shared/music-links';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
 import type { TrackDetails } from './data/track-details';
 import { useMediaSession } from './player/mediaSession';
-import { activeOnlineRefs, catalogQueueRefs, readPreferences, rememberTrack, savePreferences } from './player/preferences';
+import { activeOnlineRefs, catalogQueueRefs, readPreferences, readFavorites, rememberTrack, savePreferences } from './player/preferences';
+import { useSleepTimer } from './player/useSleepTimer';
+import { verifiedLocalReplacement } from './shared/recording-match';
 import { useAudio } from './player/useAudio';
 import { usePresentation } from './player/usePresentation';
 import { useTrackLyrics } from './player/useTrackLyrics';
@@ -47,10 +52,11 @@ import { dataLocale } from './shared/app-info';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
 import { adjacentStationId, stationTracks, STATION_IDS, tuneStation } from './shared/radio';
 import { MAX_PLAYLISTS, playlistTitle, playlistTrackIds } from './shared/luma-playlists';
+import { rememberSearch } from './shared/search-history';
 import { MAX_ONLINE_TRACKS, readOnlineTrack, sessionCatalogId } from './shared/online';
 import type { OnlineTrack } from './shared/online';
 import type { ImportResult, Track } from './shared/media';
-import { adjacentId, appendToQueue, moveUpcoming, reconcileQueue, removeFromQueue, startQueue, toggleShuffle, upcomingIds } from './shared/queue';
+import { adjacentId, appendToQueue, moveUpcoming, reconcileQueue, removeFromQueue, replaceCurrent, startQueue, toggleShuffle, upcomingIds } from './shared/queue';
 import type { QueueState } from './shared/queue';
 
 type NoticeText = string | ((t: Text) => string);
@@ -99,6 +105,7 @@ export default function App() {
   const [showEqualizer, setShowEqualizer] = useState(false);
   const [showAppearance, setShowAppearance] = useState(false);
   const [importPlaylist, setImportPlaylist] = useState(false);
+  const [musicDialog, setMusicDialog] = useState<{ url?: string }>();
   const [coverTarget, setCoverTarget] = useState<CoverTarget>();
   const { urls: covers, update: updateCover } = useCoverArt();
   const [detailsId, setDetailsId] = useState<string>();
@@ -109,12 +116,19 @@ export default function App() {
   const busy = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const ended = useRef<() => void>(noop);
+  const recover = useRef<(track: Track) => boolean>(() => false);
   const transition = useRef<{ seconds: number; next(track: Track): Track | undefined; advance(id: string): void }>(noTransition);
   const bootPlayback = useRef(false);
   const dropDepth = useRef(0);
   const scrollArea = useRef<HTMLElement>(null);
 
   const { appearance, playback, onlineTracks, onlineRefs, audioQuality } = preferences;
+  const rememberQuery = useCallback((query: string) => setPreferences((data) => {
+    const searchHistory = rememberSearch(data.searchHistory, query);
+    return searchHistory === data.searchHistory ? data : { ...data, searchHistory };
+  }), []);
+  const clearSearchHistory = useCallback(() => setPreferences((data) => ({ ...data, searchHistory: [] })), []);
+
   const [systemLocale, setSystemLocale] = useState(() => dataLocale(navigator.language));
   useEffect(() => {
     void window.luma?.getAppInfo().then(({ systemLocale }) => setSystemLocale(dataLocale(systemLocale, navigator.language)), () => {});
@@ -155,7 +169,7 @@ export default function App() {
   const current = byId.get(queue.currentId ?? '') ?? null;
   const live = current?.online?.source === 'broadcast';
   const detailsTrack = detailsId ? byId.get(detailsId) : undefined;
-  const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance || importPlaylist);
+  const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance || importPlaylist || musicDialog);
   const { kind: presentationKind, show: showStage, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
   const presentationOpen = presentationKind !== null;
   const canUseLyrics = !!current && !live && !sessionCatalogId(current.id);
@@ -167,8 +181,31 @@ export default function App() {
     const recent = rememberTrack(data.recent, id);
     return recent === data.recent ? data : { ...data, recent };
   }), []);
-  const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition);
+  const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition, recover);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
+  const sleepExpired = useCallback(() => setNotice({ message: 'Таймер сна поставил музыку на паузу' }), []);
+  const { deadline: sleepDeadline, change: changeSleepTimer, expire: expireSleep } = useSleepTimer(pause, sleepExpired);
+  useLayoutEffect(() => {
+    recover.current = (failed) => {
+      const state = queueRef.current;
+      if (!preferences.localFallback || state.currentId !== failed.id || expireSleep()) return false;
+      const replacement = verifiedLocalReplacement(failed, collection.filter(({ id }) => !dislikedIds.has(id)));
+      if (!replacement) return false;
+      const next = replaceCurrent(state, failed.id, replacement.id);
+      if (next === state) return false;
+      commit(next);
+      load(replacement, true);
+      setNotice({ message: 'Включён резервный локальный файл', detail: (t) => t('Онлайн-источник недоступен. Играет «{0}» с этого устройства.', replacement.title) });
+      return true;
+    };
+  }, [collection, commit, dislikedIds, expireSleep, load, preferences.localFallback]);
+  const { discord } = preferences;
+  const discordTitle = player.playing && !live && !sessionCatalogId(current?.id) ? current?.title : undefined;
+  const discordArtist = discordTitle ? current?.artist : undefined;
+  useEffect(() => {
+    window.luma?.discord?.update(discord.enabled ? discord.clientId : '', discord.enabled && discordTitle && discordArtist
+      ? { title: discordTitle, artist: discordArtist } : null);
+  }, [discord, discordTitle, discordArtist]);
   const lyrics = useTrackLyrics(canUseLyrics ? current : null, { enabled: !widget && (karaokeOpen || (!presentationOpen && page === 'player' && homeTab === 'home' && !homeQuery.trim())),
     auto: preferences.autoLyrics, connected, playing: player.playing, duration: player.duration });
   const changeWidget = useCallback(async (enabled: boolean) => {
@@ -179,6 +216,22 @@ export default function App() {
     catch { setNotice({ message: "Не удалось переключить режим виджета.", error: true }); }
     finally { switchingWidget.current = false; setWidgetPending(false); }
   }, [presentationOpen]);
+  useEffect(() => {
+    const links = window.luma?.musicLinks;
+    if (!links) return;
+    let subscribed = true;
+    const receive = () => void links.take().then((url) => {
+      if (subscribed && url) setMusicDialog({ url });
+    }).catch(() => {});
+    const unsubscribe = links.onAvailable(receive);
+    receive();
+    return () => { subscribed = false; unsubscribe(); };
+  }, []);
+  useEffect(() => {
+    if (!musicDialog?.url) return;
+    if (presentationOpen) closePresentation();
+    if (widget && !widgetPending) void changeWidget(false);
+  }, [changeWidget, closePresentation, musicDialog, presentationOpen, widget, widgetPending]);
   useEffect(() => window.luma?.window.onWidgetShortcut(() => {
     if (!modalOpen) void changeWidget(!widget);
   }), [changeWidget, modalOpen, widget]);
@@ -272,9 +325,9 @@ export default function App() {
   }, [playTrack, position, seek]);
   useEffect(() => {
     ended.current = () => {
-      if (shouldAdvanceAfterEnd(playback, queueRef.current.repeat)) next(true);
+      if (!expireSleep() && shouldAdvanceAfterEnd(playback, queueRef.current.repeat)) next(true);
     };
-  }, [next, playback]);
+  }, [expireSleep, next, playback]);
   const cancelTransitions = player.cancelTransitions;
   useEffect(() => {
     if (!playback.autoNext || !playback.crossfade) {
@@ -286,12 +339,12 @@ export default function App() {
       seconds: playback.crossfade,
       next(track) {
         const state = queueRef.current;
-        if (state.currentId !== track.id) return;
+        if (state.currentId !== track.id || expireSleep()) return;
         return byId.get(adjacentId(state, 1, true) ?? '');
       },
       advance(id) { commit({ ...queueRef.current, currentId: id }); },
     };
-  }, [byId, cancelTransitions, commit, playback.autoNext, playback.crossfade]);
+  }, [byId, cancelTransitions, commit, expireSleep, playback.autoNext, playback.crossfade]);
   const mediaActions = useMemo(() => ({
     play, pause, ...(!live || connected ? { nexttrack: () => next(), previoustrack: previous } : {}),
     stop: () => { pause(); seek(0); },
@@ -530,7 +583,8 @@ export default function App() {
   }
   function resetCustomization() {
     if (!preferences.showDemos) toggleDemos();
-    setPreferences((data) => ({ ...data, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, nativeFloat: false, autoLyrics: false, exportLyrics: false }));
+    changeSleepTimer();
+    setPreferences((data) => ({ ...data, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, nativeFloat: false, autoLyrics: false, exportLyrics: false, localFallback: false, discord: { ...data.discord, enabled: false } }));
     setNotice({ message: "Оформление и параметры воспроизведения сброшены" });
   }
   function editTrackDetails(id: string) {
@@ -589,6 +643,27 @@ export default function App() {
     load(byId.get(first.id) ?? first, true);
     return true;
   }, [ready, connected, preferences, byId, commit, load]);
+  const sharePlaylist = (title: string, tracks: readonly Track[]) => {
+    void saveSharedPlaylist(title, tracks).then((saved) => {
+      if (saved) setNotice({ message: 'Файл обмена готов', detail: 'В нём только данные о записях, без аудио. Откройте его через «Импорт плейлиста → Luma».' });
+    }).catch(() => setNotice({ message: 'Не удалось сохранить файл обмена.', error: true }));
+  };
+  const shareTrack = (track: Track) => {
+    if (track.demo || sessionCatalogId(track.id) || track.online?.source === 'broadcast') return;
+    const link = track.id.startsWith('ov-') && readOnlineTrack(track)
+      ? readMusicLink(`https://openverse.org/audio/${track.id.slice(3)}/`) : undefined;
+    if (!link) { sharePlaylist(track.title, [track]); return; }
+    const copy = window.luma?.musicLinks ? window.luma.musicLinks.copy(link.url) : navigator.clipboard?.writeText(musicLaunchUrl(link));
+    if (!copy) { sharePlaylist(track.title, [track]); return; }
+    void copy.then(() => setNotice({ message: 'Ссылка для Luma скопирована', detail: 'Её можно открыть в установленной Luma или вставить в окно «Открыть музыкальную ссылку».' }),
+      () => sharePlaylist(track.title, [track]));
+  };
+  const seedFavorites = (tracks: readonly Track[]) => {
+    const ids = new Set(readFavorites(tracks.map(({ id }) => id)));
+    if (!ids.size) return;
+    setPreferences((data) => ({ ...data, favorites: readFavorites([...data.favorites, ...ids]), disliked: data.disliked.filter((id) => !ids.has(id)) }));
+    setNotice({ message: 'Треки добавлены в «Любимое Luma»', detail: 'Лайки на внешних сервисах не изменены.' });
+  };
   function savePlaylist(title: string, items: readonly Track[], existingId?: string) {
     const name = playlistTitle(title);
     if (!ready || !name || !items.length || (!existingId && preferences.playlists.length >= MAX_PLAYLISTS)) return false;
@@ -697,18 +772,20 @@ export default function App() {
           <HomePage tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
             tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
+            searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={page === 'player' && !widget && !modalOpen && !presentationOpen}
             busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
-            openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose}
+            openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose} openMusicLink={() => setMusicDialog({})}
+            sharePlaylist={sharePlaylist} seedFavorites={seedFavorites} openFavorites={() => navigate('favorites')}
             nowPlaying={<NowPlayingCard track={current} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
               playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
-              count={queue.order.length} toggle={toggle}
+              count={queue.order.length} toggle={toggle} shareTrack={shareTrack}
               favorite={!!current && (live ? stationIds : favoriteIds).has(current.id)} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)}
-              openPresentation={showPresentation} openKaraoke={showKaraoke} sceneVisible={page === 'player' && !widget && !presentationOpen && !modalOpen}
+              openPresentation={showPresentation} openKaraoke={showKaraoke} sleepActive={sleepDeadline !== undefined} openSleepTimer={() => { setSettingsSection('playback'); openSettings(); }} sceneVisible={page === 'player' && !widget && !presentationOpen && !modalOpen}
               readSpectrum={player.readSpectrum} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} />}
             lyrics={current && canUseLyrics && !presentationOpen && page === 'player' && (!current.demo || lyrics.attached)
-              ? <LyricsPanel key={current.id} state={lyrics} elapsed={player.elapsed} clock={player.playing ? position : undefined} demo={current.demo} /> : undefined} />
+              ? <LyricsPanel key={current.id} state={lyrics} elapsed={player.elapsed} seek={seek} clock={player.playing ? position : undefined} demo={current.demo} /> : undefined} />
           </Suspense> :
           basePage === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :
           basePage === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers}
@@ -718,6 +795,7 @@ export default function App() {
           <LibraryPage key={`${basePage}:${libraryScope}`} initialScope={basePage === 'library' ? libraryScope : 'all'} fullNumbers={appearance.fullNumbers} tracks={basePage === 'favorites' ? favorites : basePage === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
             visible={page === basePage && !widget && !modalOpen && !presentationOpen}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
+            searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
             mode={basePage === 'favorites' || basePage === 'search' || basePage === 'recent' ? basePage : 'library'} favorites={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
             chooseOnline={chooseOnline} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openHome={() => navigate('player')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
         </div>
@@ -727,6 +805,9 @@ export default function App() {
             nativeFloat={preferences.nativeFloat} floatStatus={player.floatStatus} changeFloat={(nativeFloat) => setPreferences((data) => ({ ...data, nativeFloat }))}
             metered={audioQuality.network === 'auto' ? metered : audioQuality.network === 'metered'}
             autoLyrics={preferences.autoLyrics} exportLyrics={preferences.exportLyrics} showDemos={preferences.showDemos} libraryReady={ready && !working}
+            discord={preferences.discord} changeDiscord={(discord) => setPreferences((data) => ({ ...data, discord }))}
+            sleepDeadline={sleepDeadline} changeSleepTimer={changeSleepTimer} localFallback={preferences.localFallback}
+            toggleLocalFallback={() => setPreferences((data) => ({ ...data, localFallback: !data.localFallback }))}
             previewTrack={current} tint={tint} localCount={localTracks.length} recentCount={preferences.recent.length}
             volumeControls={localControls} eqEnabled={preferences.equalizer.enabled} openEqualizer={openEqualizer} openRecent={() => navigate('recent')}
             clearRecent={() => setPreferences((data) => ({ ...data, recent: [] }))} openDiagnostics={() => navigate('diagnostics')} changeAppearance={changeAppearance}
@@ -768,6 +849,8 @@ export default function App() {
           {visibleNotice && <button type="button" className="icon-button" onClick={() => setNotice(undefined)} aria-label={t("Скрыть уведомление")}><X size={17} /></button>}
         </div>}
       </div>
+      {musicDialog && !widget && !presentationOpen && <MusicLinkDialog key={musicDialog.url ?? 'paste'} initial={musicDialog.url} close={() => setMusicDialog(undefined)}
+        connected={connected} disabled={working || !ready} choose={chooseOnline} />}
       {importPlaylist && <Suspense fallback={null}><PlaylistImport collection={collection} close={() => setImportPlaylist(false)} save={(title, items) => {
         if (!savePlaylist(title, items)) return false;
         setImportPlaylist(false);

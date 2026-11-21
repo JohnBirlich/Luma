@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, FileUp, ListMusic, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
+import { ChevronRight, FileUp, Heart, ListMusic, Pencil, Play, Plus, Share2, Trash2, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { MAX_PLAYLIST_TRACKS, MAX_PLAYLISTS, playlistTitle } from '../shared/luma-playlists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
@@ -12,6 +12,9 @@ interface PlaylistsProps {
   currentId: string | null; playing: boolean; busy: boolean; connected: boolean;
   play(id: string, toggleCurrent?: boolean): void; playAll(tracks: Track[], start?: string): boolean;
   save(title: string, tracks: readonly Track[], id?: string): boolean; remove(id: string): void; openImport(): void;
+  share(title: string, tracks: readonly Track[]): void;
+  seedFavorites(tracks: readonly Track[]): void;
+  openFavorites(): void;
 }
 
 function PlaylistEditor({ playlist, source, close, save }: {
@@ -54,7 +57,7 @@ function PlaylistEditor({ playlist, source, close, save }: {
   </form>;
 }
 
-export function MyPlaylists({ items, byId, collection, currentId, playing, busy, connected, play, playAll, save, remove, openImport }: PlaylistsProps) {
+export function MyPlaylists({ items, byId, collection, currentId, playing, busy, connected, play, playAll, save, remove, openImport, share, seedFavorites, openFavorites }: PlaylistsProps) {
   const t = useText();
   const [active, setActive] = useState<string>();
   const [editor, setEditor] = useState<'new' | LumaPlaylist>();
@@ -69,6 +72,7 @@ export function MyPlaylists({ items, byId, collection, currentId, playing, busy,
     action={<div className="playlist-import-actions">
       <button type="button" className="text-button" disabled={busy || items.length >= MAX_PLAYLISTS} onClick={openImport} aria-haspopup="dialog"><FileUp size={16} />{t('Импортировать')}</button>
       <button type="button" className="text-button" disabled={busy || !collection.length || items.length >= MAX_PLAYLISTS} onClick={() => setEditor(editor === 'new' ? undefined : 'new')}><Plus size={16} />{t('Создать плейлист')}</button>
+      <button type="button" className="text-button" onClick={openFavorites}><Heart size={16} />{t('Любимое Luma')}</button>
     </div>}>
     {editor && <PlaylistEditor key={editor === 'new' ? 'new' : editor.id} close={() => setEditor(undefined)} playlist={editor === 'new' ? undefined : editor} save={save} source={source} />}
     {items.length > 0 ? <div className="hub-rail hub-topic-rail">{items.map((item, index) => <Tile key={item.id} title={item.title} description={t('Треков: {0}', item.trackIds.length)}
@@ -81,6 +85,8 @@ export function MyPlaylists({ items, byId, collection, currentId, playing, busy,
       <div className="topic-actions">
         <button className="button primary-button" disabled={!available.length || busy} type="button" onClick={() => playAll(available)}><Play size={15} />{t('Слушать плейлист')}</button>
         <button className="button outline-button" type="button" disabled={busy} onClick={() => setEditor(playlist)}><Pencil size={15} />{t('Редактировать плейлист')}</button>
+        <button className="button outline-button" disabled={busy || !tracks.length} type="button" onClick={() => seedFavorites(tracks)}><Heart size={15} />{t('Добавить в «Любимое Luma»')}</button>
+        <button className="button outline-button" disabled={busy || !tracks.some(({ demo }) => !demo)} type="button" onClick={() => share(playlist.title, tracks)}><Share2 size={15} />{t('Поделиться списком')}</button>
         <button className="button outline-button" type="button" onClick={() => setConfirm(!confirm)} aria-expanded={confirm}><Trash2 size={15} />{t('Удалить плейлист')}</button>
       </div>
       {confirm && <div className="topic-actions"><p>{t('Файлы и записи в медиатеке останутся на месте.')}</p>

@@ -3,7 +3,10 @@ import { ArrowLeft, ChevronLeft, ChevronRight, FileText, FileUp, ListMusic, X } 
 import { useText } from '../i18n/context';
 import { MAX_PLAYLIST_TRACKS, playlistTitle } from '../shared/luma-playlists';
 import type { Track } from '../shared/media';
-import { IMPORT_STATUS, MAX_PLAYLIST_IMPORT_BYTES, playlistImportFormat, previewPlaylist, readPlaylistImport } from '../shared/playlist-import';
+import { formatTime } from '../shared/media';
+import { ONLINE_SOURCES } from '../shared/online';
+import { musicSearchKey } from '../shared/russian';
+import { canChooseForPlaylist, IMPORT_STATUS, MAX_PLAYLIST_IMPORT_BYTES, playlistImportFormat, previewPlaylist, readPlaylistImport } from '../shared/playlist-import';
 import type { PlaylistDraft } from '../shared/playlist-import';
 import spotify from '../assets/playlist-sources/spotify.svg';
 import appleMusic from '../assets/playlist-sources/apple-music.svg';
@@ -15,6 +18,7 @@ import yandexMusic from '../assets/playlist-sources/yandex-music.png';
 import './playlist-import.css';
 
 const sources = [
+  { id: 'luma', name: 'Luma', icon: ListMusic, hint: '.luma.json' },
   { id: 'spotify', name: 'Spotify', logo: spotify, hint: 'Playlist*.json / CSV / TXT' },
   { id: 'apple', name: 'Apple Music', logo: appleMusic, hint: 'TXT / CSV' },
   { id: 'deezer', name: 'Deezer', logo: deezer, hint: 'CSV / TXT' },
@@ -27,6 +31,35 @@ const sources = [
 ] as const;
 type ImportSource = typeof sources[number];
 const PAGE_SIZE = 10;
+
+function MatchOptions({ title, choices, candidates, match, choice, change }: {
+  title: string; choices: readonly Track[]; candidates: readonly Track[]; match?: Track; choice?: string | null;
+  change(value: string | null | undefined): void;
+}) {
+  const t = useText();
+  const [search, setSearch] = useState('');
+  const term = musicSearchKey(search);
+  const found: Track[] = [];
+  if (term) for (const track of choices) {
+    if (musicSearchKey(`${track.title} ${track.artist} ${track.album} ${track.fileName ?? ''}`).includes(term)) found.push(track);
+    if (found.length >= 24) break;
+  }
+  const options = [...new Map([...(match ? [match] : []), ...candidates, ...found].map((track) => [track.id, track])).values()];
+  return <details className="playlist-match-options">
+    <summary>{t('Выбрать или пропустить')}</summary>
+    <label className="playlist-import-field">{t('Поиск другого варианта')}<input type="search" maxLength={140} value={search}
+      onChange={(event) => setSearch(event.currentTarget.value)} /></label>
+    <label className="playlist-import-field">{t('Совпадение для «{0}»', title)}<select value={choice === null ? 'skip' : choice ? `id:${choice}` : 'auto'}
+      onChange={(event) => { const value = event.currentTarget.value; change(value === 'skip' ? null : value.startsWith('id:') ? value.slice(3) : undefined); }}>
+      <option value="auto">{t('Автоматически (только локальный файл)')}</option>
+      <option value="skip">{t('Пропустить трек')}</option>
+      {options.map((track) => <option value={`id:${track.id}`} key={track.id}>
+        {[track.title, track.artist, track.album, track.duration > 0 && formatTime(track.duration), track.fileName || (track.online && track.online.source !== 'broadcast' ? ONLINE_SOURCES[track.online.source] : t('Файл'))].filter(Boolean).join(' · ')}
+      </option>)}
+    </select></label>
+    {term && !found.length && <small>{t('Нет подходящих треков.')}</small>}
+  </details>;
+}
 
 export function PlaylistImport({ collection, save, close }: {
   collection: readonly Track[]; save(title: string, tracks: readonly Track[]): boolean; close(): void;
@@ -45,8 +78,18 @@ export function PlaylistImport({ collection, save, close }: {
   const [page, setPage] = useState(0);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState('');
+  const [choices, setChoices] = useState<Map<number, string | null>>(() => new Map());
   const draft = drafts[list];
-  const preview = useMemo(() => draft ? previewPlaylist(draft, collection) : undefined, [draft, collection]);
+  const available = useMemo(() => collection.filter(canChooseForPlaylist), [collection]);
+  const preview = useMemo(() => draft ? previewPlaylist(draft, collection, choices) : undefined, [draft, collection, choices]);
+  function resolve(index: number, value: string | null | undefined) {
+    setChoices((prior) => {
+      const next = new Map(prior);
+      if (value === undefined) next.delete(index); else next.set(index, value);
+      return next;
+    });
+    setError('');
+  }
   const step = preview ? 3 : source ? 2 : 1;
 
   useLayoutEffect(() => {
@@ -60,7 +103,7 @@ export function PlaylistImport({ collection, save, close }: {
   }, [step]);
 
   function select(next: PlaylistDraft[], index: number) {
-    setDrafts(next); setList(index); setTitle(next[index]?.title || t('Импортированный плейлист')); setPage(0); setError('');
+    setChoices(new Map()); setDrafts(next); setList(index); setTitle(next[index]?.title || t('Импортированный плейлист')); setPage(0); setError('');
   }
   function goBack() {
     request.current++;
@@ -74,7 +117,9 @@ export function PlaylistImport({ collection, save, close }: {
     try {
       if (file.size > MAX_PLAYLIST_IMPORT_BYTES) throw new Error('Выберите файл плейлиста размером до 2 МБ.');
       const format = playlistImportFormat(file.name);
-      if (!format || (provider.id === 'm3u' ? format !== 'm3u' : format === 'm3u' || (format === 'spotify-json' && provider.id !== 'spotify'))) {
+        const allowed = provider.id === 'm3u' ? format === 'm3u' : provider.id === 'luma' ? format === 'luma-json'
+        : format === 'csv' || format === 'txt' || (format === 'spotify-json' && provider.id === 'spotify');
+      if (!format || !allowed) {
         throw new Error('Формат не подходит для выбранного источника.');
       }
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -109,10 +154,11 @@ export function PlaylistImport({ collection, save, close }: {
         <h3>{t(source.name)}</h3>
         <p>{t(source.id === 'spotify' ? 'Откройте Playlist*.json из архива Spotify или экспорт CSV / TXT.'
           : source.id === 'apple' ? 'В приложении «Музыка» экспортируйте список в текстовый файл с данными о треках или выберите CSV.'
+          : source.id === 'luma' ? 'Выберите полученный файл .luma.json, затем проверьте совпадения с вашей медиатекой.'
           : source.id === 'm3u' ? 'Откройте M3U / M3U8 со списком локальных аудиофайлов. Luma не открывает пути, ссылки или потоки из списка.'
           : 'Выберите CSV / TXT, экспортированный из сервиса или инструмента переноса плейлистов.')}</p>
-        {source.id !== 'm3u' && <p>{t('Для CSV нужны колонки «Название» и «Исполнитель», альбом необязателен. В TXT — «Исполнитель — Название» на каждой строке.')}</p>}
-        <input type="file" ref={input} hidden accept={source.id === 'spotify' ? '.json,.csv,.txt' : source.id === 'm3u' ? '.m3u,.m3u8' : '.csv,.txt'} onChange={(event) => {
+        {source.id !== 'm3u' && source.id !== 'luma' && <p>{t('Для CSV нужны колонки «Название» и «Исполнитель», альбом необязателен. В TXT — «Исполнитель — Название» на каждой строке.')}</p>}
+        <input type="file" ref={input} hidden accept={source.id === 'spotify' ? '.json,.csv,.txt' : source.id === 'luma' ? '.json' : source.id === 'm3u' ? '.m3u,.m3u8' : '.csv,.txt'} onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = '';
           if (file) void read(file, source);
@@ -127,14 +173,19 @@ export function PlaylistImport({ collection, save, close }: {
         </select></label>}
         <label className="playlist-import-field">{t('Название плейлиста')}<input value={title} maxLength={64} onChange={(event) => { setTitle(event.currentTarget.value); setError(''); }} /></label>
         <p className="playlist-import-summary" role="status">{t('Будет добавлено {0} из {1} записей', preview.items.length, preview.rows.length + draft.skipped)}</p>
-        <p>{t('Сохранятся только однозначно сопоставленные локальные треки, в исходном порядке (до {0}).', MAX_PLAYLIST_TRACKS)}</p>
+        <p>{t('Проверьте совпадения. Можно выбрать другой трек из медиатеки или пропустить строку. Порядок исходного списка сохранится (до {0}).', MAX_PLAYLIST_TRACKS)}</p>
         {draft.skipped > 0 && <p>{t('Пропущено строк без подходящих данных: {0}', draft.skipped)}</p>}
-        {!preview.items.length && <p>{t('Нет однозначных совпадений. Добавьте аудиофайлы в Luma и повторите импорт.')}</p>}
+        {!preview.items.length && <p>{t('Пока не выбран ни один трек. Проверьте варианты в списке.')}</p>}
         <ol className="playlist-import-preview" start={page * PAGE_SIZE + 1}>
-          {preview.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(({ ref, match, status }, index) => <li key={page * PAGE_SIZE + index}>
-            <span><strong>{match?.title ?? ref.title}</strong><small>{[match?.artist ?? ref.artist, match?.album ?? ref.album].filter(Boolean).join(' · ')}</small></span>
-            <span className="playlist-match" data-status={status}>{t(IMPORT_STATUS[status])}</span>
-          </li>)}
+          {preview.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(({ ref, match, status, candidates }, index) => {
+            const row = page * PAGE_SIZE + index;
+            return <li key={`${list}:${row}`}>
+              <span><strong>{ref.title}</strong><small>{[ref.artist, ref.album].filter(Boolean).join(' · ')}</small>
+                {match && choices.get(row) && <small>{t('В плейлист: {0}', `${match.artist} — ${match.title}`)}</small>}</span>
+              <span className="playlist-match" data-status={status}>{t(IMPORT_STATUS[status])}</span>
+              <MatchOptions title={ref.title} choices={available} candidates={candidates} match={match} choice={choices.get(row)} change={(value) => resolve(row, value)} />
+            </li>;
+          })}
         </ol>
 
       </>}

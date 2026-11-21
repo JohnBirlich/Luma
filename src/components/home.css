@@ -224,3 +224,15 @@
 .station-extras { margin-top: 22px; }
 .station-extras > h3 { font: 740 15px/1.2 var(--display); }
 @media (max-width: 560px) { .playlist-import-actions { justify-content: start; } }
+.search-history { color: var(--muted); font-size: .82rem; }
+.search-history > summary, .recording-sources > summary { display: flex; align-items: center; gap: 6px; width: fit-content; cursor: pointer; }
+.search-history > summary::-webkit-details-marker, .recording-sources > summary::-webkit-details-marker { display: none; }
+.search-history > summary:hover, .recording-sources > summary:hover { color: var(--accent-light); }
+.search-history-entries { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+.search-history-entries .button { min-height: 30px; padding: 4px 9px; overflow-wrap: anywhere; max-width: 100%; }
+.library-page .search-history { margin: 9px 0; }
+.recording-sources { grid-column: 2 / -1; font-size: .8rem; color: var(--muted); }
+.recording-sources > summary { flex-wrap: wrap; }
+.recording-sources > summary small { border: 1px solid var(--line); border-radius: 20px; padding: 2px 6px; color: var(--accent-light); }
+.recording-sources ul { list-style: none; padding: 0; margin: 5px 0 0; }
+.recording-sources li { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 0; }

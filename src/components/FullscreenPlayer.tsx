@@ -101,7 +101,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
               </div>
             </div>
           </div>
-          <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} clock={props.clock} karaoke={{ style: props.karaokeStyle, change: props.changeKaraokeStyle, tools: karaokeTools }} demo={track.demo} />
+          <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} clock={props.clock} seek={props.seek} karaoke={{ style: props.karaokeStyle, change: props.changeKaraokeStyle, tools: karaokeTools }} demo={track.demo} />
         </div>
         {queueVisible && <UpcomingTracks tracks={props.upcoming} repeat={props.repeat} autoNext={props.autoNext} fullNumbers={appearance.fullNumbers} play={props.playUpcoming} />}
       </div> : <div className={`immersive-main${queueVisible ? ' immersive-with-queue' : ''}`}>

@@ -1,6 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, safeStorage, session, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APP_NAME, APP_USER_MODEL_ID, RELEASES_URL } from '../src/shared/app-info.js';
@@ -23,11 +23,16 @@ import { isMetadataPage } from '../src/shared/recognition.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
 import { isStationPage } from '../src/shared/radio.js';
+import { musicLaunchUrl, musicLinkArgument, readMusicLink } from '../src/shared/music-links.js';
+import { readSignerSha256 } from '../src/shared/release-updates.js';
+import { readSharedPlaylist } from '../src/shared/playlist-share.js';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
+import { DesktopDiscord } from './discord-presence.js';
 import { DesktopFloatOutput } from './float-output.js';
 import { StreamCache } from './stream-cache.js';
 import { createProtocolHandler } from './protocol.js';
+import { WindowsUpdates } from './windows-update.js';
 import { fetchAudius } from './audius-network.js';
 
 protocol.registerSchemesAsPrivileged([{
@@ -42,10 +47,13 @@ const devUrl = getDevUrl();
 app.setPath('userData', join(app.getPath('appData'), devUrl ? 'Luma Player Dev' : 'Luma Player'));
 let window: BrowserWindow | null = null;
 let journal: DesktopDiagnostics | undefined;
+let updates: WindowsUpdates | undefined;
+let pendingMusicLink = musicLinkArgument(process.argv.slice(1));
 let changeWidget: ((enabled: boolean) => boolean) | undefined;
 let changeFullscreen: ((fullscreen: boolean) => void) | undefined;
 const floatOutput = new DesktopFloatOutput(process.platform === 'win32' ? (app.isPackaged
   ? join(process.resourcesPath, 'audio', 'LumaFloat.exe') : join(app.getAppPath(), 'dist-native', 'LumaFloat.exe')) : undefined);
+const discord = new DesktopDiscord(process.platform === 'win32');
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -91,6 +99,14 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   lastfm.onChange = (status) => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('lastfm:changed', status);
   };
+  discord.onChange = (status) => {
+    if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('discord:changed', status);
+  };
+  ipcMain.handle('discord:status', (event) => { appWindow(event); return discord.status(); });
+  ipcMain.on('discord:update', (event, client: unknown, track: unknown) => {
+    try { appWindow(event); } catch { return; }
+    discord.update(client, track);
+  });
   ipcMain.handle('lastfm:status', (event) => { appWindow(event); return lastfm.status(); });
   ipcMain.handle('lastfm:configure', (event, key: unknown, secret: unknown) => { appWindow(event); return lastfm.configure(key, secret); });
   ipcMain.handle('lastfm:forget', (event) => { appWindow(event); return lastfm.forgetCredentials(); });
@@ -116,6 +132,35 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
       logs.main('vk.browserFailed');
       throw new Error('Could not open VK Music in the browser');
     }
+  });
+  ipcMain.handle('music-link:take', (event) => {
+    appWindow(event);
+    const url = pendingMusicLink;
+    pendingMusicLink = undefined;
+    return url;
+  });
+  ipcMain.handle('music-link:browser', (event, value: unknown) => {
+    appWindow(event);
+    const link = readMusicLink(value);
+    if (!link || link.url !== value) throw new Error('Unsupported music link');
+    return shell.openExternal(link.url);
+  });
+  ipcMain.handle('music-link:copy', (event, value: unknown) => {
+    appWindow(event);
+    const link = readMusicLink(value);
+    if (!link || link.provider !== 'openverse' || link.url !== value) throw new Error('Unsupported share link');
+    clipboard.writeText(musicLaunchUrl(link));
+  });
+  ipcMain.handle('playlist:share', async (event, data: unknown) => {
+    const owner = appWindow(event);
+    const playlist = readSharedPlaylist(data);
+    if (!playlist) throw new Error('Invalid playlist share');
+    const { canceled, filePath } = await dialog.showSaveDialog(owner, {
+      title: t('Сохранить файл обмена Luma'), defaultPath: 'luma-playlist.luma.json', filters: [{ name: 'Luma JSON', extensions: ['json'] }],
+    });
+    if (!filePath || canceled) return false;
+    await writeFile(/\.luma\.json$/i.test(filePath) ? filePath : `${filePath}.luma.json`, JSON.stringify(playlist, null, 2), 'utf8');
+    return true;
   });
   ipcMain.handle('vk:reset', async (event) => {
     appWindow(event);
@@ -171,6 +216,21 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     appWindow(event);
     if (!(isOnlineExternalUrl(url) || isStationPage(url))) throw new Error('Unsupported catalog link');
     return shell.openExternal(url);
+  });
+  ipcMain.handle('updates:check', (event) => { appWindow(event); return updates?.check() ?? { state: 'unavailable', mode: 'development' }; });
+  ipcMain.handle('updates:install', async (event, version: unknown) => {
+    const owner = appWindow(event);
+    const canLaunch = () => !owner.isDestroyed() && !owner.webContents.isDestroyed() && isAppPage(owner.webContents.getURL());
+    const result = await updates?.install(version, async (release) => {
+      const choice = await dialog.showMessageBox(owner, {
+        type: 'question', title: t('Обновление Luma'), message: t('Установить Luma {0}?', release.version),
+        detail: t('Luma скачает и проверит подписанный установщик, запустит его и закроет плеер.'),
+        buttons: [t('Отмена'), t('Скачать и установить')], cancelId: 0, defaultId: 0, noLink: true,
+      });
+      return choice.response === 1;
+    }, canLaunch);
+    if (result === 'started') setImmediate(() => app.quit());
+    return result ?? 'unavailable';
   });
   ipcMain.handle('app:releases', (event) => { appWindow(event); return shell.openExternal(RELEASES_URL); });
   logs.onChange = () => {
@@ -244,10 +304,10 @@ async function createWindow() {
     },
   });
   owner.webContents.on('did-start-navigation', ({ isMainFrame, isSameDocument }) => {
-    if (isMainFrame && !isSameDocument) void floatOutput.stop();
+    if (isMainFrame && !isSameDocument) { discord.stop(); void floatOutput.stop(); }
   });
-  owner.webContents.on('render-process-gone', () => { void floatOutput.stop(); });
-  owner.once('closed', () => { void floatOutput.stop(); });
+  owner.webContents.on('render-process-gone', () => { discord.stop(); void floatOutput.stop(); });
+  owner.once('closed', () => { discord.stop(); void floatOutput.stop(); });
   window = owner;
   changeWidget = widgetController(owner);
   // Reserve the chord inside Luma only, before Chromium can handle Ctrl+Shift+R as reload.
@@ -317,12 +377,21 @@ async function createWindow() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, args) => {
+    const url = musicLinkArgument(args.slice(1));
+    if (url) {
+      pendingMusicLink = url;
+      if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('music-link:available');
+    }
     if (window?.isMinimized()) window.restore();
     window?.focus();
   });
   void app.whenReady().then(async () => {
     const info = desktopAppInfo();
+    const portable = !!process.env.PORTABLE_EXECUTABLE_FILE;
+    const supported = process.platform === 'win32' && process.arch === 'x64' && app.isPackaged;
+    const signer = supported && !portable ? readSignerSha256(JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8')).lumaWindowsSignerSha256) : undefined;
+    updates = new WindowsUpdates(info.version, !supported ? 'development' : portable ? 'portable' : signer ? 'signed' : 'manual', signer, app.getPath('temp'));
     journal = await DesktopDiagnostics.open(app.getPath('userData'), info);
     journal.main('desktop.start');
     Menu.setApplicationMenu(null);
@@ -358,6 +427,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!journal || flushing) return;
     event.preventDefault();
     flushing = true;
+    updates?.stop();
     journal.main('desktop.stopped');
     void Promise.allSettled([journal.flush(), floatOutput.stop()]).finally(() => app.quit());
   });

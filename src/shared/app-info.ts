@@ -1,3 +1,5 @@
+import { RELEASE_REPO } from './release-updates.js';
+
 export const APP_NAME = 'Luma Player';
 // Keep the Windows media/launcher ID resolvable by both AppsFolder and executable-name readers.
 export const APP_USER_MODEL_ID = 'LumaPlayer.exe';
@@ -12,7 +14,7 @@ export const runtimeMode = {
   desktop: 'Настольное приложение', dev: 'Настольная сборка из исходников', web: 'Веб-версия',
 } as const;
 
-export const RELEASES_URL = 'https://github.com/JohnBirlich/VKX-Modded/releases/latest';
+export const RELEASES_URL = `https://github.com/${RELEASE_REPO}/releases/latest`;
 
 /** Some Chromium hosts return locale identifiers with ICU/POSIX separators or suffixes. */
 export function dataLocale(...candidates: Array<string | undefined>): string {

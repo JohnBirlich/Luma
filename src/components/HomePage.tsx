@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AudioLines, ChevronRight, Headphones, ListEnd, ListMusic, Play, Plus, Search, Settings2, X } from 'lucide-react';
+import { AudioLines, ChevronRight, Headphones, Link2, ListEnd, ListMusic, Play, Plus, Search, Settings2, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { Track } from '../shared/media';
 import { makeMix } from '../shared/mix';
@@ -8,11 +8,14 @@ import type { MixType } from '../shared/mix';
 import { HUB_QUEUE_LIMIT, hubMusic } from '../shared/music-hub';
 import type { OnlineTrack } from '../shared/online';
 import { musicSearchKey } from '../shared/russian';
+import { SearchHistory } from './SearchHistory';
+import type { SearchHistoryProps } from './SearchHistory';
 import { OnlineSearch } from './OnlineMusic';
 import type { CatalogSearchPreferences } from './OnlineMusic';
 import { catalogQuery } from '../data/catalog-search';
 import type { OnlineAction } from './OnlineMusic';
-import { ReleaseLink, useInstalledBuild } from './About';
+import { UpdatesPanel } from './UpdatesPanel';
+import { useInstalledBuild } from './About';
 import { RadioStations } from './RadioStations';
 import { Shelf, Tile, TrackRows } from './MusicShelf';
 import { Discovery } from './Discovery';
@@ -22,7 +25,7 @@ import { SceneBackground } from './SceneBackground';
 
 const TABS = { home: 'Для вас', mine: 'Моя музыка', radio: 'Радио', updates: 'Обновления' } as const;
 export type HomeTab = keyof typeof TABS;
-interface HomeProps extends CatalogSearchPreferences {
+interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   tab: HomeTab;
   query: string;
   selectTab(tab: HomeTab): void;
@@ -51,6 +54,10 @@ interface HomeProps extends CatalogSearchPreferences {
   savePlaylist(title: string, tracks: readonly Track[], existingId?: string): boolean;
   removePlaylist(id: string): void;
   openPlaylistImport(): void;
+  openMusicLink(): void;
+  sharePlaylist(title: string, tracks: readonly Track[]): void;
+  seedFavorites(tracks: readonly Track[]): void;
+  openFavorites(): void;
   chooseOnline(track: OnlineTrack, action: OnlineAction): void;
   openLibrary(): void;
   openMixes(): void;
@@ -64,7 +71,7 @@ function Updates({ tracks, play, currentId, playing }: Pick<HomeProps, 'tracks' 
   return <>
     <section className="hub-shelf hub-version"><div className="hub-version-mark"><AudioLines size={27} /></div>
       <div><p className="overline">LUMA PLAYER</p><h2>{info ? t('Версия {0}', info.version) : info === null ? t('Версия недоступна') : t('Читаем версию…')}</h2>
-        <p>{t('Проверьте новые версии на странице релизов. Установка запускается вручную.')}</p></div><ReleaseLink className="button outline-button" />
+        <UpdatesPanel /></div>
     </section>
     {latest.length > 0 && <Shelf title={t('Недавно добавлено')}><TrackRows tracks={latest} play={play} currentId={currentId} playing={playing} strip /></Shelf>}
   </>;
@@ -111,6 +118,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         <p className="overline page-kicker"><span />{t('Ваша коллекция')}</p>
         <h1>{t('Главная')}</h1>
       </div><div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
+        onKeyDown={(event) => { if (event.key === 'Enter' && !composing && !event.nativeEvent.isComposing) props.rememberSearch(query); }}
         onChange={(event) => setQuery(event.currentTarget.value)} onCompositionStart={() => setComposing(true)}
         onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div></div>
       <div className="hub-topline"><nav aria-label={t('Разделы на главной')} className="hub-tabs">
@@ -120,16 +128,18 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
           aria-label={t('Добавить музыку')} title={t('Добавить музыку (Ctrl+O)')}><Plus size={18} aria-hidden="true" /></button>
         <button type="button" className="icon-button" data-playlist-import aria-haspopup="dialog" disabled={props.busy} onClick={props.openPlaylistImport}
           aria-label={t('Импорт из сервисов')} title={t('Импорт из сервисов')}><ListEnd size={18} aria-hidden="true" /></button>
+        <button type="button" className="icon-button" data-open-music-link aria-haspopup="dialog" onClick={props.openMusicLink}
+          aria-label={t('Открыть музыкальную ссылку')} title={t('Открыть музыкальную ссылку')}><Link2 size={17} /></button>
         <button type="button" className="icon-button" onClick={props.openMixes} title={t('Миксы Luma')} aria-label={t('Миксы Luma')}><ListMusic size={18} /></button>
       </div></div>
     </header>
-    {term ? <>
-      <Shelf title={t('В вашей медиатеке')}>
-        {found.length ? <TrackRows {...rows} tracks={found} /> : <p className="hub-note">{t('В медиатеке нет совпадений.')}</p>}
-      </Shelf>
-      <OnlineSearch key={catalogTerm} query={query} visible={visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
-        autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />
-    </> : <>
+    <SearchHistory history={props.searchHistory} select={(value) => { setQuery(value); props.rememberSearch(value); formInput.current?.focus(); }} clear={props.clearSearchHistory} />
+    {term ? <OnlineSearch key={catalogTerm} query={query} visible={visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
+      library={found} playLibrary={(id) => play(id, true)} remember={props.rememberSearch}
+      renderLibrary={(items) => items.length > 0 || !found.length ? <Shelf title={t('В вашей медиатеке')}>
+        {items.length ? <TrackRows {...rows} play={(id) => { props.rememberSearch(query); play(id, true); }} tracks={items} /> : <p className="hub-note">{t('В медиатеке нет совпадений.')}</p>}
+      </Shelf> : null}
+      autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} /> : <>
       {tab === 'home' && <>
         <div className="hub-lead">{props.nowPlaying}<section className="hub-hero" aria-labelledby="hub-mix-title">
           <SceneBackground effect="mix-flow" strength={1} animate={props.motion} visible={visible && props.motion} />
@@ -167,7 +177,8 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       </>}
       {tab === 'mine' && <>
         <MyPlaylists items={props.playlists} byId={props.playlistTracks} collection={tracks} {...rows} busy={props.busy}
-          connected={connected} playAll={props.playCatalog} save={props.savePlaylist} remove={props.removePlaylist} openImport={props.openPlaylistImport} />
+          connected={connected} playAll={props.playCatalog} save={props.savePlaylist} remove={props.removePlaylist} openImport={props.openPlaylistImport}
+          share={props.sharePlaylist} seedFavorites={props.seedFavorites} openFavorites={props.openFavorites} />
         <Shelf title={t('Мои треки')} action={<button type="button" className="text-button" onClick={openLibrary}>{t('Медиатека')}<ChevronRight size={15} /></button>}>
           {mine.length ? <TrackRows {...rows} tracks={mine.slice(0, 24)} /> : <p className="hub-note">{t('Добавьте аудиофайлы, чтобы начать.')}</p>}
         </Shelf>

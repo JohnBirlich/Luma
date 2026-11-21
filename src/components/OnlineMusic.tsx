@@ -8,6 +8,8 @@ import { CATALOG_DEBOUNCE_MS, catalogQuery, catalogTargets, mergeCatalogResults,
 import type { CatalogId, CatalogResult } from '../data/catalog-search';
 import { importOnlineTrack } from '../data/online';
 import { formatTime } from '../shared/media';
+import type { Track } from '../shared/media';
+import { bundleRecordings, recordingEvidence } from '../shared/recording-match';
 import { AUDIUS_LEGAL, commonsMp3Export, ONLINE_SOURCES } from '../shared/online';
 import type { OnlineCreditData, OnlineTrack } from '../shared/online';
 import { Artwork } from './Artwork';
@@ -51,9 +53,25 @@ function subscribeVisibility(listener: () => void) {
 type SearchAttempt = { term: string };
 type SearchSnapshot = { term: string; attempt?: SearchAttempt; results: Partial<Record<CatalogId, CatalogResult>> };
 
+function OnlineResultActions({ track, saved, disabled, connected, choose }: {
+  track: OnlineTrack; saved: ReadonlySet<string>; disabled: boolean; connected: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
+}) {
+  const t = useText();
+  return <div className="online-result-actions">
+    <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("Слушать онлайн: {0}", track.title)} title={t("Слушать онлайн")} onClick={() => choose(track, 'play')}><Play size={17} /></button>
+    <button type="button" className="icon-button" disabled={disabled} aria-label={t("В очередь: {0}", track.title)} title={t("В очередь")} onClick={() => choose(track, 'queue')}><ListPlus size={17} /></button>
+    {track.online.source !== 'audius' && <button type="button" className="icon-button" disabled={disabled || saved.has(track.id)} aria-label={saved.has(track.id) ? t("Сохранено: {0}", track.title) : t("Сохранить: {0}", track.title)} title={t("Сохранить ссылку в медиатеке")} onClick={() => choose(track, 'save')}>
+      {saved.has(track.id) ? <Check size={17} /> : <BookmarkPlus size={17} />}
+    </button>}
+    {window.luma?.streamCache && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("В кэш: {0}", track.title)} title={t("Сохранить временную копию для офлайн-прослушивания")} onClick={() => choose(track, 'cache')}><HardDriveDownload size={17} /></button>}
+    {window.luma && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("Скачать MP3: {0}", track.title)} title={t("Сохранить копию MP3")} onClick={() => choose(track, 'export')}><Download size={17} /></button>}
+  </div>;
+}
+
 /** Both search surfaces share one policy and show each supported catalog as it finishes. */
-export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCatalogSearch, saved, disabled, choose }: CatalogSearchPreferences & {
+export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCatalogSearch, saved, disabled, choose, library, playLibrary, renderLibrary, remember }: CatalogSearchPreferences & {
   query: string; visible: boolean; saved: ReadonlySet<string>; disabled: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
+  library: Track[]; playLibrary(id: string): void; renderLibrary(tracks: Track[]): ReactNode; remember(query: string): void;
 }) {
   const t = useText();
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
@@ -71,6 +89,23 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
   const settled = targets.flatMap(({ id }) => results?.[id] ?? []);
   const searching = active && settled.length < targets.length;
   const tracks = mergeCatalogResults(settled);
+  const { bundles, bundledIds } = bundleRecordings(tracks, library.filter(({ online }) => !online));
+  const onlineById = new Map(tracks.map((track) => [track.id, track]));
+  const actions = (track: Track) => {
+    const remote = onlineById.get(track.id);
+    return remote ? <OnlineResultActions track={remote} saved={saved} disabled={disabled} connected={connected} choose={(item, action) => {
+      remember(query); choose(item, action);
+    }} /> : <button type="button" className="icon-button" disabled={disabled} onClick={() => { remember(query); playLibrary(track.id); }}
+      aria-label={t('Воспроизвести файл: {0}', track.title)} title={t('Воспроизвести файл: {0}', track.title)}><Play size={17} /></button>;
+  };
+  const sourceName = (track: Track) => {
+    const remote = onlineById.get(track.id);
+    return remote ? ONLINE_SOURCES[remote.online.source] : t('Файл');
+  };
+  const credit = (track: Track) => {
+    const remote = onlineById.get(track.id);
+    return remote ? <OnlineCredit track={remote} /> : <span>{track.fileName ?? t('Файл')}</span>;
+  };
   const failures = settled.filter((result) => 'error' in result);
 
   useEffect(() => {
@@ -89,7 +124,7 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
   const canRequest = !!term && connected && visible && foreground && !searching;
   const searchLabel = t(autoCatalogSearch ? 'Повторить поиск' : 'Искать во всех каталогах');
   const SearchIcon = autoCatalogSearch ? RotateCw : Search;
-  return <section className="online-panel catalog-search" aria-labelledby="online-title">
+  return <>{renderLibrary(library.filter(({ id }) => !bundledIds.has(id)))}<section className="online-panel catalog-search" aria-labelledby="online-title">
     <header className="catalog-header">
       <h2 id="online-title"><Globe2 size={17} aria-hidden="true" />{t('Онлайн-каталоги')}</h2>
       <div className="catalog-controls">
@@ -99,7 +134,7 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
           }} />{t('Автопоиск')}
         </label>
         {(!autoCatalogSearch || failures.length > 0) && <button className="icon-button catalog-request" type="button" disabled={!canRequest}
-          aria-label={searchLabel} title={searchLabel} onClick={() => setManual({ term })}><SearchIcon size={16} aria-hidden="true" /></button>}
+          aria-label={searchLabel} title={searchLabel} onClick={() => { remember(query); setManual({ term }); }}><SearchIcon size={16} aria-hidden="true" /></button>}
       </div>
     </header>
     <details className="catalog-details">
@@ -127,26 +162,26 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
     {!connected && <p className="online-offline" role="status"><CloudOff size={17} />{' '}{t('Устройство вне сети. Онлайн-поиск пока недоступен.')}</p>}
     {!term && !!query.trim() && <p className="online-message">{t('Введите не менее двух символов, чтобы искать треки.')}</p>}
     {searching && !settled.length && <p className="online-message" role="status">{t('Ищем записи в каталогах…')}</p>}
-    {!!settled.length && <p className="online-message" role="status">{tracks.length ? t('Доступно записей: {0}', tracks.length)
+    {!!settled.length && <p className="online-message" role="status">{bundles.length ? t('Доступно записей: {0}', bundles.length)
       : searching ? t('Ждём ответы других каталогов…') : failures.length === targets.length ? t('Ни один каталог не ответил.')
         : t('В ответивших каталогах нет подходящих записей.')}</p>}
-    {tracks.length > 0 && <ul className="online-results">
-      {tracks.map((track) => <li key={track.id} data-source={track.online.source}>
+    {bundles.length > 0 && <ul className="online-results">
+      {bundles.map(([track, ...alternatives]) => <li key={track.id} data-source={track.online?.source ?? 'file'}>
         <Artwork track={track} />
         <div className="online-result-copy"><strong title={track.title}>{track.title}</strong><span>{track.artist}{track.duration > 0 ? ` · ${formatTime(track.duration)}` : ''}</span>
-          <OnlineCredit track={track} /></div>
-        <div className="online-result-actions">
-          <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("Слушать онлайн: {0}", track.title)} title={t("Слушать онлайн")} onClick={() => choose(track, 'play')}><Play size={17} /></button>
-          <button type="button" className="icon-button" disabled={disabled} aria-label={t("В очередь: {0}", track.title)} title={t("В очередь")} onClick={() => choose(track, 'queue')}><ListPlus size={17} /></button>
-          {track.online.source !== 'audius' && <button type="button" className="icon-button" disabled={disabled || saved.has(track.id)} aria-label={saved.has(track.id) ? t("Сохранено: {0}", track.title) : t("Сохранить: {0}", track.title)} title={t("Сохранить ссылку в медиатеке")} onClick={() => choose(track, 'save')}>
-            {saved.has(track.id) ? <Check size={17} /> : <BookmarkPlus size={17} />}
-          </button>}
-          {window.luma?.streamCache && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("В кэш: {0}", track.title)} title={t("Сохранить временную копию для офлайн-прослушивания")} onClick={() => choose(track, 'cache')}><HardDriveDownload size={17} /></button>}
-          {window.luma && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("Скачать MP3: {0}", track.title)} title={t("Сохранить копию MP3")} onClick={() => choose(track, 'export')}><Download size={17} /></button>}
-        </div>
+          {credit(track)}</div>
+        {actions(track)}
+        {alternatives.length > 0 && <details className="recording-sources">
+          <summary><span>{t(alternatives.every((other) => recordingEvidence(track, other) === 'verified') ? 'Другие источники' : 'Похожие записи · проверьте версию')}</span>
+            {[...new Set([track, ...alternatives].map(sourceName))].map((name) => <small key={name}>{name}</small>)}
+          </summary>
+          <ul>{alternatives.map((other) => <li key={other.id} data-source={other.online?.source ?? 'file'}>
+            <div className="online-result-copy"><span>{[other.album, other.duration > 0 && formatTime(other.duration)].filter(Boolean).join(' · ')}</span>{credit(other)}</div>{actions(other)}
+          </li>)}</ul>
+        </details>}
       </li>)}
     </ul>}
-  </section>;
+  </section></>;
 }
 
 export function OnlineImport({ disabled, save }: { disabled: boolean; save(track: OnlineTrack): void }) {

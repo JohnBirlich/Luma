@@ -1,6 +1,10 @@
+import type { InstallResult, UpdateReport } from './release-updates.js';
+import type { DiscordStatus, DiscordTrack } from './discord-presence.js';
+import type { SharedPlaylist } from './playlist-share.js';
 import type { FloatStart } from './float-output.js';
 import type { UiLanguage } from './ui-language.js';
 import { formatCount } from './customization.js';
+import { readIsrc } from './recording-match.js';
 import type { AudioFormat } from './audio-quality.js';
 import type { AppInfo } from './app-info.js';
 import type { DiagnosticsBridge } from './diagnostics.js';
@@ -34,6 +38,7 @@ export interface Track {
   album: string;
   duration: number;
   genres?: string[];
+  isrc?: string;
   format?: AudioFormat;
   embeddedLyrics?: string;
   /** Local basename, used for matching an imported playlist. Never a readable path. */
@@ -59,6 +64,7 @@ export interface DesktopBridge {
   setUiLanguage(value: UiLanguage): Promise<void>;
   getAppInfo(): Promise<AppInfo>;
   openReleases(): Promise<void>;
+  updates: { check(): Promise<UpdateReport>; install(version: string): Promise<InstallResult> };
   searchCommunity(id: number, query: string, source: DesktopCatalogSource): Promise<OnlineTrack[]>;
   cancelCatalogSearch(id: number): Promise<void>;
   openOnlineLink(url: string): Promise<void>;
@@ -68,6 +74,18 @@ export interface DesktopBridge {
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
   openVkMusic(): Promise<void>;
+  saveSharedPlaylist(share: SharedPlaylist): Promise<boolean>;
+  discord: {
+    status(): Promise<DiscordStatus>;
+    update(clientId: string, track: DiscordTrack | null): void;
+    onChange(callback: (status: DiscordStatus) => void): () => void;
+  };
+  musicLinks: {
+    take(): Promise<string | undefined>;
+    onAvailable(callback: () => void): () => void;
+    openBrowser(url: string): Promise<void>;
+    copy(url: string): Promise<void>;
+  };
   clearLegacyVkSession(): Promise<void>;
   lyrics: { lookup(query: LyricsQuery, refresh?: boolean): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null>; openEdition(url: string): Promise<void> };
   exportMp3(track: OnlineTrack, saveLyrics: boolean): Promise<Mp3ExportResult>;
@@ -141,12 +159,13 @@ export function readGenres(input: unknown, clean: (value: string) => string = cl
 
 export function trackInfo(
   filename: string,
-  tags?: { title?: string; artist?: string; albumartist?: string; album?: string; genre?: string[] },
+  tags?: { title?: string; artist?: string; albumartist?: string; album?: string; genre?: string[]; isrc?: string[] | string },
   duration?: number,
-): Pick<Track, 'title' | 'artist' | 'album' | 'duration' | 'genres'> {
+): Pick<Track, 'title' | 'artist' | 'album' | 'duration' | 'genres' | 'isrc'> {
   const genres = readGenres(tags?.genre, readTrackTag);
+  const isrc = readIsrc(tags?.isrc);
   return {
-    ...(genres && { genres }),
+    ...(genres && { genres }), ...(isrc && { isrc }),
     title: readTrackTag(tags?.title) || cleanTrackText(filename.replace(/\.[^.]+$/, '')) || cleanTrackText(filename) || 'Без названия',
     artist: readTrackTag(tags?.artist) || readTrackTag(tags?.albumartist) || 'Неизвестный исполнитель',
     album: readTrackTag(tags?.album) || 'Без альбома',

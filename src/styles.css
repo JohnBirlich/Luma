@@ -1320,3 +1320,22 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .lastfm-issue > b { white-space: nowrap; color: var(--accent-light); }
 
 .live-timeline { display: flex; align-items: center; justify-content: center; gap: 6px; font: 680 11px/1.35 var(--display); color: var(--muted); }
+.lyric-line-seek { display: block; font: inherit; color: inherit; text-align: inherit; border: 0; padding: 0; background: none; cursor: pointer; width: 100%; }
+.lyric-line-seek:hover { text-decoration: underline; text-underline-offset: .15em; }
+.lyric-line-seek:focus-visible { outline-offset: -2px; border-radius: 5px; }
+.sleep-timer { flex-wrap: wrap; }
+.sleep-timer .settings-actions { margin: 0; flex-wrap: wrap; }
+.sleep-timer-open[aria-pressed='true'] { color: var(--accent-light); border-color: var(--accent-light); }
+.music-link-dialog { width: min(490px, calc(100vw - 22px)); max-height: 90dvh; margin: auto; padding: 18px;
+  border: 1px solid var(--line); border-radius: 19px; background: var(--raised-bg); color: var(--text); }
+.music-link-dialog::backdrop { background: #0a0818aa; backdrop-filter: blur(7px); }
+.music-link-dialog .dialog-header { margin-bottom: 16px; }
+.music-link-dialog .dialog-header h2 { flex: 1; font-size: 18px; }
+.music-link-dialog .online-search-form input { min-width: 0; }
+.music-link-target { margin: 12px 0 0; padding: 12px; border-radius: 10px; border: 1px solid var(--line); }
+.music-link-target h3 { font-size: 15px; }
+.music-link-target p { margin: 7px 0 10px; color: var(--muted); overflow-wrap: anywhere; }
+.discord-form { display: flex; align-items: end; flex-wrap: wrap; gap: 9px; margin: 10px 0; }
+.discord-form label { width: min(250px, 100%); }
+.update-status p { color: var(--muted); margin: 7px 0; }
+.update-status .settings-actions { column-gap: 8px; flex-wrap: wrap; }
