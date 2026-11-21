@@ -520,7 +520,7 @@ async function smoke() {
 
   const catalogCalls = [];
   const archiveCalls = [];
-  const extraCatalogCalls = [];
+  const audiusCalls = [];
   const archiveRelease = { metadata: { identifier: 'SCL108', mediatype: 'audio', collection: ['netlabels', 'southern-citys-lab'],
     licenseurl: 'https://creativecommons.org/licenses/by/4.0/', creator: 'Fixture label', title: 'Jazz release' },
     files: [{ name: 'Jazz archive.mp3', source: 'original', format: 'VBR MP3', title: 'Jazz archive', length: '32' }] };
@@ -604,7 +604,7 @@ async function smoke() {
       return Response.json({ response: { docs: query.includes('"jazz"') ? [{ identifier: 'SCL108' }] : [] } });
     }
     if (url.origin === 'https://api.audius.co' && url.pathname === '/v1/tracks/search') {
-      extraCatalogCalls.push(url);
+      audiusCalls.push(url);
       return Response.json({ data: url.searchParams.get('query') === 'jazz' ? [audiusRecording, { ...audiusRecording, id: '1233T', title: 'Restricted', is_stream_gated: true }] : [] });
     }
     if (url.origin === 'https://api.audius.co' && url.pathname === '/v1/tracks/DX0Xb/stream' && url.searchParams.get('no_redirect') === 'true') {
@@ -706,7 +706,7 @@ async function smoke() {
     assert.equal(catalogCalls.length, 1);
     assert.equal(catalogCalls[0].searchParams.get('q'), 'jazz');
     assert.equal(catalogCalls[0].searchParams.get('source'), 'jamendo,wikimedia_audio');
-    assert.deepEqual(extraCatalogCalls.map((url) => [url.origin, url.searchParams.get('query')]), [['https://api.audius.co', 'jazz']]);
+    assert.deepEqual(audiusCalls.map((url) => [url.origin, url.searchParams.get('query')]), [['https://api.audius.co', 'jazz']]);
     await click('.catalog-details summary');
     assert.equal(await run(`document.querySelector('.catalog-details').open && !!document.querySelector('.catalog-details a[href="https://audius.co/legal/api-terms"]')`), true);
     await click('.catalog-details summary');
@@ -781,15 +781,16 @@ async function smoke() {
       assert.equal(BrowserWindow.getAllWindows().length, 1);
       assert.equal(await run(`document.querySelector('${onlineAudio}').paused`), false, 'entering Home leaves online playback alone');
       assert.equal(opened.length, 0);
+      const homeSearchStart = catalogCalls.length;
+      const homeAudiusStart = audiusCalls.length;
       await fill('.hub-search input', 'Ты здесь');
       await waitFor('native search finds a local track', () => run(`document.querySelector('.hub-track strong')?.textContent === 'Ты здесь'`));
       assert.equal(await run(`!!document.querySelector('.vk-track-matches')`), false);
-      await waitFor('Home finds local and online matches despite a failed catalog', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 4
+      await waitFor('Home finds local and online matches despite a failed catalog', () => run(`document.querySelectorAll('.catalog-sources [data-state="done"]').length === 3
         && document.querySelector('[data-catalog="southern_city"]').dataset.state === 'error'
         && document.querySelectorAll('.online-results li').length === 2`));
-      assert.equal(catalogCalls.length, 2);
-      assert.equal(catalogCalls[1].searchParams.get('q'), 'Ты здесь');
-      assert.deepEqual(extraCatalogCalls.slice(2).map((url) => url.searchParams.get('s') ?? url.searchParams.get('query')), ['Ты здесь', 'Ты здесь']);
+      assert.deepEqual(catalogCalls.slice(homeSearchStart).map((url) => url.searchParams.get('q')), ['Ты здесь']);
+      assert.deepEqual(audiusCalls.slice(homeAudiusStart).map((url) => url.searchParams.get('query')), ['Ты здесь']);
       assert.equal(opened.length, 0, 'no browser tab from automatic searches');
       assert.equal(await run(`!!document.querySelector('.music-sites, .music-site-grid')`), false);
       for (const url of ['https://example.invalid/', VK_MUSIC_URL, 'https://vk.ru/audio?q=jazz', 'https://my.mail.ru/music', 'https://music.yandex.ru/']) {
@@ -867,8 +868,8 @@ async function smoke() {
       assert.deepEqual((await preferences()).playlists[0].trackIds, importedIds);
       assert.deepEqual((await preferences()).queue, beforeImport.queue);
       assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
-      assert.equal(catalogCalls.length, 2, 'playlist preview and save are local');
-      assert.equal(extraCatalogCalls.length, 4);
+      assert.equal(catalogCalls.length, homeSearchStart + 1, 'playlist preview and save are local');
+      assert.equal(audiusCalls.length, homeAudiusStart + 1);
       await run('window.luma.clearLegacyVkSession()');
       assert.equal((await legacyVk.cookies.get({ name: 'lumaFixture' })).length, 0);
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
@@ -1232,7 +1233,18 @@ async function smoke() {
               return null;
             })()`)).catch(() => ({ code: 'timeout' }));
             if (decoded.format === (source === 'jamendo' ? 'mp31' : 'original')) {
-              result = `decoded ${title} (${decoded.format})`;
+              if (target === 'audius') {
+                const seek = await run(`(async () => {
+                  const url = document.querySelector('${onlineAudio}').currentSrc;
+                  const response = await fetch(url, { headers: { Range: 'bytes=1024-1031' }, signal: AbortSignal.timeout(12_000) });
+                  if (response.status !== 206 || !/^bytes 1024-1031\\/\\d+$/.test(response.headers.get('Content-Range') ?? '')) {
+                    await response.body?.cancel(); return response.status;
+                  }
+                  return (await response.arrayBuffer()).byteLength === 8 ? '206' : 'invalid byte count';
+                })()`).catch(() => 'request failed');
+                if (seek !== '206') { failures.push(`${title}: range ${seek}`); continue; }
+              }
+              result = `decoded ${title} (${decoded.format}${target === 'audius' ? ', range 206' : ''})`;
               ok = true;
               break;
             }
