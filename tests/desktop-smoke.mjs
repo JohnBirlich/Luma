@@ -982,14 +982,27 @@ async function smoke() {
       await click('[aria-label="Резервный локальный файл"]');
       await closeSettings();
       const copyText = clipboard.writeText;
-      const realClipboard = process.platform === 'win32' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' && process.env.GITHUB_ACTIONS === 'true';
+      const hostedWindows = process.platform === 'win32' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' && process.env.GITHUB_ACTIONS === 'true';
+      const probe = 'Luma clipboard capability check';
+      let realClipboard = false;
       try {
+        if (hostedWindows) {
+          clipboard.writeText(probe);
+          for (let i = 0; i < 6 && !realClipboard; i++) {
+            realClipboard = clipboard.readText() === probe;
+            if (!realClipboard) await delay(75);
+          }
+          if (!realClipboard) console.log('::warning title=Windows clipboard::No readable system clipboard in this desktop session. The IPC route is tested with a fixture; manual Windows check still required.');
+        }
         let copied = '';
         if (!realClipboard) clipboard.writeText = (text) => { copied = text; };
-        await run(`window.luma.musicLinks.copy(${JSON.stringify(`https://openverse.org/audio/${jamendoRecording.id}/`)})`);
-        assert.equal(readMusicLink(realClipboard ? clipboard.readText() : copied)?.url, `https://openverse.org/audio/${jamendoRecording.id}/`);
-        if (realClipboard) console.log('::notice title=Windows clipboard::Copied a canonical music link and read it back through the system clipboard.');
-      } finally { if (realClipboard) clipboard.clear(); else clipboard.writeText = copyText; }
+        const expected = `https://openverse.org/audio/${jamendoRecording.id}/`;
+        await run(`window.luma.musicLinks.copy(${JSON.stringify(expected)})`);
+        if (realClipboard) {
+          await waitFor('canonical link in the system clipboard', () => readMusicLink(clipboard.readText())?.url === expected);
+          console.log('::notice title=Windows clipboard::Copied a canonical music link and read it back through the system clipboard.');
+        } else assert.equal(readMusicLink(copied)?.url, expected);
+      } finally { clipboard.writeText = copyText; if (hostedWindows) clipboard.clear(); }
 
       await click('[data-home-tab="home"]');
       await waitFor('For You genres', () => run(`!!document.querySelector('[aria-label="Жанры"] .hub-tile[aria-label="Джаз"]')`));
