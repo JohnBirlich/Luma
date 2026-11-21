@@ -61,12 +61,21 @@ async function writeRecord(write: (store: IDBObjectStore) => IDBRequest) {
   });
 }
 
+function sourceName(signature: string): string | undefined {
+  // Browser profiles already keep the basename in the deduplication tuple. No DB migration or path needed.
+  try {
+    const entry: unknown = JSON.parse(signature);
+    const name: unknown = Array.isArray(entry) && entry[0];
+    if (typeof name === 'string' && name.length <= 255 && !/[/\\]/.test(name) && audioMime(name)) return name;
+  } catch { /* Metadata matching still works for an old or incomplete record. */ }
+}
+
 function makeEntry(record: StoredTrack, persisted: boolean): SessionEntry {
   const { id, audio, artwork, title, artist, album, duration, textVersion, genres } = record;
   const info = textVersion === 1 ? { title, artist, album, duration, genres: readGenres(genres) } : trackInfo(title, record, duration);
   return {
     persisted, record,
-    track: { id, ...info, format: readAudioFormat(record.format), embeddedLyrics: readLocalLyrics(record.embeddedLyrics)?.plain, audioUrl: URL.createObjectURL(audio), artworkUrl: artwork && URL.createObjectURL(artwork) },
+    track: { id, ...info, fileName: sourceName(record.signature), format: readAudioFormat(record.format), embeddedLyrics: readLocalLyrics(record.embeddedLyrics)?.plain, audioUrl: URL.createObjectURL(audio), artworkUrl: artwork && URL.createObjectURL(artwork) },
   };
 }
 

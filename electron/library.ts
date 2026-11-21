@@ -68,7 +68,7 @@ export class DesktopLibrary {
       // Old profiles are repaired for display without rewriting their metadata or changing track IDs.
       const info = textVersion === 1 ? { ...tags, duration, ...(tagsGenres && { genres: tagsGenres }) } : trackInfo(basename(path), tags, duration);
       return {
-        id, ...info, format: readAudioFormat(format), audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
+        id, ...info, fileName: basename(path), format: readAudioFormat(format), audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
         artworkUrl: coverExtension ? `${APP_ORIGIN}/media/cover/${id}` : undefined,
       };
     });

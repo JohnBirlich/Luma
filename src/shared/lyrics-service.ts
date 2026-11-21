@@ -9,13 +9,13 @@ export function createLyricsService(fetcher: Fetcher = fetch, desktop = false) {
   const cache = new Map<string, { result: Lyrics | null; until: number }>();
   let nextCall = 0;
   let busy = false;
-  return async (input: unknown, signal: AbortSignal) => {
+  return async (input: unknown, signal: AbortSignal, refresh = false) => {
     const query = readLyricsQuery(input);
     if (!query) return null;
     signal.throwIfAborted();
     const url = lyricsUrl(query).href;
     const hit = cache.get(url);
-    if (hit && hit.until > Date.now()) return hit.result;
+    if (!refresh && hit && hit.until > Date.now()) return hit.result;
     if (busy || nextCall > Date.now()) throw new Error('Подождите немного перед повторным запросом LRCLIB.');
     busy = true;
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(8000)]);

@@ -59,6 +59,7 @@ interface Notice { message: NoticeText; detail?: NoticeText; error?: boolean }
 const noticeText = (t: Text, message: NoticeText) => typeof message === 'function' ? message(t) : t(message);
 const demoIds = demoTracks.map((track) => track.id);
 const noop = () => undefined;
+const PlaylistImport = lazy(() => import('./components/PlaylistImport').then(({ PlaylistImport }) => ({ default: PlaylistImport })));
 const HomePage = lazy(() => import('./components/HomePage').then(({ HomePage }) => ({ default: HomePage })));
 const noTransition = { seconds: 0, next: (): Track | undefined => undefined, advance: (_id: string) => undefined as void };
 const connection = (navigator as Navigator & { connection?: EventTarget & { type?: string; saveData?: boolean } }).connection;
@@ -98,6 +99,7 @@ export default function App() {
   const switchingWidget = useRef(false);
   const [showEqualizer, setShowEqualizer] = useState(false);
   const [showAppearance, setShowAppearance] = useState(false);
+  const [importPlaylist, setImportPlaylist] = useState(false);
   const [coverTarget, setCoverTarget] = useState<CoverTarget>();
   const { urls: covers, update: updateCover } = useCoverArt();
   const [detailsId, setDetailsId] = useState<string>();
@@ -155,7 +157,7 @@ export default function App() {
   const current = byId.get(queue.currentId ?? '') ?? null;
   const live = current?.online?.source === 'broadcast';
   const detailsTrack = detailsId ? byId.get(detailsId) : undefined;
-  const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance);
+  const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance || importPlaylist);
   const { kind: presentationKind, show: showStage, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
   const presentationOpen = presentationKind !== null;
   const showPresentation = useCallback(() => showStage('player'), [showStage]);
@@ -206,7 +208,7 @@ export default function App() {
       recordDiagnostic('library.opened', { tracks: allLocal.length, ms: performance.now() - start });
       setLocalTracks(allLocal);
       const ids = [...allLocal.map(({ id }) => id), ...(boot.showDemos ? demoIds : []), ...boot.onlineTracks.map(({ id }) => id)];
-      const available = new Set([...ids, ...STATION_IDS, ...boot.onlineRefs.map(({ id }) => id)]);
+      const available = new Set([...ids, ...stationTracks.map(({ id }) => id), ...boot.onlineRefs.map(({ id }) => id)]);
       const state = queueRef.current;
       const restored = reconcileQueue(state, available);
       const initial = (!boot.queue && ids.length && !isPlaying()) || (!restored.order.length && state.order.length)
@@ -578,6 +580,7 @@ export default function App() {
     if (!ready || !name || !items.length || (!existingId && preferences.playlists.length >= MAX_PLAYLISTS)) return false;
     if (existingId && !preferences.playlists.some(({ id }) => id === existingId)) return false;
     const trackIds = playlistTrackIds(items.map(({ id }) => id));
+    if (!trackIds.length) return false;
     const playlist = { id: existingId ?? `list-${crypto.randomUUID()}`, title: name, trackIds };
     const playlists = existingId ? preferences.playlists.map((item) => item.id === existingId ? playlist : item) : [playlist, ...preferences.playlists];
     const keep = new Set(trackIds);
@@ -681,7 +684,7 @@ export default function App() {
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={page === 'player' && !widget && !modalOpen && !presentationOpen}
             busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} loading={!!player.loading}
-            playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist}
+            playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
             covers={covers} editCover={setCoverTarget} discardCover={discardCover} openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose}
             nowPlaying={<NowPlayingCard track={current} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
               playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
@@ -730,6 +733,7 @@ export default function App() {
       : <PlayerBar {...localControls} track={current} classic={!glass && appearance.classicDock}
         goToPlayer={() => { navigate('player'); scrollArea.current?.scrollTo({ top: 0 }); }} openPresentation={showPresentation} openKaraoke={showKaraoke} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
       {presentationKind && current && !widget && <FullscreenPlayer {...localControls} karaoke={presentationKind === 'karaoke'} lyrics={lyrics} clock={player.playing ? position : undefined}
+        karaokeStyle={preferences.karaokeStyle} changeKaraokeStyle={(karaokeStyle) => setPreferences((data) => ({ ...data, karaokeStyle }))}
         toggleKaraoke={presentationKind === 'karaoke' ? showPresentation : showKaraoke} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={effectiveAppearance}
         favorite={(live ? stationIds : favoriteIds).has(current.id)} disliked={dislikedIds.has(current.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
         toggleQueue={() => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, fullscreenQueue: !data.appearance.fullscreenQueue } }))}
@@ -749,6 +753,12 @@ export default function App() {
           {visibleNotice && <button type="button" className="icon-button" onClick={() => setNotice(undefined)} aria-label={t("Скрыть уведомление")}><X size={17} /></button>}
         </div>}
       </div>
+      {importPlaylist && <Suspense fallback={null}><PlaylistImport collection={collection} close={() => setImportPlaylist(false)} save={(title, items) => {
+        if (!savePlaylist(title, items)) return false;
+        setImportPlaylist(false);
+        setNotice({ message: (t) => t('Плейлист «{0}» импортирован', playlistTitle(title)) });
+        return true;
+      }} /></Suspense>}
       {coverTarget && <CoverEditor key={coverTarget.key} target={coverTarget} currentUrl={covers.get(coverTarget.key)} update={saveCover} close={() => setCoverTarget(undefined)} />}
       {detailsTrack && <TrackDetailsEditor key={detailsTrack.id} locale={locale} track={detailsTrack} edited={details.has(detailsTrack.id)} save={saveDetails} close={() => setDetailsId(undefined)} />}
       {showAppearance && <NowPlayingDialog appearance={appearance} tint={tint} track={current} playing={player.playing} sample={player.playing && !current?.online ? player.readSpectrum : undefined} change={changeAppearance} close={() => setShowAppearance(false)} />}

@@ -5,6 +5,7 @@ import { AudioLines, ChevronDown, ListMusic, MicVocal, Palette, SlidersHorizonta
 import type { TrackLyrics } from '../player/useTrackLyrics';
 import type { ReadSpectrum } from '../player/useAudio';
 import type { Appearance } from '../shared/customization';
+import type { KaraokeStyle } from '../shared/karaoke-style';
 import type { Track } from '../shared/media';
 import { OnlineCredit } from './OnlineMusic';
 import { LyricsPanel } from './LyricsPanel';
@@ -20,6 +21,8 @@ import { UpcomingTracks } from './UpcomingTracks';
 interface FullscreenPlayerProps extends PlaybackProps {
   track: Track;
   karaoke: boolean;
+  karaokeStyle: KaraokeStyle;
+  changeKaraokeStyle(style: KaraokeStyle): void;
   lyrics: TrackLyrics;
   clock?: () => number;
   toggleKaraoke(): void;
@@ -78,7 +81,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
           <button type="button" className="icon-button immersive-queue-toggle" onClick={karaoke ? () => setKaraokeQueue(!karaokeQueue) : props.toggleQueue}
             aria-expanded={queueVisible} aria-controls={queueVisible ? 'immersive-upcoming' : undefined} aria-label={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}
             title={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}><ListMusic size={20} /></button>
-          <div className="immersive-brand" aria-hidden="true"><AudioLines size={19} /><span>Luma Player</span></div>
+          {!karaoke && <div className="immersive-brand" aria-hidden="true"><AudioLines size={19} /><span>Luma Player</span></div>}
         </div>
       </header>
       <div className="immersive-scroll">{karaoke ? <div className={`karaoke-grid${queueVisible ? ' karaoke-with-queue' : ''}`}>
@@ -97,7 +100,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
               </div>
             </div>
           </div>
-          <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} clock={props.clock} karaoke demo={track.demo} />
+          <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} clock={props.clock} karaoke={{ style: props.karaokeStyle, change: props.changeKaraokeStyle }} demo={track.demo} />
         </div>
         {queueVisible && <UpcomingTracks tracks={props.upcoming} repeat={props.repeat} autoNext={props.autoNext} fullNumbers={appearance.fullNumbers} play={props.playUpcoming} />}
       </div> : <div className={`immersive-main${queueVisible ? ' immersive-with-queue' : ''}`}>

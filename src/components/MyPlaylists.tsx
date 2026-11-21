@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, ListMusic, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
+import { ChevronRight, FileUp, ListMusic, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { MAX_PLAYLIST_TRACKS, MAX_PLAYLISTS, playlistTitle } from '../shared/luma-playlists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
@@ -11,7 +11,7 @@ interface PlaylistsProps {
   items: LumaPlaylist[]; byId: ReadonlyMap<string, Track>; collection: Track[];
   currentId: string | null; playing: boolean; busy: boolean; connected: boolean;
   play(id: string, toggleCurrent?: boolean): void; playAll(tracks: Track[], start?: string): boolean;
-  save(title: string, tracks: readonly Track[], id?: string): boolean; remove(id: string): void;
+  save(title: string, tracks: readonly Track[], id?: string): boolean; remove(id: string): void; openImport(): void;
 }
 
 function PlaylistEditor({ playlist, source, close, save }: {
@@ -54,7 +54,7 @@ function PlaylistEditor({ playlist, source, close, save }: {
   </form>;
 }
 
-export function MyPlaylists({ items, byId, collection, currentId, playing, busy, connected, play, playAll, save, remove }: PlaylistsProps) {
+export function MyPlaylists({ items, byId, collection, currentId, playing, busy, connected, play, playAll, save, remove, openImport }: PlaylistsProps) {
   const t = useText();
   const [active, setActive] = useState<string>();
   const [editor, setEditor] = useState<'new' | LumaPlaylist>();
@@ -66,7 +66,10 @@ export function MyPlaylists({ items, byId, collection, currentId, playing, busy,
   const editingTracks = editor && editor !== 'new' ? editor.trackIds.flatMap((id) => byId.get(id) ?? []) : [];
   const source = editor ? [...new Map([...editingTracks, ...collection].map((track) => [track.id, track])).values()] : [];
   return <Shelf title={t('Мои плейлисты')} detail={t('Списки Luma хранятся на этом устройстве.')}
-    action={<button type="button" className="text-button" disabled={busy || !collection.length || items.length >= MAX_PLAYLISTS} onClick={() => setEditor(editor === 'new' ? undefined : 'new')}><Plus size={16} />{t('Создать плейлист')}</button>}>
+    action={<div className="playlist-import-actions">
+      <button type="button" className="text-button" disabled={busy || items.length >= MAX_PLAYLISTS} onClick={openImport} aria-haspopup="dialog"><FileUp size={16} />{t('Импортировать')}</button>
+      <button type="button" className="text-button" disabled={busy || !collection.length || items.length >= MAX_PLAYLISTS} onClick={() => setEditor(editor === 'new' ? undefined : 'new')}><Plus size={16} />{t('Создать плейлист')}</button>
+    </div>}>
     {editor && <PlaylistEditor key={editor === 'new' ? 'new' : editor.id} close={() => setEditor(undefined)} playlist={editor === 'new' ? undefined : editor} save={save} source={source} />}
     {items.length > 0 ? <div className="hub-rail hub-topic-rail">{items.map((item, index) => <Tile key={item.id} title={item.title} description={t('Треков: {0}', item.trackIds.length)}
       color={['orchid', 'aqua', 'mango', 'blue'][index % 4]} symbol="♪" image={byId.get(item.trackIds[0])} open

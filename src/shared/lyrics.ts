@@ -38,6 +38,12 @@ export function readLocalLyrics(plainText?: unknown, lrcText?: unknown): Lyrics 
   return plain || synced ? { instrumental: false, ...(plain && { plain }), ...(synced && { synced }) } : null;
 }
 
+/** A pasted LRC stays timed; ordinary text is not treated as synchronized lyrics. */
+export function readCustomLyrics(value: unknown): Lyrics | null {
+  if (typeof value !== 'string' || new TextEncoder().encode(value).byteLength > MAX_LYRIC_FILE) return null;
+  return readLocalLyrics(undefined, value) ?? readLocalLyrics(value);
+}
+
 export function lyricsFromTags(tags?: { text?: string; timeStampFormat?: number; contentType?: number; syncText?: { timestamp?: number; text: string }[] }[]) {
   const timed = tags?.find((tag) => tag.timeStampFormat === 2 && tag.contentType === 1 && tag.syncText?.length)?.syncText;
   const synced = timed?.slice(0, 600).flatMap(({ timestamp, text }) => {

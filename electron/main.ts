@@ -121,9 +121,9 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     if (!isLyricEditionPage(url)) throw new Error('Unsupported lyrics link');
     return shell.openExternal(url);
   });
-  ipcMain.handle('lyrics:lookup', (event, query: unknown) => {
+  ipcMain.handle('lyrics:lookup', (event, query: unknown, refresh: unknown) => {
     appWindow(event);
-    return lookupLyrics(query, AbortSignal.timeout(9000));
+    return lookupLyrics(query, AbortSignal.timeout(9000), refresh === true);
   });
   ipcMain.handle('cache:url', (event, track: unknown) => { appWindow(event); return cache.url(track); });
   ipcMain.handle('cache:save', (event, track: unknown) => { appWindow(event); return cache.save(track); });

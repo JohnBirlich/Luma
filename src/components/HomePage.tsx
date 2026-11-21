@@ -56,6 +56,7 @@ interface HomeProps extends BookmarkProps, CatalogSearchPreferences {
   playlistTracks: ReadonlyMap<string, Track>;
   savePlaylist(title: string, tracks: readonly Track[], existingId?: string): boolean;
   removePlaylist(id: string): void;
+  openPlaylistImport(): void;
   chooseOnline(track: OnlineTrack, action: OnlineAction): void;
   openLibrary(): void;
   openMixes(): void;
@@ -176,7 +177,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         {...rows} busy={props.busy} visible={visible} connected={connected} initialTopic={topic} playAll={props.playCatalog} save={props.savePlaylist} />}
       {tab === 'mine' && <>
         <MyPlaylists items={props.playlists} byId={props.playlistTracks} collection={tracks} {...rows} busy={props.busy}
-          connected={connected} playAll={props.playCatalog} save={props.savePlaylist} remove={props.removePlaylist} />
+          connected={connected} playAll={props.playCatalog} save={props.savePlaylist} remove={props.removePlaylist} openImport={props.openPlaylistImport} />
         <VkTracksShelf state={props.vkTracks} library={tracks} play={play} disabled={props.busy} lookup={(item) => {
           setQuery([item.artist, item.title].filter(Boolean).join(' ').slice(0, 140));
           formInput.current?.focus();

@@ -265,3 +265,11 @@
 .vk-track-pages { justify-content: flex-end; margin-top: 5px; }
 .vk-track-matches { margin-top: 10px; }
 .vk-track-list .vk-file-play { color: var(--accent-light); background: var(--accent-fill); border-color: var(--accent-border); }
+
+.playlist-import-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: end; gap: 6px 11px; }
+.radio-search { width: min(420px, 100%); margin-top: 12px; }
+.radio-search > svg { flex: none; }
+.station-extras { margin-top: 22px; }
+.station-extras > h3 { font: 740 15px/1.2 var(--display); }
+.station-tile[data-mode='browser'] .station-link { width: auto; padding-inline: 9px; }
+@media (max-width: 560px) { .playlist-import-actions { justify-content: start; } }

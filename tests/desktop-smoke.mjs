@@ -8,13 +8,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, screen, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
-import { STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
+import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
 import { LEGACY_VK_SESSION } from '../dist-electron/src/shared/vk.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
 import { parseFile } from 'music-metadata';
 import { taggedMp3 } from './fixtures/mp3.mjs';
+import { probeRadio } from './live-radio.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
@@ -40,7 +41,7 @@ async function waitFor(label, check) {
 const liveCatalog = process.env.LUMA_LIVE_CATALOG === '1';
 const liveServices = process.env.LUMA_LIVE_SERVICES === '1';
 const liveRadio = process.env.LUMA_LIVE_RADIO === '1';
-const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), (liveCatalog || liveServices || liveRadio) ? 260_000 : 155_000);
+const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), liveRadio ? 370_000 : (liveCatalog || liveServices) ? 260_000 : 170_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
 const cover = await readFile(join(root, 'public/artwork/afterimage.webp'));
@@ -170,7 +171,7 @@ async function smoke() {
   await run(`(() => { document.querySelector('audio').currentTime = 1.5; })()`);
   await waitFor('seek updates the highlighted line', () => run(`document.querySelector('.lyrics-scroll [aria-current="true"]')?.textContent === 'Следующая строка'`));
   await run(`(() => {
-    const field = document.querySelector('.lyrics-sources input');
+    const field = document.querySelector('.lyrics-card input[type="file"]');
     const file = new DataTransfer();
     file.items.add(new File(['Прикреплённый текст'], 'lyrics.txt', { type: 'text/plain' }));
     field.files = file.files; field.dispatchEvent(new Event('change', { bubbles: true }));
@@ -188,7 +189,13 @@ async function smoke() {
   assert.equal(await run(`!document.querySelector('.karaoke-stage > :is(.scene-cover,.immersive-backdrop)')`), true, 'karaoke does not mount a second cover');
   assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-track h1')).userSelect`), 'none');
   assert.equal(await run(`getComputedStyle(document.querySelector('.karaoke-lyrics .lyrics-scroll')).userSelect`), 'text');
-  await run(`[...document.querySelectorAll('.karaoke-lyrics .lyrics-sources button')].find((item) => item.textContent === 'Убрать текст из файла').click()`);
+  await click('.karaoke-settings-toggle');
+  await waitFor('karaoke text settings opens', () => run(`!!document.querySelector('.karaoke-settings:popover-open')`));
+  await fill('.karaoke-settings input[aria-label="Размер текста"]', '47');
+  await click('.karaoke-settings .karaoke-align button:nth-child(2)');
+  await waitFor('karaoke typography updates', async () => (await preferences()).karaokeStyle.size === 47
+    && await run(`getComputedStyle(document.querySelector('.karaoke-lyrics .lyrics-scroll')).textAlign === 'center'`));
+  await run(`[...document.querySelectorAll('.karaoke-sources button')].find((item) => item.textContent === 'Убрать текст из файла').click()`);
   await waitFor('karaoke highlights the sidecar from current playback position', () => run(`document.querySelector('.karaoke-lyrics [aria-current="true"]')?.textContent === 'Следующая строка'`));
   await run(`(() => {
     const seek = document.querySelector('.karaoke-controls .timeline input');
@@ -196,6 +203,15 @@ async function smoke() {
     seek.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
   await waitFor('karaoke seek changes the active line', () => run(`document.querySelector('.karaoke-lyrics [aria-current="true"]')?.textContent === 'Локальная строка'`));
+  await run(`[...document.querySelectorAll('.karaoke-sources button')].find((item) => item.textContent === 'Добавить свой текст…').click()`);
+  await waitFor('text editor receives focus', () => run(`document.activeElement?.matches('.karaoke-custom textarea')`));
+  await fill('.karaoke-custom textarea', '[00:00.10] Своя строка\n[00:02.00] Ещё одна строка');
+  await click('.karaoke-custom button[type="submit"]');
+  await waitFor('pasted LRC follows the same clock and returns focus', () => run(`document.querySelector('.karaoke-lyrics [aria-current="true"]')?.textContent === 'Своя строка'
+    && document.activeElement?.matches('.karaoke-settings-toggle') && !document.querySelector('.karaoke-settings:popover-open')`));
+  await click('.karaoke-settings-toggle');
+  await run(`[...document.querySelectorAll('.karaoke-sources button')].find((item) => item.textContent === 'Убрать свой текст').click()`);
+  await click('.karaoke-settings-toggle');
   await click('.immersive-karaoke-toggle');
   await waitFor('player and karaoke share transport', () => run(`!!document.querySelector('.immersive-main') && window.testKaraokeAudio === document.querySelector('audio')`));
   await click('.immersive-karaoke-toggle');
@@ -453,10 +469,14 @@ async function smoke() {
     files: [{ name: 'Jazz archive.mp3', source: 'original', format: 'VBR MP3', title: 'Jazz archive', length: '32' }] };
   const streamCalls = [];
   const radioCalls = [];
-  const recordStation = STATIONS[0];
+  const recordStation = STATIONS.find(({ id }) => id === 'radio-record-record');
+  const recordTrack = stationTracks.find(({ id }) => id === recordStation.id);
+  const webStation = RADIO_DIRECTORY.find(({ id }) => id === 'radio-ru-mir-far-east');
   const stationSection = '[aria-labelledby="radio-stations"]';
   const savedStations = '[aria-labelledby="radio-added"]';
-  const recordPlay = 'button[aria-label="Слушать станцию: Record"]';
+  const recordTile = `[data-station=${JSON.stringify(recordStation.id)}]`;
+  const webTile = `[data-station=${JSON.stringify(webStation.id)}]`;
+  const recordPlay = `${recordTile} .station-play`;
   const titleQueries = [];
   const fingerprints = [];
   const legacyVk = session.fromPartition(LEGACY_VK_SESSION);
@@ -655,13 +675,14 @@ async function smoke() {
       await waitFor('existing VK bookmark migrated', () => run(`document.querySelector('.hub-bookmarks a[href="https://vk.ru/music/playlist/-31_4"]') !== null`));
       const vkFile = '.vk-track-shelf input[type="file"]';
       await waitFor('VK list ready to import', () => run(`document.querySelector('.vk-track-actions .outline-button')?.disabled === false`));
-      const importVk = (name, body) => run(`(() => {
-        const input = document.querySelector(${JSON.stringify(vkFile)});
+      const loadFile = (selector, name, body) => run(`(() => {
+        const input = document.querySelector(${JSON.stringify(selector)});
         const data = new DataTransfer();
         data.items.add(new File([${JSON.stringify(body)}], ${JSON.stringify(name)}));
         input.files = data.files;
         input.dispatchEvent(new Event('change', { bubbles: true }));
       })()`);
+      const importVk = (name, body) => loadFile(vkFile, name, body);
       await importVk('tracks.csv', 'title,artist,album,ignored_url\nТы здесь,Ария,Живой звук,https://example.invalid/\nСписок VK,Тест,,');
       await waitFor('VK metadata present as a local list, independently of bookmarks', () => run(`document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length === 2
         && document.querySelectorAll('.vk-track-shelf .vk-file-play').length === 1`));
@@ -670,6 +691,44 @@ async function smoke() {
         && document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length === 2`));
       assert.equal(opened.length, 0);
       assert.equal(catalogCalls.length, 2, 'file import does not send metadata to external catalogs');
+      const importer = '.playlist-import[open]';
+      const openImport = async () => {
+        await run(`document.querySelector('.playlist-import-actions button:first-child').focus()`);
+        await click('.playlist-import-actions button:first-child');
+        await waitFor('playlist source picker', () => run(`!!document.querySelector('.playlist-import [data-source="spotify"]')`));
+      };
+      const playlistFile = `${importer} input[type="file"]`;
+      const beforeImport = await preferences();
+      await openImport();
+      await click(`${importer} [data-source="spotify"]`);
+      const jsonPlaylist = JSON.stringify({ playlists: [{ name: 'Семейный список', items: [
+        { track: { trackName: 'Ты здесь', artistName: 'Ария', albumName: 'Живой звук', trackUri: 'spotify:track:input-only' } },
+        { track: { trackName: 'Ты здесь', artistName: 'Ария', albumName: 'Живой звук' } },
+        { track: { trackName: 'Нет записи', artistName: 'Тест' } },
+      ] }] });
+      await loadFile(playlistFile, 'Playlist1.json', 'not JSON');
+      await waitFor('playlist import validates malformed files', () => run(`!!document.querySelector('.playlist-import [role="alert"]')`));
+      await loadFile(playlistFile, 'Playlist1.json', jsonPlaylist);
+      await waitFor('playlist import previews one match, one duplicate and one missing track', () => run(`!!document.querySelector('.playlist-match[data-status="match"]')
+        && !!document.querySelector('.playlist-match[data-status="duplicate"]') && !!document.querySelector('.playlist-match[data-status="unmatched"]')`));
+      assert.deepEqual((await preferences()).playlists, beforeImport.playlists);
+      await click(`${importer} .playlist-import-head button`);
+      await waitFor('cancel restores focus without saving', () => run(`!document.querySelector('.playlist-import') && document.activeElement?.matches('.playlist-import-actions button:first-child')`));
+      assert.deepEqual((await preferences()).playlists, beforeImport.playlists);
+      await openImport();
+      await click(`${importer} [data-source="m3u"]`);
+      await loadFile(playlistFile, 'Очередь из файла.m3u', '#EXTM3U\nD:\\PrivateFolder\\Без обложки.mp3\ntracks/Ты здесь.mp3\nhttps://example.invalid/missing.mp3');
+      await waitFor('M3U matches local basenames, reports skipped remote entry', () => run(`document.querySelectorAll('.playlist-match[data-status="match"]').length === 2
+        && document.querySelector('.playlist-import-body').textContent.includes('Пропущено строк без подходящих данных: 1')`));
+      const importedIds = await run(`window.luma.getTracks().then(tracks => ['Без обложки.mp3', 'Ты здесь.mp3'].map(name => tracks.find(track => track.fileName === name)?.id))`);
+      assert.ok(importedIds.every(Boolean));
+      assert.ok(!(await run(`document.querySelector('.playlist-import-body').textContent.includes('PrivateFolder')`)));
+      await click(`${importer} .playlist-import-foot .primary-button`);
+      await waitFor('explicit save creates an ordered local playlist', async () => (await preferences()).playlists[0]?.title === 'Очередь из файла');
+      assert.deepEqual((await preferences()).playlists[0].trackIds, importedIds);
+      assert.deepEqual((await preferences()).queue, beforeImport.queue);
+      assert.equal(await run(`document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length`), 2);
+      assert.equal(catalogCalls.length, 2, 'playlist preview and save are local');
       await click('.hub-bookmarks header button');
       await fill('.hub-bookmark-form textarea', 'https://vk.com/audios-42?z=audio_playlist-42_7/Share-Key');
       await click('.hub-bookmark-form button[type="submit"]');
@@ -706,11 +765,19 @@ async function smoke() {
       });
 
       await click('.hub-tabs button:nth-child(4)');
-      await waitFor('radio shows curated stations with decoded logos', () => run(`document.querySelectorAll('${stationSection} .station-tile').length === ${STATIONS.length}
-        && document.querySelector('${stationSection} .station-logo img')?.naturalWidth > 0`));
+      await waitFor('radio directory renders in exact order with Record artwork', () => run(`document.querySelectorAll('${stationSection} > .station-grid > .station-tile').length === ${RADIO_DIRECTORY.length}
+        && document.querySelector('${stationSection} ${recordTile} .station-logo img')?.naturalWidth > 0`));
+      assert.deepEqual(await run(`[...document.querySelectorAll('${stationSection} > .station-grid > .station-tile')].map(tile => tile.dataset.station)`), RADIO_DIRECTORY.map(({ id }) => id));
       assert.equal(radioCalls.length, 0);
-      await click(`${stationSection} [aria-label="Добавить станцию Record"]`);
-      await waitFor('saved station appears without starting playback', () => run(`!!document.querySelector('${savedStations} .station-tile')`));
+      await fill('.radio-search input', 'МИР Дальний');
+      await waitFor('radio search finds the exact regional feed as a browser listing', () => run(`document.querySelectorAll('${stationSection} .station-tile').length === 1
+        && document.querySelector('${stationSection} ${webTile}[data-mode="browser"]:not(:has(.station-play))') !== null`));
+      await click(`${stationSection} ${webTile} .station-link`);
+      await waitFor('unresolved radio is handed to the exact external station page', () => opened.at(-1) === webStation.page);
+      assert.equal(radioCalls.length, 0);
+      await click('.radio-search button');
+      await click(`${stationSection} ${recordTile} .station-add`);
+      await waitFor('saved station appears without starting playback', () => run(`!!document.querySelector('${savedStations} ${recordTile}')`));
       assert.deepEqual((await preferences()).stationIds, [recordStation.id]);
       const beforeRadio = await preferences();
       const beforeRadioLyrics = lyricQueries.length;
@@ -724,10 +791,10 @@ async function smoke() {
       assert.deepEqual((await preferences()).onlineTracks, beforeRadio.onlineTracks);
       assert.ok(!(await preferences()).recent.includes(recordStation.id));
       assert.equal(lyricQueries.length, beforeRadioLyrics);
-      assert.equal(await run(`window.luma.streamCache.save(${JSON.stringify(stationTracks[0])}).catch(() => false)`), false);
-      assert.equal(await run(`window.luma.exportMp3(${JSON.stringify(stationTracks[0])}, true).then(({ saved }) => saved, () => false)`), false);
+      assert.equal(await run(`window.luma.streamCache.save(${JSON.stringify(recordTrack)}).catch(() => false)`), false);
+      assert.equal(await run(`window.luma.exportMp3(${JSON.stringify(recordTrack)}, true).then(({ saved }) => saved, () => false)`), false);
       await click('.hub-tabs button:first-child');
-      await waitFor('Home omits lyrics and disables karaoke for a station', () => run(`document.querySelector('.hero h2')?.textContent === 'Record'
+      await waitFor('Home omits lyrics and disables karaoke for a station', () => run(`document.querySelector('.hero h2')?.textContent === ${JSON.stringify(recordStation.name)}
         && document.querySelector('.hero-karaoke')?.disabled && !document.querySelector('.home-page .lyrics-card')`));
       await click('.player-bar .play-button');
       await waitFor('stopping radio unloads the network source', () => run(`document.querySelector('${onlineAudio}').paused && !document.querySelector('${onlineAudio}').hasAttribute('src')`));
@@ -822,6 +889,8 @@ async function smoke() {
     assert.deepEqual((await preferences()).equalizer, editedEq, 'parametric filters restore after a renderer restart');
     assert.deepEqual((await preferences()).stationIds, [recordStation.id], 'saved radio restores after a renderer restart');
     assert.ok((await preferences()).playlists.some(({ title }) => title === 'Джаз'), 'playlist restores after a renderer restart');
+    assert.ok((await preferences()).playlists.some(({ title, trackIds }) => title === 'Очередь из файла' && trackIds.length === 2));
+    assert.deepEqual((await preferences()).karaokeStyle, { size: 47, weight: 750, spacing: 20, align: 'center' });
     await go('Home');
     await click('.hub-tabs button:nth-child(2)');
     await waitFor('VK track list persisted in the same profile', () => run(`document.querySelectorAll('.vk-track-shelf .vk-track-list > li').length === 2
@@ -864,39 +933,6 @@ async function smoke() {
   }
   console.log('::notice title=Catalogs and VK lists::Debounced parallel catalog search, a partial failure on Home, local VK file import and profile persistence verified.');
   console.log('Desktop smoke: monitor fullscreen; compact widget restores bounds; Apple/WASM; metered MP3; lyrics export; browser VK bookmarks and isolated legacy reset.');
-  if (liveRadio) {
-    const webRequest = session.defaultSession.webRequest;
-    const statuses = new Map();
-    webRequest.onResponseStarted({ urls: STATIONS.flatMap(({ stream, logo }) => [stream, logo]) }, ({ url, statusCode }) => statuses.set(url, statusCode));
-    const failures = [];
-    try {
-      // Use the shipped renderer CSP and decoder. Probe short bursts only; never save audio.
-      for (let i = 0; i < STATIONS.length; i += 3) {
-        const rows = await run(`Promise.all(${JSON.stringify(STATIONS.slice(i, i + 3))}.map(async ({ name, stream, logo }) => {
-          const audio = new Audio(); audio.muted = true;
-          const image = new Image(); image.src = logo;
-          const timerId = setTimeout(() => { audio.removeAttribute('src'); audio.load(); image.removeAttribute('src'); }, 10500);
-          try {
-            const decoded = new Promise(resolve => {
-              audio.addEventListener('timeupdate', () => { if (audio.currentTime > .18) resolve('decoded'); });
-              audio.addEventListener('error', () => resolve('media error ' + (audio.error?.code ?? 0)), { once: true });
-              audio.addEventListener('emptied', () => resolve('timeout'), { once: true });
-              audio.src = stream;
-              void audio.play().catch(error => resolve(error.name));
-            });
-            const [media, artwork] = await Promise.all([decoded, image.decode().then(() => image.naturalWidth, () => 0)]);
-            return { name, stream, logo, media, artwork };
-          } finally { clearTimeout(timerId); audio.removeAttribute('src'); audio.load(); }
-        }))`);
-        for (const { name, stream, logo, media, artwork } of rows) {
-          const line = `${name}: stream HTTP ${statuses.get(stream) ?? 'unknown'}, ${media}; logo HTTP ${statuses.get(logo) ?? 'unknown'}, ${artwork}px`;
-          console.log(`::notice title=Live radio::${line}`);
-          if (media !== 'decoded' || !(artwork > 0)) failures.push(name);
-        }
-      }
-    } finally { webRequest.onResponseStarted(null); }
-    assert.deepEqual(failures, [], 'live stations that failed to play or load artwork from this network');
-  }
   if (liveServices) {
     const suggestions = await run(`window.luma.recognition.search('Madam Broshkina', 'ru-RU')`);
     assert.ok(suggestions.some(({ title }) => title === 'Мадам Брошкина'), 'live Apple Music transliteration lookup');
@@ -951,6 +987,12 @@ async function smoke() {
   assert.deepEqual(warnings, []);
   console.log('Desktop smoke: native diagnostics recorded, persisted, exported, and cleared.');
   console.log('Desktop smoke: Cyrillic and embedded/fallback artwork published from luma:// with production CSP.');
+  if (liveRadio) {
+    await session.defaultSession.clearCache();
+    const results = await probeRadio(run, session.defaultSession.webRequest, STATIONS);
+    const failed = results.filter(({ ok }) => !ok).map(({ id }) => id);
+    assert.deepEqual(failed, [], 'Live radio sources that failed on the runner (see station report)');
+  }
   if (liveCatalog) {
     await session.defaultSession.clearCache();
     const failed = [];

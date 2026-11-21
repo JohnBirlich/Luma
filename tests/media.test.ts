@@ -71,7 +71,8 @@ test('desktop imports tagged audio, deduplicates and survives restart without de
   assert.equal(imported.tracks[0].artist, 'Арден Вейл');
   assert.equal(imported.tracks[0].album, 'Полуночные сигналы');
   assert.ok(imported.tracks[0].duration >= 31);
-  assert.ok(!JSON.stringify(imported.tracks).includes('Тестовый трек.mp3'));
+  assert.equal(imported.tracks[0].fileName, 'Тестовый трек.mp3');
+  assert.ok(!JSON.stringify(imported.tracks).includes(JSON.stringify(trackPath).slice(1, -1)), 'full path stays in the desktop library');
   const trackId = imported.added[0];
   library = await DesktopLibrary.open(profile);
   assert.equal(library.list()[0].id, trackId);

@@ -10,6 +10,8 @@ import type { EqualizerSettings } from '../shared/equalizer';
 import type { QueueState, Repeat } from '../shared/queue';
 import { defaultAppearance, defaultPlayback, readAppearance, readPlayback } from '../shared/customization';
 import type { Appearance, PlaybackPreferences } from '../shared/customization';
+import { defaultKaraokeStyle, readKaraokeStyle } from '../shared/karaoke-style';
+import type { KaraokeStyle } from '../shared/karaoke-style';
 
 import { defaultAudioQuality, readAudioQuality } from '../shared/audio-quality';
 import type { AudioQuality } from '../shared/audio-quality';
@@ -25,6 +27,7 @@ export interface Preferences {
   playback: PlaybackPreferences;
   audioQuality: AudioQuality;
   autoLyrics: boolean;
+  karaokeStyle: KaraokeStyle;
   autoCatalogSearch: boolean;
   exportLyrics: boolean;
   queue?: QueueState;
@@ -43,7 +46,7 @@ const KEY = 'luma-player:v1';
 export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
-  playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, autoCatalogSearch: true, exportLyrics: false,
+  playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, exportLyrics: false,
   resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
 };
 const readRepeat = (value: unknown): Repeat => value === 'all' || value === 'one' ? value : 'off';
@@ -84,6 +87,7 @@ export function decodePreferences(value: string | null): Preferences {
       playback,
       audioQuality: readAudioQuality(data.audioQuality),
       autoLyrics: data.autoLyrics === true,
+      karaokeStyle: readKaraokeStyle(data.karaokeStyle),
       autoCatalogSearch: data.autoCatalogSearch !== false,
       exportLyrics: data.exportLyrics === true,
       resumeRepeat, resumeShuffle,

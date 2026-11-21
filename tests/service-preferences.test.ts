@@ -6,6 +6,7 @@ import { encodePreferences, decodePreferences } from '../src/player/preferences.
 import { startQueue } from '../src/shared/queue.js';
 import { jamendoRecording, commonsRecording } from './fixtures/openverse.mjs';
 import { activeLyricLine, lyricsUrl, readLocalLyrics, readLyrics, readLyricsQuery, timedLines } from '../src/shared/lyrics.js';
+import { defaultKaraokeStyle } from '../src/shared/karaoke-style.js';
 import { createLyricsService } from '../src/shared/lyrics-service.js';
 
 const jamendo = decodeOpenverse(jamendoRecording)!;
@@ -88,5 +89,25 @@ test('lyrics requests send only recording tags, identify client, cache and honor
   const limited = createLyricsService(async () => { calls++; return new Response(null, { status: 429, headers: { 'Retry-After': '30' } }); });
   await assert.rejects(limited(query, signal), /недоступен/);
   await assert.rejects(limited({ ...query, title: 'Другой' }, signal), /Подождите/);
+  assert.equal(calls, 2);
+});
+
+test('karaoke typography survives preference round trips and repairs untrusted values', () => {
+  const preferences = decodePreferences(JSON.stringify({ karaokeStyle: { size: 52, weight: 600, spacing: 7, align: 'center' } }));
+  assert.deepEqual(decodePreferences(encodePreferences(preferences, startQueue([]))).karaokeStyle, { size: 52, weight: 600, spacing: 7, align: 'center' });
+  assert.deepEqual(decodePreferences(null).karaokeStyle, defaultKaraokeStyle);
+  assert.deepEqual(decodePreferences(JSON.stringify({ karaokeStyle: { size: -1, weight: 'bad', spacing: 1000, align: 'invalid' } })).karaokeStyle,
+    { size: 20, weight: 750, spacing: 36, align: 'left' });
+});
+
+test('manual LRCLIB refresh bypasses cached text without bypassing cooldown', async () => {
+  let calls = 0;
+  const find = createLyricsService(async () => { calls++; return Response.json({ ...response, plainLyrics: `Text ${calls}` }); });
+  const signal = new AbortController().signal;
+  assert.equal((await find(query, signal))?.plain, 'Text 1');
+  assert.equal((await find(query, signal))?.plain, 'Text 1');
+  await assert.rejects(find(query, signal, true), /Подождите/);
+  await new Promise((resolve) => setTimeout(resolve, 375));
+  assert.equal((await find(query, signal, true))?.plain, 'Text 2');
   assert.equal(calls, 2);
 });

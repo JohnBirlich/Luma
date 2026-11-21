@@ -36,6 +36,8 @@ export interface Track {
   genres?: string[];
   format?: AudioFormat;
   embeddedLyrics?: string;
+  /** Local basename, used for matching an imported playlist. Never a readable path. */
+  fileName?: string;
   audioUrl: string;
   artworkUrl?: string;
   backdropUrl?: string;
@@ -67,7 +69,7 @@ export interface DesktopBridge {
   removeTrack(id: string): Promise<Track[]>;
   openVkLink(url: string): Promise<void>;
   clearLegacyVkSession(): Promise<void>;
-  lyrics: { lookup(query: LyricsQuery): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null>; openEdition(url: string): Promise<void> };
+  lyrics: { lookup(query: LyricsQuery, refresh?: boolean): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null>; openEdition(url: string): Promise<void> };
   exportMp3(track: OnlineTrack, saveLyrics: boolean): Promise<Mp3ExportResult>;
   recognition: {
     search(query: string, locale: string): Promise<MetadataCandidate[]>;

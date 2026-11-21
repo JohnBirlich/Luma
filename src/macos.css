@@ -225,14 +225,17 @@
   box-shadow: var(--glass-shadow); backdrop-filter: blur(21px) saturate(1.35); }
 [data-layout='glass'] .immersive-upcoming { border-color: var(--glass-edge); border-radius: 27px; background: var(--glass-lens); box-shadow: var(--glass-shadow); }
 [data-layout='glass'] :is(.upcoming-copy small,.upcoming-time,.upcoming-index,.upcoming-note) { color: var(--muted); }
-[data-layout='glass'] .karaoke-deck { padding: clamp(10px,2vw,23px); border: 1px solid var(--glass-edge); border-radius: 30px; background: var(--glass-lens); box-shadow: var(--glass-shadow); }
-[data-layout='glass'] .karaoke-track .artwork { border-color: var(--glass-edge); box-shadow: 0 11px 25px #2d4b8f35; }
+[data-layout='glass'] .immersive-stage.karaoke-stage[data-ambient] {
+  background: radial-gradient(ellipse at 23% 43%, color-mix(in srgb, var(--immersive-tone) 30%, transparent), transparent 58%),
+    radial-gradient(ellipse at 93% 78%, #abaaef70, transparent 66%), linear-gradient(148deg, #e8f2fd, #f8f1fc);
+  --karaoke-played: #484158;
+  --karaoke-next: #554b69;
+  --karaoke-current: #1c1230;
+}
+[data-layout='glass'] .karaoke-track .artwork { border-color: var(--glass-edge); box-shadow: 0 22px 56px #38417143; }
 [data-layout='glass'] .karaoke-meta > p { color: var(--muted); }
-[data-layout='glass'] .lyrics-card.karaoke-lyrics { border-radius: 30px; }
-[data-layout='glass'] :is(.karaoke-lyrics .lyrics-scroll,.karaoke-lyrics .lyrics-empty,.karaoke-lyrics .lyrics-timed > p[data-past],.karaoke-controls .timeline > span,.karaoke-controls .transport-controls .icon-button) { color: var(--muted); }
+[data-layout='glass'] .karaoke-settings-toggle { color: var(--accent-light); background: var(--glass-lens); border-color: var(--glass-edge); }
 [data-layout='glass'] .karaoke-stage .immersive-queue-toggle[aria-expanded='true'] { background: var(--accent-fill); }
-[data-layout='glass'] .karaoke-lyrics .lyrics-timed > p[aria-current] { color: var(--text); background: linear-gradient(90deg,#89afff55,#ffffff20); text-shadow: none; }
-[data-layout='glass'] .karaoke-lyrics :is(header,.lyrics-sources) { border-color: var(--line); }
 [data-layout='glass'] .desktop-widget { border-radius: 23px; }
 [data-layout='glass'] .desktop-widget:not([data-widget-background='white'],[data-widget-background='paper'],[data-widget-background='liquid']) { --accent: #dce7ff; --accent-light: #e9efff; --accent-ink: #1b2852; }
 

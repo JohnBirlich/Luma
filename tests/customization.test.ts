@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { accentFor, artworkTone, contrastRatio, defaultAppearance, defaultPlayback, formatCount, scheduledTheme, shouldAdvanceAfterEnd, THEMES, themeVariables, WIDGET_BACKGROUNDS } from '../src/shared/customization.js';
+import { defaultKaraokeStyle } from '../src/shared/karaoke-style.js';
 import { defaultAudioQuality } from '../src/shared/audio-quality.js';
 import { decodePreferences, encodePreferences, RECENT_LIMIT, rememberTrack } from '../src/player/preferences.js';
 
@@ -12,7 +13,7 @@ test('customization reads old profiles without altering queue, volume or equaliz
   };
   const { equalizer, ...rest } = decodePreferences(JSON.stringify(previous));
   const { equalizer: oldEqualizer, ...old } = previous;
-  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, autoCatalogSearch: true, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [] });
+  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [] });
   assert.equal(equalizer.enabled, oldEqualizer.enabled);
   assert.equal(equalizer.preset, oldEqualizer.preset);
   assert.equal(equalizer.preamp, oldEqualizer.preamp);

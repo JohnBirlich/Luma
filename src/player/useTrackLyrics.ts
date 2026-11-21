@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { findLyricEdition } from '../shared/lyric-editions';
-import { MAX_LYRIC_FILE, readLocalLyrics, readLyricsQuery, selectLyrics, timedLines } from '../shared/lyrics';
+import { MAX_LYRIC_FILE, readCustomLyrics, readLocalLyrics, readLyricsQuery, selectLyrics, timedLines } from '../shared/lyrics';
 import type { Lyrics, LyricSource } from '../shared/lyrics';
 import { createLyricsService } from '../shared/lyrics-service';
 import type { Track } from '../shared/media';
@@ -16,6 +16,7 @@ interface Workspace {
   local?: Lyrics | null;
   remote?: { key: string; attempt: number; value: Lyrics | null; failed: boolean };
   attached?: Lyrics;
+  attachment?: 'file' | 'text';
   attachError: boolean;
 }
 const empty = (id?: string): Workspace => ({ id, token: Symbol(), choice: 'auto', attempt: 0, started: false, attachError: false });
@@ -48,7 +49,7 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
   const done = cached?.attempt === attempt;
   const showLocal = choice === 'auto' || choice === 'local';
   const allowed = Boolean(query && (choice === 'lrclib' || (choice === 'auto' && local === null && !attached)));
-  const busy = enabled && connected && allowed && !done && (attempt > 0 || (auto && started));
+  const busy = enabled && connected && allowed && !done && (attempt > 0 || choice === 'lrclib' || (auto && started));
 
   useEffect(() => {
     if (!enabled || !id || !canReadSidecar || local !== undefined || !window.luma) return;
@@ -64,7 +65,7 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
   useEffect(() => {
     if (!busy || !query) return;
     const request = new AbortController();
-    const lookup = window.luma?.lyrics.lookup(query) ?? webLyrics(query, request.signal);
+    const lookup = window.luma?.lyrics.lookup(query, attempt > 0) ?? webLyrics(query, request.signal, attempt > 0);
     void lookup.then((value) => {
       if (!request.signal.aborted) update(() => ({ remote: { key, attempt, value, failed: false } }));
     }, () => {
@@ -82,21 +83,29 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
       const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
       const lyrics = /\.lrc$/i.test(file.name) ? readLocalLyrics(undefined, text) : readLocalLyrics(text);
       if (!lyrics) throw new Error('No lyrics');
-      if (intent === attachIntent.current) update(() => ({ attached: lyrics, choice: 'attached' }));
+      if (intent === attachIntent.current) update(() => ({ attached: lyrics, attachment: 'file', choice: 'attached' }));
     } catch { if (intent === attachIntent.current) update(() => ({ attachError: true })); }
+  }, [update]);
+  const attachText = useCallback((text: string) => {
+    const lyrics = readCustomLyrics(text);
+    if (!lyrics) return false;
+    attachIntent.current++;
+    update(() => ({ attached: lyrics, attachment: 'text', choice: 'attached', attachError: false }));
+    return true;
   }, [update]);
   const select = useCallback((choice: LyricSource) => update(() => ({ choice })), [update]);
   const clear = useCallback(() => {
     attachIntent.current++;
-    update((previous) => ({ attached: undefined, choice: previous.choice === 'attached' ? 'auto' : previous.choice }));
+    update((previous) => ({ attached: undefined, attachment: undefined, attachError: false, choice: previous.choice === 'attached' ? 'auto' : previous.choice }));
   }, [update]);
   const search = useCallback(() => update((previous) => ({ attempt: previous.attempt + 1 })), [update]);
+  const searchOnline = useCallback(() => update((previous) => ({ choice: 'lrclib', attempt: previous.attempt + 1 })), [update]);
   const result = useMemo(() => selectLyrics(choice, { local, attached, lrclib: cached?.value, edition }), [choice, local, attached, cached?.value, edition]);
   const lines = useMemo(() => result.lyrics?.synced ? timedLines(result.lyrics.synced) : [], [result.lyrics?.synced]);
   return {
-    ...result, choice, select, local: Boolean(local), attached: Boolean(attached), edition, clear, attach, search, lines,
+    ...result, choice, select, local: Boolean(local), attached: Boolean(attached), edition, clear, attach, attachText, attachment: state.attachment, search, searchOnline, lines,
     attachError: state.attachError, busy, offline: !connected, loadingLocal: showLocal && canReadSidecar && local === undefined,
-    canSearch: allowed, error: Boolean(done && cached?.failed), missing: Boolean(done && cached?.value === null && !cached.failed),
+    canSearch: allowed, canSearchOnline: Boolean(query), error: Boolean(allowed && done && cached?.failed), missing: Boolean(allowed && done && cached?.value === null && !cached.failed),
   };
 }
 

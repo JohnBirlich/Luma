@@ -7,7 +7,7 @@ import { startQueue } from '../src/shared/queue.js';
 import { classifiedTracks, GENRES, mergeDiscoveryTracks } from '../src/shared/discovery.js';
 import { MAX_PLAYLIST_TRACKS, readLumaPlaylists } from '../src/shared/luma-playlists.js';
 import { MUSIC_SITES, musicSites, musicSiteUrl, isMusicSiteUrl } from '../src/shared/music-sites.js';
-import { stationTracks, STATIONS, isStationPage } from '../src/shared/radio.js';
+import { stationTracks, EXTRA_STATIONS, RADIO_DIRECTORY, RADIO_LISTINGS, RADIO_ORIGINS, STATIONS, isStationPage } from '../src/shared/radio.js';
 import { streamUrl } from '../src/shared/audio-quality.js';
 import { decodeOpenverse, readOnlineTrack } from '../src/shared/online.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
@@ -86,7 +86,8 @@ test('radio restores only curated ids and cannot be serialized as a song or a ca
     assert.equal(readOnlineTrack(station), undefined);
     assert.equal(isStationPage(page), true);
     assert.equal(isStationPage(stream), false);
-    assert.equal(new URL(logo).protocol, 'https:');
+    if (logo) assert.equal(new URL(logo).protocol, 'https:');
+    assert.ok(RADIO_ORIGINS.media.split(' ').includes(new URL(stream).origin + new URL(stream).pathname));
   }
   const id = STATIONS[0].id;
   const stored = decodePreferences(JSON.stringify({ stationIds: [id, id, 'bogus', {}], recent: [id, 'local'], onlineRefs: stationTracks }));
@@ -110,4 +111,27 @@ test('music sites expose only canonical browser URLs, never embed pages or that 
   assert.equal(musicSiteUrl('mail', '..'), MUSIC_SITES.mail.home);
   [null, 'file:///C:/music.mp3', 'https://vk.ru@elsewhere.invalid/audio?q=jazz', 'https://vk.ru/audio?q=jazz&next=https://example.invalid',
     'https://my.mail.ru/music/download/123.mp3', 'https://music.yandex.ru/search?text=jazz&type=all'].forEach((url) => assert.equal(isMusicSiteUrl(url), false));
+});
+
+test('radio keeps the requested directory, regional identities and browser-only bookmarks separate', () => {
+  assert.equal(RADIO_DIRECTORY.length, 96);
+  assert.equal(new Set(RADIO_DIRECTORY.map(({ name }) => name)).size, 96);
+  assert.equal(new Set(RADIO_LISTINGS.map(({ id }) => id)).size, 96 + EXTRA_STATIONS.length);
+  assert.deepEqual(RADIO_DIRECTORY.filter(({ name }) => name.startsWith('Радио МИР')).map(({ name }) => name), [
+    'Радио МИР - Урал', 'Радио МИР - Дальний Восток', 'Радио МИР - Россия',
+  ]);
+  const mir = RADIO_DIRECTORY.filter(({ name }) => name.startsWith('Радио МИР'));
+  assert.equal(new Set(mir.map(({ page }) => page)).size, 3);
+  assert.equal(new Set(mir.map(({ stream }) => stream).filter(Boolean)).size, mir.filter(({ stream }) => stream).length);
+  const maria = RADIO_DIRECTORY.filter(({ name }) => /Мари[яа]/u.test(name));
+  assert.equal(maria.length, 2);
+  assert.notEqual(maria[0].page, maria[1].page);
+  assert.equal(RADIO_DIRECTORY.find(({ name }) => name === 'Радио Record - Россия')?.id, 'radio-record-record');
+  const browser = RADIO_DIRECTORY.filter(({ stream }) => !stream);
+  assert.ok(browser.length);
+  assert.ok(browser.every(({ id, page }) => new URL(page).protocol === 'https:' && isStationPage(page) && !stationTracks.some((track) => track.id === id)));
+  const list = decodePreferences(JSON.stringify({ stationIds: [browser[0].id], favorites: [browser[0].id] }));
+  assert.deepEqual(list.stationIds, [browser[0].id]);
+  assert.deepEqual(list.favorites, []);
+  assert.equal(isStationPage('https://radioplayer.ru/station/radio-mariya?unexpected'), false);
 });
