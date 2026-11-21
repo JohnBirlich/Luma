@@ -926,6 +926,30 @@ async function smoke() {
       await waitFor('cancel restores focus without saving', () => run(`!document.querySelector('.playlist-import') && document.activeElement?.matches('.playlist-import-actions button:first-child')`));
       assert.deepEqual((await preferences()).playlists, beforeImport.playlists);
       await openImport();
+      await click(`${importer} [data-source="unison"]`);
+      const backupTrack = { trackJson: JSON.stringify({ source: 'VK', sourceId: 'not-a-stream', title: indexedLocal.title,
+        artists: indexedLocal.artist, album: indexedLocal.album, durationMs: Math.round(indexedLocal.duration * 1000), coverUrl: 'https://private.invalid/art' }) };
+      await loadFile(playlistFile, 'backup.json', JSON.stringify({ app: 'Unison', version: 1, settings: { secret: 'not-imported' },
+        stats: [{ trackJson: 'no-history' }], playlists: [{ name: 'Список из Unison', tracks: [backupTrack] }], favorites: [backupTrack] }));
+      await waitFor('Unison backup previews its playlist against the existing library', () => run(`document.querySelector('.playlist-import-summary')?.textContent.includes('1 из 1')
+        && !!document.querySelector('.playlist-match[data-status="match"]')`));
+      await select(`${importer} .playlist-import-body > label > select`, '1');
+      await waitFor('Unison favorites can be selected as a separate playlist', () => run(`document.querySelector('.playlist-import-body > label > input')?.value === 'Любимое Unison'`));
+      assert.doesNotMatch(await run(`document.querySelector('.playlist-import-body').textContent`), /private\.invalid|not-a-stream|no-history|not-imported/);
+      await click(`${importer} .playlist-import-head button`);
+      await waitFor('closing Unison preview saves nothing', () => run(`!document.querySelector('.playlist-import')`));
+      assert.deepEqual((await preferences()).playlists, beforeImport.playlists);
+      assert.deepEqual((await preferences()).queue, beforeImport.queue);
+      await openImport();
+      await click(`${importer} [data-source="vk"]`);
+      await waitFor('VK import is described as a file import, not an account connection', () => run(`document.querySelector('.playlist-import-body')?.textContent.includes('не подключается к аккаунту VK')`));
+      await loadFile(playlistFile, 'Список VK.csv', `Название,Исполнитель,Альбом,Ссылка\nТы здесь,Ария,Живой звук,https://vk.ru/audio123_456`);
+      await waitFor('VK CSV matches the local recording without opening its URL', () => run(`!!document.querySelector('.playlist-match[data-status="match"]')`));
+      assert.ok(!(await run(`document.querySelector('.playlist-import-body').textContent.includes('vk.ru/audio')`)));
+      await click(`${importer} .playlist-import-head button`);
+      await waitFor('closing VK preview saves nothing', () => run(`!document.querySelector('.playlist-import')`));
+      assert.deepEqual((await preferences()).playlists, beforeImport.playlists);
+      await openImport();
       await click(`${importer} [data-source="m3u"]`);
       await loadFile(playlistFile, 'Очередь из файла.m3u', '#EXTM3U\nD:\\PrivateFolder\\Без обложки.mp3\ntracks/Ты здесь.mp3\nhttps://example.invalid/missing.mp3');
       await waitFor('M3U matches local basenames, reports skipped remote entry', () => run(`document.querySelectorAll('.playlist-match[data-status="match"]').length === 2

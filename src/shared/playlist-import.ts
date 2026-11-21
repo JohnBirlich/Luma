@@ -3,21 +3,23 @@ import { audioMime } from './media.js';
 import type { Track } from './media.js';
 import { basenameKey, csvTracks, localRecordingMatches, readRecordingReference, textTracks } from './track-list.js';
 import type { RecordingReference } from './track-list.js';
-import { readOnlineTrack, sessionCatalogId } from './online.js';
+import { catalogObject, readOnlineTrack, sessionCatalogId } from './online.js';
 import { musicSearchKey } from './russian.js';
 import { MAX_PLAYLIST_SHARE_BYTES, readSharedPlaylist } from './playlist-share.js';
 import type { SharedRecording } from './playlist-share.js';
 import { recordingKey } from './recording-match.js';
 
 export const MAX_PLAYLIST_IMPORT_BYTES = 2 * 1024 * 1024;
+export const MAX_UNISON_IMPORT_BYTES = 16 * 1024 * 1024;
 const MAX_IMPORT_ROWS = 10_000;
 const MAX_IMPORT_LISTS = 100;
 export interface ImportRow extends SharedRecording { fileName?: string }
 export interface PlaylistDraft { title: string; rows: ImportRow[]; skipped: number }
-export type PlaylistFormat = 'csv' | 'txt' | 'm3u' | 'spotify-json' | 'luma-json';
+export type PlaylistFormat = 'csv' | 'txt' | 'm3u' | 'spotify-json' | 'luma-json' | 'unison-json';
 
 export function playlistImportFormat(fileName: string): PlaylistFormat | undefined {
   if (/\.luma\.json$/i.test(fileName)) return 'luma-json';
+  if (/\.unison\.json$/i.test(fileName)) return 'unison-json';
   const ext = /\.([a-z0-9]+)$/i.exec(fileName)?.[1].toLowerCase();
   if (ext === 'csv' || ext === 'txt') return ext;
   if (ext === 'm3u' || ext === 'm3u8') return 'm3u';
@@ -61,12 +63,35 @@ function* spotifyRows(items: unknown[]): Generator<RecordingReference | undefine
   }
 }
 
+// Unison backup v1 stores a nested Track JSON string in each playlist or favorite row.
+// Do not retain the source identifiers, account data, paths, art, alternate refs or settings.
+function* unisonRows(items: unknown[]): Generator<ImportRow | undefined> {
+  for (const item of items) {
+    const { trackJson } = catalogObject(item);
+    if (typeof trackJson !== 'string' || trackJson.length > 16 * 1024) { yield undefined; continue; }
+    let value: unknown;
+    try { value = JSON.parse(trackJson); } catch { yield undefined; continue; }
+    const { title, artists, album, durationMs } = catalogObject(value);
+    const row = readRecordingReference({ title, artist: artists, album });
+    const duration = typeof durationMs === 'number' && Number.isSafeInteger(durationMs) && durationMs > 0 && durationMs <= 86_400_000
+      ? durationMs / 1000 : undefined;
+    yield row && { ...row, ...(duration && { duration }) };
+  }
+}
+
+export function checkPlaylistImportSize(size: number, format: PlaylistFormat) {
+  if (format === 'unison-json') {
+    if (size > MAX_UNISON_IMPORT_BYTES) throw new Error('Выберите резервную копию Unison размером до 16 МБ.');
+  } else if (format === 'luma-json') {
+    if (size > MAX_PLAYLIST_SHARE_BYTES) throw new Error('Нужен файл .luma.json размером до 256 КБ.');
+  } else if (size > MAX_PLAYLIST_IMPORT_BYTES) throw new Error('Выберите файл плейлиста размером до 2 МБ.');
+}
+
 export function readPlaylistImport(bytes: Uint8Array, format: PlaylistFormat, fileName: string): PlaylistDraft[] {
-  if (bytes.byteLength > MAX_PLAYLIST_IMPORT_BYTES) throw new Error('Выберите файл плейлиста размером до 2 МБ.');
+  checkPlaylistImportSize(bytes.byteLength, format);
   const text = readText(bytes, format);
   const name = playlistTitle(fileName.split(/[\\/]/).pop()?.replace(/\.[^.]*$/, ''));
   if (format === 'luma-json') {
-    if (bytes.length > MAX_PLAYLIST_SHARE_BYTES) throw new Error('Нужен файл .luma.json размером до 256 КБ.');
     let value: unknown;
     try { value = JSON.parse(text); } catch { throw new Error('Не удалось прочитать файл обмена Luma.'); }
     const shared = readSharedPlaylist(value);
@@ -84,7 +109,20 @@ export function readPlaylistImport(bytes: Uint8Array, format: PlaylistFormat, fi
     return { title, rows, skipped };
   }
   let lists: PlaylistDraft[];
-  if (format === 'spotify-json') {
+  if (format === 'unison-json') {
+    const invalid = 'Нужна резервная копия Unison версии 1 в формате JSON.';
+    let value: unknown;
+    try { value = JSON.parse(text); } catch { throw new Error(invalid); }
+    const { app, version, playlists, favorites } = catalogObject(value);
+    if (app !== 'Unison' || version !== 1 || !Array.isArray(playlists) || !Array.isArray(favorites)
+      || playlists.length + Number(favorites.length > 0) > MAX_IMPORT_LISTS) throw new Error(invalid);
+    lists = playlists.map((list) => {
+      const { name: title, tracks } = catalogObject(list);
+      if (!Array.isArray(tracks)) throw new Error(invalid);
+      return draft(playlistTitle(title) || name, unisonRows(tracks));
+    });
+    if (favorites.length > 0) lists.push(draft('Любимое Unison', unisonRows(favorites)));
+  } else if (format === 'spotify-json') {
     let value: { playlists?: { name?: unknown; items?: unknown }[] } | null;
     try { value = JSON.parse(text); } catch { throw new Error('Не удалось прочитать JSON Spotify.'); }
     if (!Array.isArray(value?.playlists) || value.playlists.length > MAX_IMPORT_LISTS) throw new Error('Выберите Playlist*.json из архива Spotify (до 100 плейлистов).');

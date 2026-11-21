@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { MAX_PLAYLIST_TRACKS } from '../src/shared/luma-playlists.js';
 import type { Track } from '../src/shared/media.js';
-import { MAX_PLAYLIST_IMPORT_BYTES, playlistImportFormat, previewPlaylist, readPlaylistImport } from '../src/shared/playlist-import.js';
+import { checkPlaylistImportSize, MAX_PLAYLIST_IMPORT_BYTES, MAX_UNISON_IMPORT_BYTES, playlistImportFormat, previewPlaylist, readPlaylistImport } from '../src/shared/playlist-import.js';
 
 const parse = (name: string, text: string) => readPlaylistImport(new TextEncoder().encode(text), playlistImportFormat(name)!, name);
 const local = (id = 'file-a', overrides: Partial<Track> = {}): Track => ({
@@ -87,4 +87,35 @@ test('manual import picks only known usable entries, can skip a match and preser
   assert.deepEqual(edited.items, [b, c]);
   assert.deepEqual(edited.rows.map(({ status }) => status), ['chosen', 'skipped', 'chosen']);
   assert.deepEqual(previewPlaylist(draft, [...files, local('audius-aaa')], new Map([[0, 'audius-aaa'], [1, 'demo'], [2, 'invented']])).items, []);
+});
+
+
+test('Unison backup v1 imports ordered playlists and a favorites list without service data', () => {
+  const trackJson = JSON.stringify({ source: 'VK', sourceId: 'vk-input-only', title: 'Первый снег', artists: 'Артём', album: 'Зима',
+    durationMs: 42000, coverUrl: 'https://private.invalid/cover', alternates: [{ source: 'YOUTUBE', sourceId: 'alternate-input-only' }] });
+  const backup = { app: 'Unison', version: 1, createdAt: 1754455022000,
+    playlists: [{ name: 'Вечер', tracks: [{ trackJson }, { trackJson: 'broken' }, {
+      trackJson: JSON.stringify({ title: 'Второй снег', artists: 'Артём', durationMs: -1 }) }] }],
+    favorites: [{ trackJson, sentYandex: true, sentYoutube: true }],
+    settings: { ytProxyHost: 'proxy-input-only' }, stats: [{ trackJson: 'history-input-only' }],
+  };
+  const [evening, favorites] = parse('luma-transfer.unison.json', JSON.stringify(backup));
+  assert.deepEqual(evening, { title: 'Вечер', skipped: 1, rows: [
+    { title: 'Первый снег', artist: 'Артём', album: 'Зима', duration: 42 }, { title: 'Второй снег', artist: 'Артём', album: '' },
+  ] });
+  assert.deepEqual(favorites, { title: 'Любимое Unison', skipped: 0, rows: [evening.rows[0]] });
+  assert.doesNotMatch(JSON.stringify([evening, favorites]), /input-only|private\.invalid|sentYandex|sentYoutube/);
+  assert.deepEqual(previewPlaylist(evening, [local(), local('live', { duration: 49, album: 'Зима' })]).items.map(({ id }) => id), ['file-a']);
+});
+
+test('Unison import rejects unsupported schema and enforces its file and playlist limits', () => {
+  const backup = { app: 'Unison', version: 1, playlists: [], favorites: [] };
+  const parseBackup = (data: unknown) => readPlaylistImport(new TextEncoder().encode(JSON.stringify(data)), 'unison-json', 'backup.json');
+  assert.throws(() => parseBackup({ ...backup, version: 2 }), /версии 1/);
+  assert.throws(() => parseBackup({ ...backup, playlists: [{}] }), /версии 1/);
+  assert.throws(() => parseBackup({ ...backup, playlists: Array(101).fill({ tracks: [] }) }), /версии 1/);
+  assert.throws(() => checkPlaylistImportSize(MAX_UNISON_IMPORT_BYTES + 1, 'unison-json'), /16 МБ/);
+  assert.throws(() => parseBackup(backup), /нет записей/);
+  assert.throws(() => parseBackup({ ...backup, playlists: [{ name: 'a', tracks: Array(6000).fill(null) }],
+    favorites: Array(4001).fill(null) }), /10 000/);
 });

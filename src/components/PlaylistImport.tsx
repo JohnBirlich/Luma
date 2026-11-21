@@ -6,7 +6,7 @@ import type { Track } from '../shared/media';
 import { formatTime } from '../shared/media';
 import { ONLINE_SOURCES } from '../shared/online';
 import { musicSearchKey } from '../shared/russian';
-import { canChooseForPlaylist, IMPORT_STATUS, MAX_PLAYLIST_IMPORT_BYTES, playlistImportFormat, previewPlaylist, readPlaylistImport } from '../shared/playlist-import';
+import { canChooseForPlaylist, checkPlaylistImportSize, IMPORT_STATUS, playlistImportFormat, previewPlaylist, readPlaylistImport } from '../shared/playlist-import';
 import type { PlaylistDraft } from '../shared/playlist-import';
 import spotify from '../assets/playlist-sources/spotify.svg';
 import appleMusic from '../assets/playlist-sources/apple-music.svg';
@@ -19,6 +19,7 @@ import './playlist-import.css';
 
 const sources = [
   { id: 'luma', name: 'Luma', icon: ListMusic, hint: '.luma.json' },
+  { id: 'unison', name: 'Unison', icon: FileText, hint: 'JSON' },
   { id: 'spotify', name: 'Spotify', logo: spotify, hint: 'Playlist*.json / CSV / TXT' },
   { id: 'apple', name: 'Apple Music', logo: appleMusic, hint: 'TXT / CSV' },
   { id: 'deezer', name: 'Deezer', logo: deezer, hint: 'CSV / TXT' },
@@ -26,6 +27,7 @@ const sources = [
   { id: 'soundcloud', name: 'SoundCloud', logo: soundcloud, hint: 'CSV / TXT' },
   { id: 'tidal', name: 'Tidal', logo: tidal, hint: 'CSV / TXT' },
   { id: 'yandex', name: 'Яндекс Музыка', logo: yandexMusic, hint: 'CSV / TXT' },
+  { id: 'vk', name: 'VK Музыка', icon: FileText, hint: 'CSV / TXT' },
   { id: 'file', name: 'Другой сервис или список', icon: FileText, hint: 'CSV / TXT' },
   { id: 'm3u', name: 'Плейлист из M3U', icon: ListMusic, hint: 'M3U / M3U8' },
 ] as const;
@@ -115,13 +117,12 @@ export function PlaylistImport({ collection, save, close }: {
     setError('');
     setReading(true);
     try {
-      if (file.size > MAX_PLAYLIST_IMPORT_BYTES) throw new Error('Выберите файл плейлиста размером до 2 МБ.');
-      const format = provider.id === 'luma' && /\.json$/i.test(file.name) ? 'luma-json' : playlistImportFormat(file.name);
-      const allowed = provider.id === 'm3u' ? format === 'm3u' : provider.id === 'luma' ? format === 'luma-json'
+      const json = /\.json$/i.test(file.name);
+      const format = json && provider.id === 'luma' ? 'luma-json' : json && provider.id === 'unison' ? 'unison-json' : playlistImportFormat(file.name);
+      const allowed = provider.id === 'm3u' ? format === 'm3u' : provider.id === 'luma' ? format === 'luma-json' : provider.id === 'unison' ? format === 'unison-json'
         : format === 'csv' || format === 'txt' || (format === 'spotify-json' && provider.id === 'spotify');
-      if (!format || !allowed) {
-        throw new Error('Формат не подходит для выбранного источника.');
-      }
+      if (!format || !allowed) throw new Error('Формат не подходит для выбранного источника.');
+      checkPlaylistImportSize(file.size, format);
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (request.current !== current) return;
       const next = readPlaylistImport(bytes, format, file.name);
@@ -155,10 +156,12 @@ export function PlaylistImport({ collection, save, close }: {
         <p>{t(source.id === 'spotify' ? 'Откройте Playlist*.json из архива Spotify или экспорт CSV / TXT.'
           : source.id === 'apple' ? 'В приложении «Музыка» экспортируйте список в текстовый файл с данными о треках или выберите CSV.'
           : source.id === 'luma' ? 'Выберите полученный файл .luma.json, затем проверьте совпадения с вашей медиатекой.'
+          : source.id === 'unison' ? 'Откройте резервную копию из Unison. Luma читает только плейлисты и избранное, не историю и не настройки.'
+          : source.id === 'vk' ? 'Если у вас уже есть список VK в CSV или TXT, откройте его здесь. Luma не подключается к аккаунту VK и не скачивает музыку.'
           : source.id === 'm3u' ? 'Откройте M3U / M3U8 со списком локальных аудиофайлов. Luma не открывает пути, ссылки или потоки из списка.'
           : 'Выберите CSV / TXT, экспортированный из сервиса или инструмента переноса плейлистов.')}</p>
-        {source.id !== 'm3u' && source.id !== 'luma' && <p>{t('Для CSV нужны колонки «Название» и «Исполнитель», альбом необязателен. В TXT — «Исполнитель — Название» на каждой строке.')}</p>}
-        <input type="file" ref={input} hidden accept={source.id === 'spotify' ? '.json,.csv,.txt' : source.id === 'luma' ? '.json' : source.id === 'm3u' ? '.m3u,.m3u8' : '.csv,.txt'} onChange={(event) => {
+        {source.id !== 'm3u' && source.id !== 'luma' && source.id !== 'unison' && <p>{t('Для CSV нужны колонки «Название» и «Исполнитель», альбом необязателен. В TXT — «Исполнитель — Название» на каждой строке.')}</p>}
+        <input type="file" ref={input} hidden accept={source.id === 'spotify' ? '.json,.csv,.txt' : source.id === 'luma' || source.id === 'unison' ? '.json' : source.id === 'm3u' ? '.m3u,.m3u8' : '.csv,.txt'} onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = '';
           if (file) void read(file, source);
