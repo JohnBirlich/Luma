@@ -42,7 +42,7 @@ import { DesktopFloatOutput } from './float-output.js';
 import { StreamCache } from './stream-cache.js';
 import { createProtocolHandler } from './protocol.js';
 import { verifyWindowsSigner, WINDOWS_VERIFIER_EXE, WindowsUpdates } from './windows-update.js';
-import { fetchAudius } from './audius-network.js';
+import { AUDIUS_MEDIA_PARTITION, createAudiusFetch } from './audius-network.js';
 import { GOOGLE_PRIVACY, isYouTubeEmbedUrl, YOUTUBE_EMBED_SOURCE, YOUTUBE_TERMS } from '../src/shared/youtube.js';
 import { allowMusicEmbedFrame } from './embed-navigation.js';
 import { youTubeAppHeaders, youTubePopupUrl } from './youtube.js';
@@ -443,14 +443,15 @@ if (!app.requestSingleInstanceLock()) {
     session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
       canRouteAudio(contents, permission, details.requestingUrl, details.isMainFrame)
         || canFullscreenYouTube(contents, permission, details.requestingUrl, details.isMainFrame));
-    if (!devUrl) session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${YOUTUBE_EMBED_SOURCE}*`] }, (details, reply) => {
+    if (!devUrl) session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${YOUTUBE_EMBED_SOURCE}*`], types: ['subFrame'] }, (details, reply) => {
       const contents = window && !window.isDestroyed() ? window.webContents : null;
       const requestHeaders = contents && isAppPage(contents.getURL()) ? youTubeAppHeaders(details, contents.id, APP_ORIGIN) : undefined;
       reply(requestHeaders ? { requestHeaders } : {});
     });
     const library = await DesktopLibrary.open(app.getPath('userData'));
     const cache = await StreamCache.open(join(app.getPath('userData'), 'stream-cache'), net.fetch);
-    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache, fetchAudius));
+    const audiusFetch = createAudiusFetch(session.fromPartition(AUDIUS_MEDIA_PARTITION, { cache: false }));
+    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache, audiusFetch));
     journal.main('desktop.protocol');
     const lastfm = await DesktopLastFm.open(lastFmConfig(process.env.LUMA_LASTFM_API_KEY, process.env.LUMA_LASTFM_SECRET), net.fetch,
       join(app.getPath('userData'), 'lastfm-session.bin'), safeStorage);

@@ -1,17 +1,21 @@
 import { net } from 'electron';
+import type { Session } from 'electron';
 import { Readable } from 'node:stream';
 import type { AudiusFetch } from './audius-stream.js';
 
-// net.fetch cannot inspect a manual redirect before it is cancelled. Only the
+// Keep manual Audius redirects out of the renderer session and its embed header hooks.
+export const AUDIUS_MEDIA_PARTITION = 'luma-audius-media';
+
+// fetch cannot inspect a manual redirect before it is cancelled. Only the
 // media hop uses net.request and can follow a single, validated 307.
-export const fetchAudius: AudiusFetch = (url, init, allowRedirect) => {
-  if (!allowRedirect) return net.fetch(url, init);
+export const createAudiusFetch = (mediaSession: Session): AudiusFetch => (url, init, allowRedirect) => {
+  if (!allowRedirect) return mediaSession.fetch(url, init);
   return new Promise((resolve, reject) => {
     const signal = init.signal;
     signal?.throwIfAborted();
     const requestHeaders: Record<string, string> = {};
     new Headers(init.headers).forEach((value, key) => { requestHeaders[key] = value; });
-    const request = net.request({ url, method: init.method, credentials: 'omit', cache: 'no-store',
+    const request = net.request({ session: mediaSession, url, method: init.method, credentials: 'omit', cache: 'no-store',
       redirect: 'manual', referrerPolicy: 'no-referrer', headers: requestHeaders });
     let followed = false;
     const cleanup = () => signal?.removeEventListener('abort', abort);

@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, clipboard, dialog, powerMonitor, screen, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
+import { AUDIUS_MEDIA_PARTITION } from '../dist-electron/electron/audius-network.js';
 import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
 import { editorialPlaylist, isVkWidgetFrameUrl, LEGACY_VK_SESSION, VK_MUSIC_URL, VK_WIDGET_DOCS_URL, VK_WIDGET_FRAME_NAME,
   VK_WIDGET_URL, vkPlaylistUrl, vkWidgetUrl } from '../dist-electron/src/shared/vk.js';
@@ -658,7 +659,37 @@ async function smoke() {
   const vkWidgetRequests = [];
   const audiusFixtureHops = [];
   const testAudioPath = '/luma-smoke-audio.mp3';
-  const isEmbedAudio = (url) => url.pathname === testAudioPath && [YOUTUBE_EMBED_ORIGIN, new URL(VK_WIDGET_URL).origin].includes(url.origin);
+  const embedOrigins = new Set([YOUTUBE_EMBED_ORIGIN, new URL(VK_WIDGET_URL).origin]);
+  const fixtureAudio = (request) => {
+    const range = request.headers.get('Range');
+    const bytes = range && parseByteRange(range, sample.length);
+    const body = bytes ? sample.subarray(bytes.start, bytes.end + 1) : sample;
+    return new Response(body, { status: bytes ? 206 : 200, headers: {
+      'Content-Type': 'audio/mpeg', 'Content-Length': String(body.length), 'Accept-Ranges': 'bytes',
+      ...(bytes && { 'Content-Range': `bytes ${bytes.start}-${bytes.end}/${sample.length}` }),
+    } });
+  };
+  // Record provider hops in the real, in-memory media session, not in the browser session.
+  const audiusMediaSession = session.fromPartition(AUDIUS_MEDIA_PARTITION);
+  audiusMediaSession.protocol.handle('https', (request) => {
+    if (offlineFixture) return new Response(null, { status: 503 });
+    const url = new URL(request.url);
+    assert.equal(request.headers.has('Cookie'), false);
+    if (url.origin === 'https://api.audius.co' && url.pathname === '/v1/tracks/DX0Xb/stream' && url.searchParams.get('no_redirect') === 'true') {
+      audiusFixtureHops.push('resolve');
+      return Response.json({ data: creatorStream });
+    }
+    if (url.href === creatorStream) {
+      audiusFixtureHops.push('redirect');
+      return Response.redirect(storageStream, 307);
+    }
+    if (url.href === storageStream) {
+      audiusFixtureHops.push('media');
+      streamCalls.push(url.href);
+      return fixtureAudio(request);
+    }
+    return new Response(null, { status: 404 });
+  });
   session.defaultSession.protocol.handle('https', async (request) => {
     if (offlineFixture) return new Response(null, { status: 503 });
     const url = new URL(request.url);
@@ -749,29 +780,14 @@ async function smoke() {
       audiusCalls.push(url);
       return Response.json({ data: url.searchParams.get('query') === 'jazz' ? [audiusRecording, { ...audiusRecording, id: '1233T', title: 'Restricted', is_stream_gated: true }] : [] });
     }
-    if (url.origin === 'https://api.audius.co' && url.pathname === '/v1/tracks/DX0Xb/stream' && url.searchParams.get('no_redirect') === 'true') {
-      audiusFixtureHops.push('resolve');
-      return Response.json({ data: creatorStream });
-    }
-    if (url.href === creatorStream) {
-      audiusFixtureHops.push('redirect');
-      return Response.redirect(storageStream, 307);
-    }
-    if (url.href === storageStream) audiusFixtureHops.push('media');
     if (url.href === 'https://archive.org/metadata/SCL108') return Response.json(archiveRelease);
     if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
     const radioFixture = radioFixtureUrls.has(url.href);
-    const embedAudio = isEmbedAudio(url);
-    if (embedAudio || radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, storageStream, phishTrack.mp3_url].includes(url.href)) {
+    if (url.pathname === testAudioPath && embedOrigins.has(url.origin)) return fixtureAudio(request);
+    if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, phishTrack.mp3_url].includes(url.href)) {
       // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
-      if (!embedAudio) (radioFixture ? radioCalls : streamCalls).push(url.href);
-      const range = request.headers.get('Range');
-      const bytes = range && parseByteRange(range, sample.length);
-      const body = bytes ? sample.subarray(bytes.start, bytes.end + 1) : sample;
-      return new Response(body, { status: bytes ? 206 : 200, headers: {
-        'Content-Type': 'audio/mpeg', 'Content-Length': String(body.length), 'Accept-Ranges': 'bytes',
-        ...(bytes && { 'Content-Range': `bytes ${bytes.start}-${bytes.end}/${sample.length}` }),
-      } });
+      (radioFixture ? radioCalls : streamCalls).push(url.href);
+      return fixtureAudio(request);
     }
     return new Response(null, { status: 404 });
   });
@@ -933,13 +949,7 @@ async function smoke() {
         return { src: el.currentSrc, position: el.currentTime, duration: el.duration, paused: el.paused, ready: el.readyState,
           error: el.error?.code, message: el.error?.message, notice: document.querySelector('.toast-error strong')?.textContent };
       })()`);
-      const hops = [...audiusFixtureHops];
-      const diagnoseRange = () => run(`fetch(${JSON.stringify(ephemeralUrl)}, { headers: { Range: 'bytes=24-31' }, signal: AbortSignal.timeout(2500) })
-        .then(async response => [response.status, (await response.arrayBuffer()).byteLength], error => error.name)`);
-      const initialProbe = await diagnoseRange();
-      session.defaultSession.webRequest.onBeforeSendHeaders(null);
-      const noObserverProbe = await diagnoseRange();
-      throw new Error(`${error.message}: ${JSON.stringify({ hops, media, initialProbe, noObserverProbe, probeHops: audiusFixtureHops.slice(hops.length) })}`, { cause: error });
+      throw new Error(`${error.message}: ${JSON.stringify({ hops: audiusFixtureHops, media })}`, { cause: error });
     }
     assert.ok(streamCalls.includes(storageStream));
     await go('Главная');
@@ -1585,6 +1595,7 @@ async function smoke() {
 
   } finally {
     session.defaultSession.protocol.unhandle('https');
+    audiusMediaSession.protocol.unhandle('https');
     await legacyVk.clearStorageData();
   }
   fixtureNotice('Catalogs and playlists', 'Merged Home, parallel catalog search without site shortcuts, playlist import, radio tuning in both directions, and preservation of legacy profile data verified.');
@@ -1677,7 +1688,7 @@ async function smoke() {
     window.webContents.reload();
     await fresh;
     await waitFor('fresh player for live catalogs', () => run(`!!document.querySelector('.app-shell') && document.documentElement.lang === 'ru'`));
-    const { webRequest } = session.defaultSession;
+    const observers = [session.defaultSession.webRequest, audiusMediaSession.webRequest];
     const network = [];
     // Network diagnostics are limited to statuses, MIME, and origins.
     const upstream = { urls: ['https://phish.in/*', 'https://api.audius.co/*', 'https://creatornode.audius.co/*', `${new URL(storageStream).origin}/*`] };
@@ -1685,12 +1696,14 @@ async function smoke() {
       const { hostname, pathname } = new URL(url);
       return `${hostname}${pathname.endsWith('/stream') ? '(resolve)' : pathname.startsWith('/blob/') || pathname.includes('/cidstream/') || hostname.endsWith('.r2.cloudflarestorage.com') ? '(media)' : '(query)'}`;
     };
-    webRequest.onResponseStarted(upstream, ({ url, statusCode, responseHeaders }) => {
-      const mime = Object.entries(responseHeaders ?? {}).find(([key]) => key.toLowerCase() === 'content-type')?.[1]?.[0]?.split(';')[0];
-      network.push(`${label(url)} ${statusCode}${mime ? ` ${mime}` : ''}`);
-    });
-    webRequest.onBeforeRedirect(upstream, ({ url, statusCode, redirectURL }) => network.push(`${label(url)} ${statusCode} -> ${new URL(redirectURL).origin}`));
-    webRequest.onErrorOccurred(upstream, ({ url, error }) => network.push(`${label(url)} ${error}`));
+    for (const webRequest of observers) {
+      webRequest.onResponseStarted(upstream, ({ url, statusCode, responseHeaders }) => {
+        const mime = Object.entries(responseHeaders ?? {}).find(([key]) => key.toLowerCase() === 'content-type')?.[1]?.[0]?.split(';')[0];
+        network.push(`${label(url)} ${statusCode}${mime ? ` ${mime}` : ''}`);
+      });
+      webRequest.onBeforeRedirect(upstream, ({ url, statusCode, redirectURL }) => network.push(`${label(url)} ${statusCode} -> ${new URL(redirectURL).origin}`));
+      webRequest.onErrorOccurred(upstream, ({ url, error }) => network.push(`${label(url)} ${error}`));
+    }
     await run(`document.addEventListener('securitypolicyviolation', event => {
       const url = URL.parse(event.blockedURI);
       if (url && event.violatedDirective === 'media-src') (window.catalogPolicyBlocks ??= []).push(url.origin);
@@ -1767,9 +1780,11 @@ async function smoke() {
         report.push({ source: target === 'openverse' ? source : target, ok, result });
       }
     } finally {
-      webRequest.onErrorOccurred(null);
-      webRequest.onBeforeRedirect(null);
-      webRequest.onResponseStarted(null);
+      for (const webRequest of observers) {
+        webRequest.onErrorOccurred(null);
+        webRequest.onBeforeRedirect(null);
+        webRequest.onResponseStarted(null);
+      }
     }
     const detail = report.map(({ source, result }) => `${source}: ${result}`).join(' | ');
     const policy = [...new Set(await run(`window.catalogPolicyBlocks ?? []`))];
