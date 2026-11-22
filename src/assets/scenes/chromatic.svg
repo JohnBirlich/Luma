@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" fill="none"><defs><linearGradient id="g"><stop stop-color="#884cf4" stop-opacity=".06"/><stop offset=".50" stop-color="#b47aff"/><stop offset=".77" stop-color="#f1aab1"/><stop offset="1" stop-color="#5ee8df" stop-opacity=".46"/></linearGradient></defs>
+<path d="M -25 63 C 183 22 221 -137 370 -66 S 460 104 595 30 724 -131 985 -42" stroke="url(#g)" stroke-width="1.10" opacity="0.84"/>
+<path d="M -25 77 C 183 36 221 -123 370 -52 S 460 118 595 44 724 -117 985 -28" stroke="url(#g)" stroke-width="2.13" opacity="0.80"/>
+<path d="M -25 91 C 183 50 221 -109 370 -38 S 460 132 595 58 724 -103 985 -14" stroke="url(#g)" stroke-width="2.68" opacity="0.67"/>
+<path d="M -25 105 C 183 64 221 -95 370 -24 S 460 146 595 72 724 -89 985 0" stroke="url(#g)" stroke-width="2.48" opacity="0.49"/>
+<path d="M -25 119 C 183 78 221 -81 370 -10 S 460 160 595 86 724 -75 985 14" stroke="url(#g)" stroke-width="1.64" opacity="0.42"/>
+<path d="M -25 133 C 183 92 221 -67 370 4 S 460 174 595 100 724 -61 985 28" stroke="url(#g)" stroke-width="1.66" opacity="0.62"/>
+<path d="M -25 147 C 183 106 221 -53 370 18 S 460 188 595 114 724 -47 985 42" stroke="url(#g)" stroke-width="2.49" opacity="0.76"/>
+<path d="M -25 161 C 183 120 221 -39 370 32 S 460 202 595 128 724 -33 985 56" stroke="url(#g)" stroke-width="2.67" opacity="0.84"/>
+<path d="M -25 175 C 183 134 221 -25 370 46 S 460 216 595 142 724 -19 985 70" stroke="url(#g)" stroke-width="2.11" opacity="0.82"/>
+<path d="M -25 189 C 183 148 221 -11 370 60 S 460 230 595 156 724 -5 985 84" stroke="url(#g)" stroke-width="1.13" opacity="0.72"/>
+<path d="M -25 203 C 183 162 221 3 370 74 S 460 244 595 170 724 9 985 98" stroke="url(#g)" stroke-width="2.15" opacity="0.55"/>
+<path d="M -25 217 C 183 176 221 17 370 88 S 460 258 595 184 724 23 985 112" stroke="url(#g)" stroke-width="2.68" opacity="0.36"/>
+<path d="M -25 231 C 183 190 221 31 370 102 S 460 272 595 198 724 37 985 126" stroke="url(#g)" stroke-width="2.47" opacity="0.56"/>
+<path d="M -25 245 C 183 204 221 45 370 116 S 460 286 595 212 724 51 985 140" stroke="url(#g)" stroke-width="1.61" opacity="0.73"/>
+<path d="M -25 259 C 183 218 221 59 370 130 S 460 300 595 226 724 65 985 154" stroke="url(#g)" stroke-width="1.69" opacity="0.82"/>
+<path d="M -25 273 C 183 232 221 73 370 144 S 460 314 595 240 724 79 985 168" stroke="url(#g)" stroke-width="2.51" opacity="0.83"/>
+<path d="M -25 287 C 183 246 221 87 370 158 S 460 328 595 254 724 93 985 182" stroke="url(#g)" stroke-width="2.67" opacity="0.76"/>
+<path d="M -25 301 C 183 260 221 101 370 172 S 460 342 595 268 724 107 985 196" stroke="url(#g)" stroke-width="2.09" opacity="0.60"/>
+<path d="M -25 315 C 183 274 221 115 370 186 S 460 356 595 282 724 121 985 210" stroke="url(#g)" stroke-width="1.15" opacity="0.41"/>
+<path d="M -25 329 C 183 288 221 129 370 200 S 460 370 595 296 724 135 985 224" stroke="url(#g)" stroke-width="2.17" opacity="0.50"/>
+<path d="M -25 343 C 183 302 221 143 370 214 S 460 384 595 310 724 149 985 238" stroke="url(#g)" stroke-width="2.68" opacity="0.68"/>
+<path d="M -25 357 C 183 316 221 157 370 228 S 460 398 595 324 724 163 985 252" stroke="url(#g)" stroke-width="2.45" opacity="0.80"/>
+<path d="M -25 371 C 183 330 221 171 370 242 S 460 412 595 338 724 177 985 266" stroke="url(#g)" stroke-width="1.58" opacity="0.84"/>
+<path d="M -25 385 C 183 344 221 185 370 256 S 460 426 595 352 724 191 985 280" stroke="url(#g)" stroke-width="1.71" opacity="0.79"/>
+<path d="M -25 399 C 183 358 221 199 370 270 S 460 440 595 366 724 205 985 294" stroke="url(#g)" stroke-width="2.52" opacity="0.66"/>
+<path d="M -25 413 C 183 372 221 213 370 284 S 460 454 595 380 724 219 985 308" stroke="url(#g)" stroke-width="2.66" opacity="0.47"/>
+<path d="M -25 427 C 183 386 221 227 370 298 S 460 468 595 394 724 233 985 322" stroke="url(#g)" stroke-width="2.07" opacity="0.44"/>
+<path d="M -25 441 C 183 400 221 241 370 312 S 460 482 595 408 724 247 985 336" stroke="url(#g)" stroke-width="1.18" opacity="0.63"/>
+<path d="M -25 455 C 183 414 221 255 370 326 S 460 496 595 422 724 261 985 350" stroke="url(#g)" stroke-width="2.19" opacity="0.77"/>
+<path d="M -25 469 C 183 428 221 269 370 340 S 460 510 595 436 724 275 985 364" stroke="url(#g)" stroke-width="2.69" opacity="0.84"/>
+</svg>

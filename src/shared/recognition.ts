@@ -7,13 +7,19 @@ export const MAX_AUDIO_SECONDS = 720;
 export const MIN_AUDIO_SECONDS = 8;
 
 export interface MetadataCandidate {
-  source: 'apple' | 'acoustid';
+  source: 'apple' | 'acoustid' | 'musicbrainz' | 'theaudiodb';
   page: string;
   title: string;
   artist: string;
   album?: string;
   duration?: number;
   score?: number;
+  disambiguation?: string;
+  releaseTitles?: string[];
+  year?: string;
+  isrc?: string;
+  genre?: string;
+  artworkUrl?: string;
 }
 
 export interface Fingerprint {
@@ -114,6 +120,7 @@ export function readAcoustidCandidates(data: unknown): MetadataCandidate[] {
 export function isMetadataPage(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 180 || value.trim() !== value) return false;
   return /^https:\/\/music\.apple\.com\/[a-z]{2}\/album\/[1-9]\d{0,15}\?i=[1-9]\d{0,15}$/.test(value)
+    || /^https:\/\/www\.theaudiodb\.com\/track\/[1-9]\d{0,11}$/.test(value)
     || (value.startsWith('https://musicbrainz.org/recording/') && mbid.test(value.slice('https://musicbrainz.org/recording/'.length)));
 }
 

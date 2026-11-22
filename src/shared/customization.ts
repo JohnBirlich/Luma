@@ -1,8 +1,11 @@
+import type { UiLanguage } from './ui-language.js';
+
 export const THEMES = {
   amber: { name: 'Тёплая ночь', accent: '#f2bd86', chrome: '#101116', side: '#111218', panel: '#15161e', raised: '#1d1e27', glow: '#1a1a24', stage: '#14151c' },
   ocean: { name: 'Океан', accent: '#8ecffc', chrome: '#101620', side: '#121a27', panel: '#162233', raised: '#1c2c41', glow: '#22354d', stage: '#121c2a' },
   violet: { name: 'Сирень', accent: '#ceb1fb', chrome: '#17111f', side: '#1a1424', panel: '#221a30', raised: '#2f233f', glow: '#362744', stage: '#1e172a' },
   pine: { name: 'Хвоя', accent: '#a4dfb4', chrome: '#111a17', side: '#131f1b', panel: '#182823', raised: '#20352e', glow: '#274237', stage: '#16241f' },
+  macos: { name: 'MacOS', accent: '#2058c4', chrome: '#ecf5ff', side: '#dfeaff', panel: '#f4f9ff', raised: '#e9f1ff', glow: '#c9dbff', stage: '#e0edff' },
 } as const;
 
 export const ACCENTS = [
@@ -12,13 +15,17 @@ export const ACCENTS = [
 ] as const;
 
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
-export const BACKGROUND_EFFECTS = ['off', 'aurora', 'waves', 'stars', 'spectrum', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks'] as const;
+export const BACKGROUND_EFFECTS = ['off', 'tunnel', 'aurora', 'waves', 'stars', 'spectrum', 'columns', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors', 'notes', 'liquid', 'mix-flow'] as const;
 export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
-export const START_PAGES = ['player', 'library', 'local', 'search', 'vk'] as const;
+export const START_PAGES = ['player', 'library', 'local', 'search'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
 export const CROSSFADE_TIMES = [0, 2, 4, 6, 8] as const;
 export const DATA_LANGUAGES = { system: 'Системный', 'ru-RU': 'Русский', 'en-US': 'English', 'de-DE': 'Deutsch' } as const;
-export const WIDGET_BACKGROUNDS = { blur: 'Размытый', cover: 'Цвет обложки', white: 'Белый', dark: 'Тёмный', black: 'Чёрный' } as const;
+export const WIDGET_BACKGROUNDS = {
+  blur: 'Размытый', album: 'Обложка альбома', cover: 'Цвет обложки', glass: 'Матовое стекло', liquid: 'Жидкое стекло',
+  aurora: 'Северное сияние', paper: 'Тёплый свет', white: 'Белый', dark: 'Тёмный', black: 'Чёрный',
+} as const;
+export const WIDGET_SHORTCUT = { label: 'Ctrl + Shift + R', code: 'KeyR', key: 'r', aria: 'Control+Shift+R' } as const;
 export type CrossfadeTime = typeof CROSSFADE_TIMES[number];
 export type DataLanguage = keyof typeof DATA_LANGUAGES;
 export type WidgetBackground = keyof typeof WIDGET_BACKGROUNDS;
@@ -82,12 +89,15 @@ export const isHexColor = (value: unknown): value is string => typeof value === 
 
 export function readAppearance(value: unknown): Appearance {
   const data = value as Partial<Appearance> | null | undefined;
+  const effect: unknown = data?.effect;
   const oldAppearance = data && typeof data === 'object' && HERO_STYLES.includes(data.hero as HeroStyle) && !Object.hasOwn(data, 'effect');
   return {
     theme: typeof data?.theme === 'string' && Object.hasOwn(THEMES, data.theme) ? data.theme : defaultAppearance.theme,
     accent: isHexColor(data?.accent) ? data.accent.toLowerCase() : null,
     hero: data?.hero && HERO_STYLES.includes(data.hero) ? data.hero : defaultAppearance.hero,
-    effect: data?.effect && BACKGROUND_EFFECTS.includes(data.effect) ? data.effect : oldAppearance ? 'off' : defaultAppearance.effect,
+    // Old album backgrounds fall back to the existing layout, without selecting a new effect for the user.
+    effect: BACKGROUND_EFFECTS.includes(effect as BackgroundEffect) ? effect as BackgroundEffect
+      : effect === 'cover' || oldAppearance ? 'off' : defaultAppearance.effect,
     effectStrength: typeof data?.effectStrength === 'number' && Number.isFinite(data.effectStrength) ? Math.max(0.25, Math.min(1, data.effectStrength)) : defaultAppearance.effectStrength,
     effectTempo: typeof data?.effectTempo === 'string' && Object.hasOwn(EFFECT_TEMPOS, data.effectTempo) ? data.effectTempo : defaultAppearance.effectTempo,
     audioReactive: data?.audioReactive !== false,
@@ -109,8 +119,10 @@ export function readAppearance(value: unknown): Appearance {
 
 export function readPlayback(value: unknown): PlaybackPreferences {
   const data = value as Partial<PlaybackPreferences> | null | undefined;
+  const startPage: unknown = data?.startPage;
   return {
-    startPage: data?.startPage && START_PAGES.includes(data.startPage) ? data.startPage : defaultPlayback.startPage,
+    // Removed Music/VK launch destinations now open the merged Home page.
+    startPage: START_PAGES.includes(startPage as StartPage) ? startPage as StartPage : defaultPlayback.startPage,
     seekStep: data?.seekStep && SEEK_STEPS.includes(data.seekStep) ? data.seekStep : defaultPlayback.seekStep,
     autoNext: data?.autoNext !== false,
     autoPlay: data?.autoPlay === true,
@@ -128,9 +140,9 @@ export function scheduledTheme({ theme, autoTheme, dayTheme }: Appearance, hour:
   return autoTheme && hour >= 8 && hour < 20 ? dayTheme : theme;
 }
 
-export function formatCount(count: number, full = false) {
+export function formatCount(count: number, full = false, language: UiLanguage = 'ru') {
   if (full || count < 1000) return String(count);
-  const [scale, suffix] = count >= 1e6 ? [1e6, 'млн'] as const : [1000, 'к'] as const;
+  const [scale, suffix] = count >= 1e6 ? [1e6, language === 'en' ? 'M' : 'млн'] as const : [1000, language === 'en' ? 'K' : 'к'] as const;
   return `${Math.floor(count / (scale / 10)) / 10}${suffix}`;
 }
 
@@ -151,18 +163,19 @@ export function contrastRatio(a: string, b: string) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-const lighten = (hex: string, amount: number) => `#${rgb(hex)
-  .map((byte) => Math.round(byte + (255 - byte) * amount).toString(16).padStart(2, '0')).join('')}`;
+const tintToward = (hex: string, target: 0 | 255, amount: number) => `#${rgb(hex)
+  .map((byte) => Math.round(byte + (target - byte) * amount).toString(16).padStart(2, '0')).join('')}`;
 
-/** Preserve the selected hue, lightening dark custom accents against app surfaces when necessary. */
+/** Preserve the selected hue while keeping custom accents legible on either material. */
 export function accentFor(appearance: Appearance): string {
   const theme = THEMES[appearance.theme];
   const base = isHexColor(appearance.accent) ? appearance.accent : theme.accent;
+  const target = appearance.theme === 'macos' ? 0 : 255;
   for (let step = 0; step <= 20; step++) {
-    const candidate = step === 0 ? base : lighten(base, step / 20);
+    const candidate = step === 0 ? base : tintToward(base, target, step / 20);
     if (contrastRatio(candidate, theme.raised) >= 4.5) return candidate;
   }
-  return '#ffffff';
+  return target === 0 ? '#000000' : '#ffffff';
 }
 
 export function themeVariables(appearance: Appearance) {
@@ -171,7 +184,7 @@ export function themeVariables(appearance: Appearance) {
   return {
     '--chrome-bg': theme.chrome, '--sidebar-bg': theme.side, '--panel-bg': theme.panel, '--raised-bg': theme.raised,
     '--stage-bg': theme.stage, '--stage-glow': theme.glow,
-    '--accent': accent, '--accent-light': lighten(accent, 0.25),
+    '--accent': accent, '--accent-light': tintToward(accent, appearance.theme === 'macos' ? 0 : 255, 0.20),
     '--accent-ink': contrastRatio(accent, '#151419') >= contrastRatio(accent, '#ffffff') ? '#151419' : '#ffffff',
   };
 }

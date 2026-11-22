@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { accentFor, artworkTone, contrastRatio, defaultAppearance, defaultPlayback, formatCount, scheduledTheme, shouldAdvanceAfterEnd, THEMES, themeVariables } from '../src/shared/customization.js';
+import { accentFor, artworkTone, contrastRatio, defaultAppearance, defaultPlayback, formatCount, scheduledTheme, shouldAdvanceAfterEnd, THEMES, themeVariables, WIDGET_BACKGROUNDS } from '../src/shared/customization.js';
+import { defaultKaraokeStyle } from '../src/shared/karaoke-style.js';
 import { defaultAudioQuality } from '../src/shared/audio-quality.js';
 import { decodePreferences, encodePreferences, RECENT_LIMIT, rememberTrack } from '../src/player/preferences.js';
 
@@ -10,7 +11,17 @@ test('customization reads old profiles without altering queue, volume or equaliz
     equalizer: { enabled: true, preset: 'custom', preamp: -2, gains: [1, 2, 3, 4, 5] },
     queue: { order: ['local-1'], currentId: 'local-1', beforeShuffle: null, repeat: 'one' },
   };
-  assert.deepEqual(decodePreferences(JSON.stringify(previous)), { ...previous, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], recent: [], onlineTracks: [], onlineRefs: [] });
+  const { equalizer, ...rest } = decodePreferences(JSON.stringify(previous));
+  const { equalizer: oldEqualizer, ...old } = previous;
+  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: '', enabled: false }, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [] });
+  assert.equal(equalizer.enabled, oldEqualizer.enabled);
+  assert.equal(equalizer.preset, oldEqualizer.preset);
+  assert.equal(equalizer.preamp, oldEqualizer.preamp);
+  assert.equal(equalizer.autoHeadroom, false, 'upgrading does not change the old base gain');
+  assert.equal(equalizer.bands.length, 10);
+  assert.deepEqual(equalizer.bands.filter(({ enabled }) => enabled).map(({ hz, type, q, gain }) => [hz, type, q, gain]), [
+    [60, 'lowshelf', .9, 1], [230, 'peaking', .9, 2], [910, 'peaking', .9, 3], [3600, 'peaking', .9, 4], [14000, 'highshelf', .9, 5],
+  ]);
 });
 
 test('customization persists valid choices and validates each stored field', () => {
@@ -49,6 +60,11 @@ test('legacy layouts remain unchanged; effect intensity and favorite IDs are val
   const old = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl' }, favorites: ['demo-afterimage', 5, 'demo-afterimage', '', 'local'] }));
   assert.equal(old.appearance.hero, 'vinyl');
   assert.equal(old.appearance.effect, 'off');
+  const cover = decodePreferences(JSON.stringify({ appearance: { hero: 'cover', effect: 'cover', motion: false }, volume: .31 }));
+  assert.equal(cover.appearance.hero, 'cover');
+  assert.equal(cover.appearance.effect, 'off');
+  assert.equal(cover.appearance.motion, false);
+  assert.equal(cover.volume, .31);
   assert.deepEqual(old.favorites, ['demo-afterimage', 'local']);
   const options = decodePreferences(JSON.stringify({ appearance: { effect: 'waves', effectStrength: 50, compactSidebar: true } }));
   assert.equal(options.appearance.effect, 'waves');
@@ -56,8 +72,8 @@ test('legacy layouts remain unchanged; effect intensity and favorite IDs are val
   assert.equal(options.appearance.compactSidebar, true);
 });
 
-test('new audio-reactive scenes persist without replacing old settings', () => {
-  for (const effect of ['orbits', 'prism', 'spectrum', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'off']) {
+test('scene choices persist without replacing old settings', () => {
+  for (const effect of ['orbits', 'prism', 'spectrum', 'columns', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'notes', 'liquid', 'mix-flow', 'tunnel', 'off']) {
     const prefs = decodePreferences(JSON.stringify({ appearance: { hero: 'vinyl', effect, effectStrength: 0.6, motion: false }, volume: 0.17 }));
     assert.equal(prefs.appearance.effect, effect);
     assert.equal(prefs.appearance.hero, 'vinyl');
@@ -110,4 +126,15 @@ test('scheduled themes change at local day/night boundaries and compact counts a
   assert.equal(formatCount(1234), '1.2к');
   assert.equal(formatCount(1234, true), '1234');
   assert.equal(formatCount(999), '999');
+});
+
+
+test('MacOS and every widget material round-trip while preserving artwork and motion preferences', () => {
+  for (const widgetBackground of Object.keys(WIDGET_BACKGROUNDS)) {
+    const { appearance } = decodePreferences(JSON.stringify({ appearance: { theme: 'macos', dayTheme: 'macos', widgetBackground, motion: false } }));
+    assert.equal(appearance.theme, 'macos');
+    assert.equal(appearance.dayTheme, 'macos');
+    assert.equal(appearance.widgetBackground, widgetBackground);
+    assert.equal(appearance.motion, false);
+  }
 });

@@ -1,6 +1,7 @@
 import { createMetadataService, readLimitedBody } from '../shared/metadata-service';
 import { FINGERPRINT_SECONDS, isFingerprint, MAX_AUDIO_SECONDS, MIN_AUDIO_SECONDS, rankAppleCandidates } from '../shared/recognition';
 import type { Track } from '../shared/media';
+import { musicSearchKey } from '../shared/russian';
 
 const webCatalog = createMetadataService();
 const MAX_AUDIO_BYTES = 40 * 1024 * 1024;
@@ -11,6 +12,21 @@ export async function lookupByTitle(track: Track, query: string, artist: string,
     : webCatalog.search(query, locale, signal));
   signal.throwIfAborted();
   return rankAppleCandidates(candidates, query, artist, track.duration);
+}
+
+export async function lookupByMusicBrainz(track: Track, title: string, artist: string, album: string, signal: AbortSignal) {
+  const bridge = window.luma?.recognition;
+  if (!bridge) throw new Error('Поиск в MusicBrainz доступен в настольной Luma.');
+  const isrc = musicSearchKey(title) === musicSearchKey(track.title) ? track.isrc : undefined;
+  const candidates = await bridge.searchMusicBrainz({ title, artist, album, isrc, duration: track.duration });
+  signal.throwIfAborted();
+  return candidates;
+}
+
+export async function lookupByAudioDb(title: string, artist: string, signal: AbortSignal) {
+  const candidates = await window.luma?.recognition.searchAudioDb({ title, artist }) ?? [];
+  signal.throwIfAborted();
+  return candidates;
 }
 
 export function canFingerprint(track: Track) {

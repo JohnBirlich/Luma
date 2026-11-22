@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, extname, isAbsolute, join } from 'node:path';
 import { parseFile } from 'music-metadata';
-import { readLocalLyrics } from '../src/shared/lyrics.js';
+import { lyricsFromTags, MAX_LYRIC_FILE, readLocalLyrics } from '../src/shared/lyrics.js';
 import { audioMime, emptyImport, readGenres, trackInfo, usableArtwork } from '../src/shared/media.js';
+import { readIsrc } from '../src/shared/recording-match.js';
 import { readAudioFormat } from '../src/shared/audio-quality.js';
 import type { AudioFormat } from '../src/shared/audio-quality.js';
 import type { ImportResult, Track } from '../src/shared/media.js';
@@ -62,13 +63,13 @@ export class DesktopLibrary {
   }
 
   list(): Track[] {
-    return this.entries.map(({ id, path, title, artist, album, duration, coverExtension, textVersion, genres, format }) => {
+    return this.entries.map(({ id, path, title, artist, album, duration, coverExtension, textVersion, genres, format, isrc }) => {
       const tags = { title, artist, album };
       const tagsGenres = readGenres(genres);
       // Old profiles are repaired for display without rewriting their metadata or changing track IDs.
       const info = textVersion === 1 ? { ...tags, duration, ...(tagsGenres && { genres: tagsGenres }) } : trackInfo(basename(path), tags, duration);
       return {
-        id, ...info, format: readAudioFormat(format), audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
+        id, ...info, isrc: readIsrc(isrc), fileName: basename(path), format: readAudioFormat(format), audioUrl: `${APP_ORIGIN}/media/audio/${id}`,
         artworkUrl: coverExtension ? `${APP_ORIGIN}/media/cover/${id}` : undefined,
       };
     });
@@ -92,15 +93,16 @@ export class DesktopLibrary {
   async lyrics(id: unknown) {
     const entry = typeof id === 'string' && UUID.test(id) ? this.entries.find((track) => track.id === id) : undefined;
     if (!entry) return null;
-    const sidecar = `${entry.path.slice(0, -extname(entry.path).length)}.lrc`;
-    const info = await lstat(sidecar).catch(() => undefined);
-    if (info?.isFile() && info.size <= 128 * 1024) {
-      const synced = readLocalLyrics(undefined, await readFile(sidecar, 'utf8').catch(() => undefined));
-      if (synced) return synced;
-    }
-    if (extname(entry.path).toLowerCase() !== '.mp3') return null;
+    const stem = entry.path.slice(0, -extname(entry.path).length);
+    const readSidecar = async (extension: string) => {
+      const path = stem + extension;
+      const info = await lstat(path).catch(() => undefined);
+      return info?.isFile() && info.size <= MAX_LYRIC_FILE ? readFile(path, 'utf8').then((text) => text.length <= MAX_LYRIC_FILE ? text : undefined, () => undefined) : undefined;
+    };
+    const local = readLocalLyrics(await readSidecar('.lyrics.txt'), await readSidecar('.lrc'));
+    if (local) return local;
     const tags = await parseFile(entry.path, { skipCovers: true }).catch(() => undefined);
-    return readLocalLyrics(tags?.common.lyrics?.find(({ text }) => text)?.text);
+    return lyricsFromTags(tags?.common.lyrics);
   }
 
   importPaths(paths: string[]): Promise<ImportResult> {

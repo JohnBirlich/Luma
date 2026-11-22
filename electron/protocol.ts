@@ -3,9 +3,13 @@ import { stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { ONLINE_ORIGINS } from '../src/shared/online.js';
+import { RADIO_ORIGINS } from '../src/shared/radio.js';
+import { THEAUDIODB_ART_ORIGIN } from '../src/shared/theaudiodb.js';
 import { audioMime } from '../src/shared/media.js';
-import { VK_WIDGET_URL } from '../src/shared/vk.js';
 import { APP_ORIGIN, type DesktopLibrary } from './library.js';
+import type { StreamCache } from './stream-cache.js';
+import { streamAudius } from './audius-stream.js';
+import type { AudiusFetch } from './audius-stream.js';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -14,7 +18,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg', '.gif': 'image/gif', '.avif': 'image/avif', '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8', '.wasm': 'application/wasm',
 };
-const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: ${ONLINE_ORIGINS.images}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media}; worker-src 'self'; object-src 'none'; frame-src ${VK_WIDGET_URL}; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
+const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: ${ONLINE_ORIGINS.images} ${RADIO_ORIGINS.images} ${THEAUDIODB_ART_ORIGIN}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media} ${RADIO_ORIGINS.media}; worker-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
 
 export function parseByteRange(header: string, size: number): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
@@ -61,7 +65,7 @@ async function streamFile(path: string, request: Request, headers: Headers) {
   return new Response(body, { status: range ? 206 : 200, headers });
 }
 
-export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string) {
+export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache, audiusFetch?: AudiusFetch) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.protocol !== 'luma:' || url.hostname !== 'app' || url.port || url.username || url.password) return new Response(null, { status: 404 });
@@ -86,6 +90,13 @@ export function createProtocolHandler(root: string, library: DesktopLibrary, dev
     }
     if (request.method === 'OPTIONS' && origin && origin === devOrigin) return new Response(null, { status: 204, headers });
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405, headers });
+    const audius = /^\/media\/audius\/([A-Za-z0-9]{3,16})$/.exec(url.pathname);
+    if (audius && audiusFetch && !url.search) return streamAudius(audiusFetch, audius[1], request, headers);
+    const cacheMatch = /^\/media\/cache\/([a-f0-9]{64})$/.exec(url.pathname);
+    if (cacheMatch) {
+      const path = cache?.mediaPath(cacheMatch[1]);
+      return path ? streamFile(path, request, headers) : new Response(null, { status: 404, headers });
+    }
     const match = /^\/media\/(audio|cover)\/([a-f\d-]+)$/i.exec(url.pathname);
     const path = match
       ? library.mediaPath(match[2], match[1] as 'audio' | 'cover')

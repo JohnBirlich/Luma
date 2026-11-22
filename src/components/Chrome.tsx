@@ -1,19 +1,35 @@
+import { useText } from '../i18n/context';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AudioLines, Bug, Copy, Heart, House, ListMusic, Menu, Minus, Music2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Search, Settings2, SlidersHorizontal, Square, X } from 'lucide-react';
 
 import { formatCount } from '../shared/customization';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 
-export type Page = 'player' | 'search' | 'vk' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent' | 'mixes';
+export type Page = 'player' | 'search' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent' | 'mixes';
 
-interface TitleBarProps {
+interface RadioShortcutProps { openRadio(): void; radioActive: boolean }
+
+function RadioShortcut({ place, openRadio, radioActive }: RadioShortcutProps & { place: 'sidebar' | 'dock' | 'title' }) {
+  const t = useText();
+  const label = t('Радио');
+  const icon = <Radio size={place === 'dock' ? 21 : 18} aria-hidden="true" />;
+  return <button type="button" className={`radio-shortcut radio-${place}${place === 'sidebar' ? ' nav-item' : place === 'title' ? ' icon-button' : ''}`}
+    aria-label={label} title={label} aria-current={radioActive ? 'page' : undefined} onClick={openRadio}>
+    {place === 'dock' ? <><i className="glass-dock-icon" aria-hidden="true">{icon}</i><span>{label}</span></> :
+      place === 'sidebar' ? <><span className="nav-glyph">{icon}</span><span className="nav-copy">{label}</span></> : icon}
+  </button>;
+}
+
+interface TitleBarProps extends RadioShortcutProps {
   openSettings(): void;
   settingsActive: boolean;
+  glass: boolean;
   addMusic(): void;
   busy: boolean;
 }
 
-export function TitleBar({ openSettings, settingsActive, addMusic, busy }: TitleBarProps) {
+export function TitleBar({ openSettings, settingsActive, glass, addMusic, busy, openRadio, radioActive }: TitleBarProps) {
+  const t = useText();
   const api = window.luma?.window;
   const [maximized, setMaximized] = useState(false);
   useEffect(() => {
@@ -21,50 +37,51 @@ export function TitleBar({ openSettings, settingsActive, addMusic, busy }: Title
     void api.isMaximized().then(setMaximized).catch(() => undefined);
     return api.onMaximized(setMaximized);
   }, [api]);
+  const windowButtons = api && <div className="window-buttons">
+    <button type="button" onClick={api.minimize} title={t("Свернуть")} aria-label={t("Свернуть")}><Minus size={15} /></button>
+    <button type="button" onClick={api.toggleMaximize} title={maximized ? t("Восстановить окно") : t("Развернуть")} aria-label={maximized ? t("Восстановить окно") : t("Развернуть")}>
+      {maximized ? <Copy size={13} /> : <Square size={12} />}
+    </button>
+    <button type="button" className="window-close" onClick={api.close} title={t("Закрыть окно")} aria-label={t("Закрыть окно")}><X size={16} /></button>
+  </div>;
   return (
     <header className={`title-bar${api ? ' native-title-bar' : ''}`}>
+      {glass && (windowButtons ?? <span className="mac-lights" aria-hidden="true"><i /><i /><i /></span>)}
       <div className="wordmark" aria-label="Luma Player">
         <div className="brand-mark" aria-hidden="true"><AudioLines size={20} strokeWidth={2.05} /></div>
         <strong>Luma<span> Player</span></strong>
       </div>
-      <div className="title-caption">Музыкальный плеер</div>
       <div className="title-actions">
+        {!glass && <RadioShortcut place="title" openRadio={openRadio} radioActive={radioActive} />}
         <button type="button" className="icon-button title-import" onClick={addMusic} disabled={busy}
-          aria-label={busy ? 'Добавляем музыку' : 'Добавить музыку'} title="Добавить музыку (Ctrl+O)"><Plus size={19} /></button>
+          aria-label={busy ? t("Добавляем музыку") : t("Добавить музыку")} title={t("Добавить музыку (Ctrl+O)")}><Plus size={19} /></button>
         <button type="button" className="icon-button title-settings" onClick={openSettings} aria-current={settingsActive ? 'page' : undefined}
-          aria-label="Настройки" title="Настройки (Ctrl+,)"><Settings2 size={18} /></button>
-        {api ? <div className="window-buttons">
-          <button type="button" onClick={api.minimize} title="Свернуть" aria-label="Свернуть"><Minus size={15} /></button>
-          <button type="button" onClick={api.toggleMaximize} title={maximized ? 'Восстановить окно' : 'Развернуть'} aria-label={maximized ? 'Восстановить окно' : 'Развернуть'}>
-            {maximized ? <Copy size={13} /> : <Square size={12} />}
-          </button>
-          <button type="button" className="window-close" onClick={api.close} title="Закрыть окно" aria-label="Закрыть окно"><X size={16} /></button>
-        </div> : <div className="web-status"><span />Веб-превью</div>}
+          aria-label={t("Настройки")} title={t("Настройки (Ctrl+,)")}><Settings2 size={18} /></button>
+        {api ? !glass && windowButtons : <div className="web-status"><span />{t("Веб-превью")}</div>}
       </div>
     </header>
   );
 }
 
-const NAVIGATION = [
+const PRIMARY_PAGES = [
   { id: 'player', label: 'Главная', icon: House },
   { id: 'search', label: 'Поиск', icon: Search },
-  { id: 'vk', label: 'VK Музыка', icon: Radio },
   { id: 'library', label: 'Медиатека', icon: Music2 },
-  { id: 'menu', label: 'Меню', icon: Menu },
 ] as const;
+const MENU_PAGE = { id: 'menu', label: 'Меню', icon: Menu } as const;
+const NAVIGATION = [...PRIMARY_PAGES, MENU_PAGE];
+const GLASS_NAVIGATION = [...PRIMARY_PAGES, { id: 'favorites', icon: Heart, label: 'Избранное' } as const, MENU_PAGE];
 
-interface SidebarProps {
+interface SidebarProps extends RadioShortcutProps {
   page: Page;
   navigate(page: Page): void;
   addMusic(): void;
   busy: boolean;
   count: number;
   fullNumbers: boolean;
-  vkWebsiteOpen: boolean;
   favoriteCount: number;
   queued: number;
   queueOpen: boolean;
-  vkWidgetOpen: boolean;
   toggleQueue(): void;
   openEqualizer(): void;
   eqEnabled: boolean;
@@ -73,50 +90,67 @@ interface SidebarProps {
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { page, navigate, addMusic, busy, count, favoriteCount, queued, queueOpen, toggleQueue, openEqualizer, compact, toggleCompact } = props;
+  const t = useText();
+  const { page, navigate, addMusic, busy, count, favoriteCount, queued, queueOpen, toggleQueue, openEqualizer, compact, toggleCompact, openRadio, radioActive } = props;
   const online = useSyncExternalStore(subscribeConnection, connectionState);
   const active = page === 'settings' || page === 'diagnostics' || page === 'favorites' || page === 'recent' ? 'menu' : page === 'mixes' ? 'library' : page;
-  const expandLabel = compact ? 'Развернуть боковую панель' : 'Свернуть боковую панель';
+  const expandLabel = compact ? t("Развернуть боковую панель") : t("Свернуть боковую панель");
   return (
-    <aside className="sidebar" aria-label="Навигация">
+    <aside className="sidebar" aria-label={t("Навигация")}>
       <div className="sidebar-sections">
-        <nav className="navigation" aria-label="Разделы плеера">
-          <div className="nav-heading"><p className="overline nav-label">Коллекция</p>
+        <nav className="navigation" aria-label={t("Разделы плеера")}>
+          <div className="nav-heading"><p className="overline nav-label">{t("Коллекция")}</p>
             <button type="button" className="icon-button sidebar-collapse" onClick={toggleCompact} aria-label={expandLabel} title={expandLabel} aria-pressed={compact}>
               {compact ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
             </button>
           </div>
           <div className="nav-group">
-            {NAVIGATION.map(({ id, icon: Icon, label }) => <button key={id} type="button" className={`nav-item${id === 'vk' ? ' nav-vk' : ''}`}
-              title={label} aria-label={label} aria-current={active === id ? 'page' : undefined} onClick={() => navigate(id)}>
-              <span className="nav-glyph" aria-hidden="true"><Icon size={19} strokeWidth={1.8} /></span><span className="nav-copy">{label}</span>
-              {id === 'library' && <small className="nav-count" aria-hidden="true">{formatCount(count, props.fullNumbers)}</small>}
+            {NAVIGATION.map(({ id, icon: Icon, label }) => <button key={id} type="button" className="nav-item"
+              title={t(label)} aria-label={t(label)} aria-current={active === id && !(id === 'player' && radioActive) ? 'page' : undefined} onClick={() => navigate(id)}>
+              <span className="nav-glyph" aria-hidden="true"><Icon size={19} strokeWidth={1.8} /></span><span className="nav-copy">{t(label)}</span>
+              {id === 'library' && <small className="nav-count" aria-hidden="true">{formatCount(count, props.fullNumbers, t.language)}</small>}
             </button>)}
           </div>
         </nav>
-        <section className="sidebar-shortcuts" aria-label="Быстрый доступ">
-          <p className="overline nav-label">Быстрый доступ</p>
-          <button type="button" className="nav-item" title="Избранное" aria-label="Избранное" aria-current={page === 'favorites' ? 'page' : undefined} onClick={() => navigate('favorites')}>
-            <Heart className="nav-glyph" size={17} /><span className="nav-copy">Избранное</span>{favoriteCount > 0 && <small className="nav-count" aria-hidden="true">{formatCount(favoriteCount, props.fullNumbers)}</small>}
+        <section className="sidebar-shortcuts" aria-label={t("Быстрый доступ")}>
+          <p className="overline nav-label">{t("Быстрый доступ")}</p>
+          <button type="button" className="nav-item" title={t("Избранное")} aria-label={t("Избранное")} aria-current={page === 'favorites' ? 'page' : undefined} onClick={() => navigate('favorites')}>
+            <Heart className="nav-glyph" size={17} /><span className="nav-copy">{t("Избранное")}</span>{favoriteCount > 0 && <small className="nav-count" aria-hidden="true">{formatCount(favoriteCount, props.fullNumbers, t.language)}</small>}
           </button>
-          <button type="button" className="nav-item" title={props.vkWidgetOpen ? 'Очередь Luma недоступна во время работы VK' : 'Очередь'} aria-label="Очередь из боковой панели"
-            aria-pressed={queueOpen && !props.vkWidgetOpen} aria-controls={queueOpen && !props.vkWidgetOpen ? 'play-queue' : undefined} disabled={props.vkWidgetOpen} onClick={toggleQueue}>
-            <ListMusic className="nav-glyph" size={18} /><span className="nav-copy">Очередь</span>{queued > 0 && <small className="nav-count" aria-hidden="true">{formatCount(queued, props.fullNumbers)}</small>}
+          <button type="button" className="nav-item" title={t("Очередь")} aria-label={t("Очередь из боковой панели")}
+            aria-pressed={queueOpen} aria-controls={queueOpen ? 'play-queue' : undefined} onClick={toggleQueue}>
+            <ListMusic className="nav-glyph" size={18} /><span className="nav-copy">{t("Очередь")}</span>{queued > 0 && <small className="nav-count" aria-hidden="true">{formatCount(queued, props.fullNumbers, t.language)}</small>}
           </button>
-          <button type="button" className="nav-item" title="Эквалайзер" aria-label="Эквалайзер из боковой панели" aria-haspopup="dialog" disabled={props.vkWebsiteOpen} onClick={openEqualizer}>
-            <SlidersHorizontal className="nav-glyph" size={17} /><span className="nav-copy">Эквалайзер</span>{props.eqEnabled && <i className="enabled-dot" />}
+          <button type="button" className="nav-item" title={t("Эквалайзер")} aria-label={t("Эквалайзер из боковой панели")} aria-haspopup="dialog" onClick={openEqualizer}>
+            <SlidersHorizontal className="nav-glyph" size={17} /><span className="nav-copy">{t("Эквалайзер")}</span>{props.eqEnabled && <i className="enabled-dot" />}
           </button>
+          <RadioShortcut place="sidebar" openRadio={openRadio} radioActive={radioActive} />
         </section>
       </div>
       <div className="sidebar-footer">
-        <button type="button" className="button add-button" title="Добавить музыку (Ctrl+O)" aria-label={busy ? 'Добавляем музыку' : 'Добавить музыку'} onClick={addMusic} disabled={busy}>
-          <Plus size={18} /><span>{busy ? 'Добавляем…' : 'Добавить музыку'}</span>
+        <button type="button" className="button add-button" title={t("Добавить музыку (Ctrl+O)")} aria-label={busy ? t("Добавляем музыку") : t("Добавить музыку")} onClick={addMusic} disabled={busy}>
+          <Plus size={18} /><span>{busy ? t("Добавляем…") : t("Добавить музыку")}</span>
         </button>
-        <button type="button" className={`sidebar-diagnostic${online ? '' : ' connection-off'}`} aria-label="Диагностика из боковой панели" title="Диагностика (Ctrl+Shift+L)"
+        <button type="button" className={`sidebar-diagnostic${online ? '' : ' connection-off'}`} aria-label={t("Диагностика из боковой панели")} title={t("Диагностика (Ctrl+Shift+L)")}
           aria-current={page === 'diagnostics' ? 'page' : undefined} onClick={() => navigate('diagnostics')}>
-          <Bug size={17} /><span className="sidebar-diagnostic-copy"><strong>Диагностика</strong><small><i />{online ? 'Устройство в сети' : 'Устройство вне сети'}</small></span>
+          <Bug size={17} /><span className="sidebar-diagnostic-copy"><strong>{t("Диагностика")}</strong><small><i />{online ? t("Устройство в сети") : t("Устройство вне сети")}</small></span>
         </button>
       </div>
     </aside>
   );
+}
+
+export function GlassNavigation({ page, navigate, openEqualizer, eqEnabled, openRadio, radioActive }:
+  Pick<SidebarProps, 'page' | 'navigate' | 'openEqualizer' | 'eqEnabled'> & RadioShortcutProps) {
+  const t = useText();
+  const active = page === 'settings' || page === 'diagnostics' || page === 'recent' ? 'menu' : page === 'mixes' ? 'library' : page;
+  return <div className="glass-dock">
+    <nav className="glass-navigation" aria-label={t('Разделы плеера')}>
+      {GLASS_NAVIGATION.map(({ id, icon: Icon, label }) => <button key={id} type="button" aria-current={active === id && !(id === 'player' && radioActive) ? 'page' : undefined}
+        onClick={() => navigate(id)} aria-label={t(label)} title={t(label)} data-dock-item={id}>
+        <i className="glass-dock-icon" aria-hidden="true"><Icon size={21} strokeWidth={2.15} /></i><span>{t(label)}</span></button>)}
+    <button type="button" className="glass-sound" aria-label={t('Эквалайзер')} title={t('Эквалайзер')} aria-haspopup="dialog" onClick={openEqualizer}>
+      <i className="glass-dock-icon" aria-hidden="true"><SlidersHorizontal size={21} /></i><span>EQ</span>{eqEnabled && <i className="enabled-dot" />}
+    </button><RadioShortcut place="dock" openRadio={openRadio} radioActive={radioActive} /></nav>
+  </div>;
 }

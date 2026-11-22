@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
+export type PresentationKind = 'player' | 'karaoke';
+
 interface Presentation {
   target: HTMLDivElement | null;
   opener: HTMLElement | null;
@@ -9,7 +11,7 @@ interface Presentation {
 }
 
 export function usePresentation(nativeFullscreen: boolean) {
-  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<PresentationKind | null>(null);
   const stage = useRef<HTMLDivElement>(null);
   const active = useRef<Presentation>(null);
   const latest = useRef<Presentation>(null);
@@ -20,7 +22,7 @@ export function usePresentation(nativeFullscreen: boolean) {
     active.current = null;
     const owned = view.target && document.fullscreenElement === view.target;
     // Close our UI even if the system fullscreen transition fails or is still pending.
-    setOpen(false);
+    setKind(null);
     const restoreFocus = () => requestAnimationFrame(() => {
       if (view.opener?.isConnected && latest.current === view && !active.current) view.opener.focus({ preventScroll: true });
     });
@@ -29,8 +31,8 @@ export function usePresentation(nativeFullscreen: boolean) {
     else if (owned) void document.exitFullscreen().then(restoreFocus, restoreFocus);
   }, []);
 
-  const show = useCallback(() => {
-    if (active.current) return;
+  const show = useCallback((mode: PresentationKind) => {
+    if (active.current) { setKind(mode); return; }
     const view: Presentation = {
       target: null, opener: document.activeElement instanceof HTMLElement ? document.activeElement : null,
       desktop: false, native: false,
@@ -38,7 +40,7 @@ export function usePresentation(nativeFullscreen: boolean) {
     active.current = latest.current = view;
     // Mount the dialog during the user gesture. The player fills the window immediately,
     // including when the browser or desktop host does not allow monitor fullscreen.
-    flushSync(() => setOpen(true));
+    flushSync(() => setKind(mode));
     const target = view.target = stage.current;
     if (!nativeFullscreen || !target) return;
     if (window.luma) {
@@ -72,5 +74,5 @@ export function usePresentation(nativeFullscreen: boolean) {
     return () => { document.removeEventListener('fullscreenchange', sync); unsubscribe?.(); };
   }, [close]);
 
-  return { open, show, close, stage };
+  return { kind, show, close, stage };
 }

@@ -1,3 +1,4 @@
+import { useText } from '../i18n/context';
 import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, RotateCcw, Upload, X } from 'lucide-react';
 import { prepareCover } from '../data/cover-art';
@@ -13,6 +14,7 @@ interface CoverEditorProps {
 }
 
 export function CoverEditor({ target, currentUrl, update, close }: CoverEditorProps) {
+  const t = useText();
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const revision = useRef(0);
@@ -52,7 +54,7 @@ export function CoverEditor({ target, currentUrl, update, close }: CoverEditorPr
       liveUrl.current = url;
       setDraft({ image, url });
     } catch (problem) {
-      if (version === revision.current) setError(problem instanceof Error ? problem.message : 'Не удалось открыть изображение.');
+      if (version === revision.current) setError(problem instanceof Error ? problem.message : t("Не удалось открыть изображение."));
     } finally {
       if (version === revision.current) setProcessing(false);
     }
@@ -63,7 +65,7 @@ export function CoverEditor({ target, currentUrl, update, close }: CoverEditorPr
     setSaving(true);
     setError('');
     try { await update(image); dismiss(); }
-    catch { setError('Не удалось сохранить изменения. Попробуйте ещё раз.'); setSaving(false); }
+    catch { setError(t("Не удалось сохранить изменения. Попробуйте ещё раз.")); setSaving(false); }
   }
 
   return (
@@ -77,22 +79,22 @@ export function CoverEditor({ target, currentUrl, update, close }: CoverEditorPr
       <div className="cover-editor">
         <header className="dialog-header">
           <div className="dialog-mark"><ImagePlus size={22} /></div>
-          <div><p className="overline">Персонализация</p><h2 id="cover-dialog-title">{playlist ? 'Обложка плейлиста' : 'Обложка трека'}</h2></div>
-          <button type="button" className="icon-button" disabled={saving} aria-label="Закрыть редактор обложки" title="Закрыть" onClick={dismiss}><X size={20} /></button>
+          <div><p className="overline">{t("Персонализация")}</p><h2 id="cover-dialog-title">{playlist ? t("Обложка плейлиста") : t("Обложка трека")}</h2></div>
+          <button type="button" className="icon-button" disabled={saving} aria-label={t("Закрыть редактор обложки")} title={t("Закрыть")} onClick={dismiss}><X size={20} /></button>
         </header>
         <div className="cover-editor-body">
           <div className="cover-preview">
             <Artwork imageUrl={src} />
-            <span>{draft ? 'Предпросмотр' : currentUrl ? 'Своя обложка' : target.originalUrl ? 'Автоматическая обложка' : 'Обложка Luma'}</span>
+            <span>{draft ? t("Предпросмотр") : currentUrl ? t("Своя обложка") : target.originalUrl ? t("Автоматическая обложка") : t("Обложка Luma")}</span>
           </div>
           <div className="cover-editor-details">
             <h3 title={target.title}>{target.title}</h3>
-            <p>{playlist ? 'Обложка видна в Luma. Сам виджет VK не изменится.' : 'Новая обложка появится в Luma и системном плеере. Аудиофайл не изменится.'}</p>
+            <p>{playlist ? t("Обложка видна только у закладки в Luma.") : t("Новая обложка появится в Luma и системном плеере. Аудиофайл не изменится.")}</p>
             <button type="button" className={`cover-picker${over ? ' cover-picker-active' : ''}`} onClick={() => input.current?.click()} disabled={saving}>
-              <Upload size={19} /><span><strong>{processing ? 'Подготавливаем…' : 'Выбрать изображение'}</strong><small>или перетащите его сюда</small></span>
+              <Upload size={19} /><span><strong>{processing ? t("Подготавливаем…") : t("Выбрать изображение")}</strong><small>{t("или перетащите его сюда")}</small></span>
             </button>
-            <small className="cover-format">JPG, PNG, WebP · до 20 МБ · квадратная обрезка</small>
-            <input type="file" hidden ref={input} aria-label="Файл обложки" accept={COVER_ACCEPT} onChange={(event) => {
+            <small className="cover-format">{t("JPG, PNG, WebP · до 20 МБ · квадратная обрезка")}</small>
+            <input type="file" hidden ref={input} aria-label={t("Файл обложки")} accept={COVER_ACCEPT} onChange={(event) => {
               void choose(event.currentTarget.files?.[0]);
               event.currentTarget.value = '';
             }} />
@@ -100,8 +102,8 @@ export function CoverEditor({ target, currentUrl, update, close }: CoverEditorPr
         </div>
         {error && <p className="cover-error" role="alert">{error}</p>}
         <footer className="dialog-footer cover-footer">
-          <button type="button" className="button ghost-button" onClick={() => void apply()} disabled={!currentUrl || !ready}><RotateCcw size={15} /> Вернуть исходную</button>
-          <button type="button" className="button primary-button" onClick={() => void apply(draft?.image)} disabled={!draft || !ready}>{saving ? 'Сохраняем…' : 'Сохранить обложку'}</button>
+          <button type="button" className="button ghost-button" onClick={() => void apply()} disabled={!currentUrl || !ready}><RotateCcw size={15} />{" "}{t("Вернуть исходную")}</button>
+          <button type="button" className="button primary-button" onClick={() => void apply(draft?.image)} disabled={!draft || !ready}>{saving ? t("Сохраняем…") : t("Сохранить обложку")}</button>
         </footer>
       </div>
     </dialog>

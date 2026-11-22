@@ -1,3 +1,4 @@
+import type { Text } from '../i18n/text';
 import { browserSystem } from '../shared/system';
 import { webAppInfo } from './app-info';
 import { appendLog, diagnosticsReport, logEntry, readLog, reportFilename } from '../shared/diagnostics';
@@ -93,10 +94,10 @@ export const subscribeDiagnostics = (listener: () => void) => {
 export const getDiagnostics = async () => desktop()?.snapshot() ?? browserSnapshot();
 export const clearDiagnostics = async () => desktop()?.clear() ?? writeWeb([]);
 
-export async function saveDiagnostics(): Promise<boolean> {
+export async function saveDiagnostics(t: Text): Promise<boolean> {
   const api = desktop();
   if (api) return api.saveReport();
-  const url = URL.createObjectURL(new Blob([diagnosticsReport(browserSnapshot())], { type: 'text/plain;charset=utf-8' }));
+  const url = URL.createObjectURL(new Blob([diagnosticsReport(browserSnapshot(), t)], { type: 'text/plain;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url;
   link.download = reportFilename();

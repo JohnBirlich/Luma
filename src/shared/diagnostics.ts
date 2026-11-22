@@ -1,3 +1,5 @@
+import { textFor } from '../i18n/text.js';
+import type { Text } from '../i18n/text.js';
 import { runtimeMode } from './app-info.js';
 import type { AppInfo } from './app-info.js';
 
@@ -18,6 +20,7 @@ export const LOG_EVENTS = {
   'desktop.start': ['main', 'startup', 'info', 'Запуск настольного Luma'],
   'desktop.protocol': ['main', 'startup', 'info', 'Подключён локальный протокол'],
   'desktop.ready': ['main', 'startup', 'info', 'Окно Luma загружено', 'ms'],
+  'desktop.musicLinkDelivered': ['main', 'app', 'info', 'Музыкальная ссылка передана окну Luma'],
   'desktop.failed': ['main', 'startup', 'error', 'Не удалось запустить настольный Luma'],
   'desktop.pageFailed': ['main', 'startup', 'error', 'Ошибка загрузки окна', 'code'],
   'desktop.rendererExited': ['main', 'app', 'error', 'Процесс интерфейса завершился неожиданно', 'code'],
@@ -27,8 +30,6 @@ export const LOG_EVENTS = {
   'renderer.rejection': ['renderer', 'app', 'error', 'Необработанная ошибка фоновой операции'],
   'network.online': ['renderer', 'network', 'info', 'Устройство в сети'],
   'network.offline': ['renderer', 'network', 'warn', 'Устройство вне сети'],
-  'vk.browserOpened': ['main', 'network', 'info', 'Страница VK передана браузеру; вход проверяет VK'],
-  'vk.browserFailed': ['main', 'network', 'warn', 'Не удалось открыть браузер для VK'],
   'vk.websiteOpening': ['main', 'network', 'info', 'Открывается официальный сайт VK Музыки'],
   'vk.websiteOpened': ['main', 'network', 'info', 'Страница VK загружена; вход и доступ проверяет VK'],
   'vk.websiteFailed': ['main', 'network', 'warn', 'Не удалось загрузить страницу VK', 'code'],
@@ -110,25 +111,30 @@ export function readLog(raw: string | null, source?: Source): LogEntry[] {
   } catch { return []; }
 }
 
-export function displayValues({ values }: LogEntry): string[] {
+export function diagnosticSystem(system: string, t: Text) {
+  const build = /^(Windows[^·]*) · сборка (\d+)$/.exec(system);
+  return build ? t("{0} · сборка {1}", build[1], build[2]) : t(system);
+}
+
+export function displayValues({ values }: LogEntry, t: Text = textFor('ru')): string[] {
   return (Object.keys(FIELDS) as Field[]).flatMap((key) => {
     const value = values[key];
-    return value === undefined ? [] : [`${FIELDS[key]}: ${value}${key === 'ms' ? ' мс' : ''}`];
+    return value === undefined ? [] : [`${t(FIELDS[key])}: ${key === 'ms' ? t("{0} мс", value) : value}`];
   });
 }
 
 export const reportFilename = () => `Luma-diagnostics-${new Date().toISOString().slice(0, 10)}.log`;
 
-export function diagnosticsReport({ entries, environment }: DiagnosticSnapshot): string {
+export function diagnosticsReport({ entries, environment }: DiagnosticSnapshot, t: Text = textFor('ru')): string {
   const info = [
-    `Luma Player ${environment.version} · ${runtimeMode[environment.mode]}`,
-    `Система: ${environment.system}`, `Среда: ${environment.runtime}`,
-    `Сеть: ${environment.online ? 'устройство в сети' : 'устройство вне сети'}`, `Записей: ${entries.length}`, '',
+    `Luma Player ${environment.version} · ${t(runtimeMode[environment.mode])}`,
+    t("Система: {0}", diagnosticSystem(environment.system, t)), t("Среда: {0}", t(environment.runtime)),
+    t("Сеть: {0}", environment.online ? t("устройство в сети") : t("устройство вне сети")), t("Записей: {0}", entries.length), '',
   ];
   const lines = entries.map((entry) => {
     const [, area, level, message] = LOG_EVENTS[entry.event];
-    const values = displayValues(entry);
-    return `${new Date(entry.at).toISOString()} [${LOG_LEVELS[level]}] ${LOG_AREAS[area]} (${entry.event}) — ${message}${values.length ? ` · ${values.join(' · ')}` : ''}`;
+    const values = displayValues(entry, t);
+    return `${new Date(entry.at).toISOString()} [${t(LOG_LEVELS[level])}] ${t(LOG_AREAS[area])} (${entry.event}) — ${t(message)}${values.length ? ` · ${values.join(' · ')}` : ''}`;
   });
   return [...info, ...lines, ''].join('\n');
 }

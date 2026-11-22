@@ -1,0 +1,95 @@
+import { archiveId, catalogLicense, catalogRetryDelay, catalogObject as object, readOnlineTrack } from './online.js';
+import type { CommunitySource, DesktopCatalogSource, OnlineTrack } from './online.js';
+import { musicSearchKey } from './russian.js';
+import { readLimitedBody } from './metadata-service.js';
+import { audiusSearchUrl, audiusTracks } from './public-catalogs.js';
+
+const list = (value: unknown, max: number) => Array.isArray(value) ? value.slice(0, max) : [];
+const str = (value: unknown) => typeof value === 'string' ? value : '';
+const byName = (value: unknown) => Array.isArray(value) ? str(value[0]) : str(value);
+const duration = (value: unknown) => /^\d{1,3}:\d{2}$/.test(str(value)) ? str(value).split(':').reduce((a, b) => a * 60 + Number(b), 0) : Number(value);
+
+export function archiveTracks(item: string, data: unknown, source: CommunitySource = 'netlabels'): OnlineTrack[] {
+  const row = object(data), meta = object(row.metadata);
+  const license = catalogLicense(meta.licenseurl);
+  if (!archiveId(item) || meta.identifier !== item || meta.mediatype !== 'audio' || ![meta.collection].flat().includes('netlabels') || (source === 'southern_city' && ![meta.collection].flat().includes('southern-citys-lab'))
+    || !license || row.is_dark || meta.access_restricted_item || meta.private) return [];
+  return list(row.files, 240).map(object).flatMap((file) => {
+    const name = str(file.name);
+    if (file.source !== 'original' || !['VBR MP3', 'MP3', '128Kbps MP3', '64Kbps MP3', '320Kbps MP3', '192Kbps MP3'].includes(str(file.format))
+      || !file.title || file.private || !name || name.length > 200 || /[\\/:#?%\u0000-\u001f\u007f]/.test(name)) return [];
+    const track = readOnlineTrack({ title: file.title, artist: file.artist || file.creator || byName(meta.creator),
+      album: file.album || meta.title, genres: [file.genre, ...[meta.subject].flat().slice(0, 10)], duration: duration(file.length),
+      audioUrl: `https://archive.org/download/${item}/${encodeURIComponent(name)}`,
+      online: { source: 'netlabels', page: `https://archive.org/details/${item}`, licenseUrl: license.url } });
+    return track ? [track] : [];
+  }).slice(0, 28);
+}
+
+export function communitySearchUrl(query: string, source: CommunitySource) {
+  // Treat user input as literal search words, not arbitrary advanced search syntax.
+  const words = query.match(/[\p{L}\p{N}]+/gu)?.slice(0, 10).map((word) => `"${word.slice(0, 45)}"`);
+  const term = words?.join(' AND ') || '"no-result"';
+  const url = new URL('https://archive.org/advancedsearch.php');
+  url.search = new URLSearchParams({ q: `collection:${source === 'southern_city' ? 'southern-citys-lab' : 'netlabels'} AND mediatype:audio AND licenseurl:* AND (${term})`, 'fl[]': 'identifier', rows: '4', output: 'json' }).toString();
+  return url;
+}
+
+type FetchCatalog = (url: string, init?: RequestInit) => Promise<Response>;
+const validQuery = (value: unknown): value is string => typeof value === 'string' && value.length <= 140 && value.trim().length >= 2 && /[\p{L}\p{N}]/u.test(value);
+
+export async function searchCommunity(fetcher: FetchCatalog, value: unknown, source: DesktopCatalogSource, signal: AbortSignal) {
+  if (!validQuery(value)) return [];
+  async function get(url: URL, limit: number) {
+    const response = await fetcher(url.href, { signal, cache: 'no-store', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', headers: { Accept: 'application/json' } });
+    if (!response.ok || !response.body) {
+      void response.body?.cancel().catch(() => {});
+      throw new Error('Каталог сейчас недоступен.');
+    }
+    return JSON.parse(new TextDecoder().decode(await readLimitedBody(response, limit, signal))) as unknown;
+  }
+  if (source === 'audius') {
+    return audiusTracks(await get(audiusSearchUrl(value), 768 * 1024));
+  }
+  const results = await get(communitySearchUrl(value, source), 768 * 1024);
+  const response = object(object(results).response);
+  if (!Array.isArray(response.docs)) throw new Error('Каталог вернул неожиданный ответ.');
+  const items = [...new Set(list(response.docs, 4).map((row) => object(row).identifier).filter(archiveId))];
+  const metadata = await Promise.allSettled(items.map(async (id) => archiveTracks(id, await get(new URL(`https://archive.org/metadata/${id}`), 2 * 1024 * 1024), source)));
+  signal.throwIfAborted();
+  if (metadata.length && metadata.every((entry) => entry.status === 'rejected')) throw new Error('Каталог сейчас недоступен.');
+  const scores = (track: OnlineTrack) => musicSearchKey(`${track.title} ${track.artist} ${track.album}`).includes(musicSearchKey(value)) ? 1 : 0;
+  return metadata.flatMap((entry) => entry.status === 'fulfilled' ? entry.value : []).sort((a, b) => scores(b) - scores(a)).slice(0, 18);
+}
+
+/** A new query replaces only its own scope. The two Archive scopes share one quota. */
+export function createCommunitySearch(fetcher: FetchCatalog, now = Date.now) {
+  const active = new Map<DesktopCatalogSource, { id: number; controller: AbortController }>();
+  const retryAt = new Map<string, number>();
+  const fetchCatalog: FetchCatalog = async (url, init) => {
+    init?.signal?.throwIfAborted();
+    const host = new URL(url).hostname;
+    if ((retryAt.get(host) ?? 0) > now()) throw new Error('Каталог сейчас недоступен.');
+    const response = await fetcher(url, init);
+    if (response.status === 429) {
+      const time = now();
+      retryAt.set(host, Math.max(retryAt.get(host) ?? 0, time + catalogRetryDelay(response.headers.get('Retry-After'), time)));
+    }
+    return response;
+  };
+  return {
+    async search(id: unknown, query: unknown, source: unknown) {
+      if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || !validQuery(query)
+        || (source !== 'netlabels' && source !== 'southern_city' && source !== 'audius')) return [];
+      active.get(source)?.controller.abort();
+      const controller = new AbortController();
+      active.set(source, { id, controller });
+      try {
+        return await searchCommunity(fetchCatalog, query, source, AbortSignal.any([controller.signal, AbortSignal.timeout(11_000)]));
+      } finally { if (active.get(source)?.controller === controller) active.delete(source); }
+    },
+    cancel(id: unknown) {
+      for (const request of active.values()) if (request.id === id) request.controller.abort();
+    },
+  };
+}

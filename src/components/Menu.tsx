@@ -1,6 +1,7 @@
+import { useText } from '../i18n/context';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, AudioLines, Bug, ChevronRight, FolderOpen, Heart, History, Info, Music2, Radio, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bug, ChevronRight, Heart, History, Info, Music2, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
 import { About } from './About';
@@ -32,47 +33,42 @@ export function MenuGroup({ label, children }: { label: string; children: ReactN
 interface MenuPageProps {
   localCount: number;
   fullNumbers: boolean;
-  ready: boolean;
-  eqEnabled: boolean;
   openSettings(): void;
-  openEqualizer(): void;
   openLibrary(): void;
   openFavorites(): void;
   openRecent(): void;
   openMixes(): void;
   openDiagnostics(): void;
-  openVk(): void;
-  addMusic(): void;
+  openEqualizer(): void;
 }
 
 export function MenuPage(props: MenuPageProps) {
+  const t = useText();
   const [about, setAbout] = useState(false);
   return (
     <div className="page menu-page">
       <header className="page-header">
-        <div><p className="overline page-kicker"><span />Luma Player</p><h1>{about ? 'О приложении' : 'Меню'}</h1></div>
-        {about && <button type="button" className="button outline-button" onClick={() => setAbout(false)}><ArrowLeft size={16} /> В меню</button>}
+        <div><p className="overline page-kicker"><span />Luma Player</p><h1>{about ? t("О приложении") : t("Меню")}</h1></div>
+        {about && <button type="button" className="button outline-button" onClick={() => setAbout(false)}><ArrowLeft size={16} />{" "}{t("В меню")}</button>}
       </header>
       <div className="menu-body">
         {about ? <About /> : <>
-          <section className="menu-profile" aria-label="Профиль Luma">
+          <section className="menu-profile" aria-label={t("Профиль Luma")}>
             <div className="menu-profile-logo"><AudioLines size={27} strokeWidth={1.85} /></div>
-            <div><h2>Luma Player</h2><p>{trackCount(props.localCount, props.fullNumbers)} с устройства</p></div>
-            <span className="menu-profile-status"><i /> Локальный профиль</span>
+            <div><h2>Luma Player</h2><p>{trackCount(props.localCount, props.fullNumbers, t.language)}{" "}{t("с устройства")}</p></div>
+            <span className="menu-profile-status"><i />{" "}{t("Локальный профиль")}</span>
           </section>
-          <MenuGroup label="Коллекция">
-            <MenuItem icon={Music2} title="Моя медиатека" detail="Файлы, онлайн-ссылки и коллекции" select={props.openLibrary} />
-            <MenuItem icon={Heart} title="Избранное" detail="Треки, отмеченные сердцем" select={props.openFavorites} />
-            <MenuItem icon={Sparkles} title="Миксы" detail="Подборки из медиатеки, избранного и истории" select={props.openMixes} />
-            <MenuItem icon={History} title="Недавно слушали" detail="История воспроизведения на этом устройстве" select={props.openRecent} />
-            <MenuItem icon={FolderOpen} title="Импортировать треки" detail="Добавьте аудиофайлы или перетащите их в окно" select={props.addMusic} disabled={!props.ready} />
-            <MenuItem icon={Radio} title="VK Музыка" detail="Официальный сайт в Luma, закладки и публичный виджет" select={props.openVk} />
+          <MenuGroup label={t("Коллекция")}>
+            <MenuItem icon={Music2} title={t("Моя медиатека")} detail={t("Файлы, онлайн-ссылки и коллекции")} select={props.openLibrary} />
+            <MenuItem icon={Heart} title={t("Избранное")} detail={t("Треки, отмеченные сердцем")} select={props.openFavorites} />
+            <MenuItem icon={Sparkles} title={t("Миксы")} detail={t("Подборки из медиатеки, избранного и истории")} select={props.openMixes} />
+            <MenuItem icon={History} title={t("Недавно слушали")} detail={t("История воспроизведения на этом устройстве")} select={props.openRecent} />
           </MenuGroup>
-          <MenuGroup label="Плеер">
-            <MenuItem icon={Settings2} title="Настройки" detail="Внешний вид, медиатека и воспроизведение" select={props.openSettings} />
-            <MenuItem icon={SlidersHorizontal} title="Эквалайзер" detail={props.eqEnabled ? 'Включён · пресеты и пять полос' : 'Выключен · пресеты и пять полос'} select={props.openEqualizer} dialog />
-            <MenuItem icon={Bug} title="Диагностика" detail="Журнал событий, подключение и сведения о системе" select={props.openDiagnostics} />
-            <MenuItem icon={Info} title="О приложении" detail="Версия Luma, возможности и релизы" select={() => setAbout(true)} />
+          <MenuGroup label={t("Плеер")}>
+            <MenuItem icon={Settings2} title={t("Настройки")} detail={t("Внешний вид, медиатека и воспроизведение")} select={props.openSettings} />
+            <MenuItem icon={Bug} title={t("Диагностика")} detail={t("Журнал событий, подключение и сведения о системе")} select={props.openDiagnostics} />
+            <MenuItem icon={SlidersHorizontal} title={t('Эквалайзер')} detail={t('Настройте частоты и предусиление')} select={props.openEqualizer} dialog />
+            <MenuItem icon={Info} title={t("О приложении")} detail={t("Версия Luma, возможности и релизы")} select={() => setAbout(true)} />
           </MenuGroup>
         </>}
       </div>

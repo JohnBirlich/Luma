@@ -1,7 +1,14 @@
-import { decodeOpenverse, onlineSearchUrl, OPENVERSE_API, openverseLinkId } from '../shared/online';
-import type { OnlineFilter, OnlineTrack } from '../shared/online';
+import { catalogRetryDelay, decodeOpenverse, onlineSearchUrl, OPENVERSE_API, openverseLinkId } from '../shared/online';
+import type { DesktopCatalogSource, OnlineFilter, OnlineTrack } from '../shared/online';
 
+import { createPhishSearch } from '../shared/phishin';
+
+const findPhishTracks = createPhishSearch();
 const MAX_JSON = 512 * 1024;
+
+export class CatalogRateLimit extends Error {
+  constructor(readonly retryMs: number) { super('Openverse временно ограничил поиск. Попробуйте чуть позже.'); }
+}
 
 async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
   const options = { signal: AbortSignal.any([signal, AbortSignal.timeout(11_000)]), redirect: 'error', credentials: 'omit',
@@ -14,7 +21,10 @@ async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
     options.signal.throwIfAborted();
     response = await fetch(url, options);
   }
-  if (response.status === 429) throw new Error('Openverse временно ограничил поиск. Попробуйте чуть позже.');
+  if (response.status === 429) {
+    void response.body?.cancel().catch(() => {});
+    throw new CatalogRateLimit(catalogRetryDelay(response.headers.get('Retry-After')));
+  }
   if (response.status === 404) throw new Error('Запись не найдена. Возможно, её убрали из каталога.');
   if (!response.ok || !response.body) {
     void response.body?.cancel().catch(() => undefined);
@@ -35,7 +45,21 @@ async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
   } finally { void reader.cancel().catch(() => {}); }
 }
 
+let requestId = 0;
+async function communityTracks(query: string, source: DesktopCatalogSource, signal: AbortSignal) {
+  if (!window.luma) throw new Error('Этот каталог доступен в настольной версии Luma.');
+  signal.throwIfAborted();
+  const id = ++requestId;
+  const cancel = () => { void window.luma?.cancelCatalogSearch(id).catch(() => {}); };
+  signal.addEventListener('abort', cancel, { once: true });
+  try { return await window.luma.searchCommunity(id, query.trim().slice(0, 140), source); }
+  catch { throw new Error('Каталог сейчас недоступен. Повторите попытку позже.'); }
+  finally { signal.removeEventListener('abort', cancel); }
+}
+
 export async function findOnlineTracks(query: string, source: OnlineFilter, signal: AbortSignal): Promise<OnlineTrack[]> {
+  if (source === 'phishin') return findPhishTracks(query, signal);
+  if (source === 'southern_city' || source === 'netlabels' || source === 'audius') return communityTracks(query, source, signal);
   const data = await getJson(onlineSearchUrl(query, source), signal) as { results?: unknown[] } | null;
   if (!Array.isArray(data?.results)) throw new Error('Каталог вернул неожиданный ответ.');
   const tracks = new Map<string, OnlineTrack>();

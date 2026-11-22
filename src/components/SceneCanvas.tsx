@@ -1,24 +1,20 @@
 import { useEffect, useRef } from 'react';
+import { initialBeat, sampleBeat } from '../shared/beat';
 import type { ReadSpectrum } from '../player/useAudio';
-import { FIREWORKS_FPS, sceneBufferSize, SPECTRUM_FPS } from '../shared/scene-budget';
+import { compactScene, sceneBufferSize, sceneFps } from '../shared/scene-budget';
 
-const bands = [1, 2, 3, 4, 6, 8, 11, 14, 18, 24, 29, 37, 45, 56, 69, 86, 105, 127];
-const idle = [0.26, 0.36, 0.34, 0.5, 0.64, 0.6, 0.84, 0.9, 0.8, 0.68, 0.64, 0.71, 0.5, 0.43, 0.49, 0.28, 0.22];
+import { advanceColumns, advanceSpectrum, columnPalettes, drawColumns, drawAurora, drawNotes, drawOrbits, drawPrism, drawSpectrum, drawStars, flattenSpectrum, seeded, spectrumColumns, spectrumFrames } from './scene-art';
+import { CANVAS_EFFECTS, coastSpeed } from '../shared/scene-motion';
+import type { CanvasEffect } from '../shared/scene-motion';
 
-function seeded(seed: number) {
-  return () => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 0x100000000;
-  };
-}
 const scatter = seeded(971);
-const bursts = [
-  { x: .76, y: .24, phase: 0, color: '#ffd4a4' },
-  { x: .29, y: .28, phase: 2.5, color: '#e5affc' },
-  { x: .87, y: .49, phase: 4.9, color: '#92f2e6' },
-].map((burst) => ({ ...burst, sparks: Array.from({ length: 54 }, (_, index) => {
-  const angle = index * 2 * Math.PI / 54 + (scatter() - .5) * .13;
-  const speed = .31 + scatter() * .34;
+const FIREWORKS_CYCLE = 7.2;
+const bursts = Array.from({ length: 6 }, (_, i) => ({
+  x: [.78, .29, .87, .53, .68, .19][i], y: [.19, .32, .44, .17, .52, .22][i], phase: i * FIREWORKS_CYCLE / 6,
+  color: ['#ffbd9f', '#ceaffa', '#9affef', '#ffe2a3', '#ade0ff', '#ffb0d8'][i],
+})).map((burst) => ({ ...burst, sparks: Array.from({ length: 36 }, (_, index) => {
+  const angle = index * 2 * Math.PI / 36 + (scatter() - .5) * .13;
+  const speed = .32 + scatter() * .39;
   return { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed, life: .9 + scatter() * .62 };
 }) }));
 
@@ -27,7 +23,7 @@ function fireworks(ctx: CanvasRenderingContext2D, w: number, h: number, t: numbe
   ctx.lineWidth = Math.max(.9, Math.min(2.8, size / 246));
   ctx.lineCap = 'round';
   for (const { x, y, color, phase, sparks } of bursts) {
-    const age = ((t + phase) % 6.65) - .74;
+    const age = ((t + phase) % FIREWORKS_CYCLE) - .74;
     const cx = w * x, cy = h * y;
     ctx.strokeStyle = color;
     if (age < 0) {
@@ -57,74 +53,230 @@ function fireworks(ctx: CanvasRenderingContext2D, w: number, h: number, t: numbe
     const tip = Math.max(1.25, size / 366);
     for (let i = 0; i < sparks.length; i += 2) {
       const spark = sparks[i];
-      if (age <= spark.life) ctx.fillRect(cx + spark.x * distance * size, cy + (spark.y * distance + drift) * size, tip, tip);
+      if (age <= spark.life) { ctx.beginPath(); ctx.arc(cx + spark.x * distance * size, cy + (spark.y * distance + drift) * size, tip / 2, 0, 2 * Math.PI); ctx.fill(); }
     }
   }
   ctx.globalAlpha = 1;
 }
 
-/** A single bounded surface for the two scenes whose geometry changes each frame. */
-export function SceneCanvas({ effect, tempo, sample }: { effect: 'spectrum' | 'fireworks'; tempo: number; sample?: ReadSpectrum }) {
+const rainDrops = Array.from({ length: 100 }, () => ({ x: scatter(), y: scatter(), depth: scatter() }));
+const reflections = Array.from({ length: 12 }, () => ({ x: .2 + scatter() * .79, y: .62 + scatter() * .34, phase: scatter() * 3 }));
+const meteors = Array.from({ length: 12 }, () => ({ x: scatter(), y: scatter() * .7, phase: scatter() * 4.4, depth: scatter() }));
+const fraction = (v: number) => v - Math.floor(v);
+
+function drawRain(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+  ctx.lineCap = 'round';
+  for (let front = 0; front < 2; front++) {
+    ctx.strokeStyle = front ? '#c3e8ff9c' : '#b4b8ecd5';
+    ctx.globalAlpha = front ? .55 : .36;
+    ctx.lineWidth = front ? Math.max(1, h / 414) : Math.max(.62, h / 690);
+    ctx.beginPath();
+    for (const { x, y, depth } of rainDrops) {
+      if (Number(depth > .68) !== front) continue;
+      const dx = h * (.018 + depth * .034), dy = h * (.03 + depth * .082);
+      const xx = fraction(x - t * (.025 + depth * .071)) * (w + dx) - dx;
+      const yy = fraction(y + t * (.6 + depth * 1.47)) * (h + dy);
+      ctx.moveTo(xx + dx, yy - dy); ctx.lineTo(xx, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#f5d0a1';
+  ctx.lineWidth = Math.max(.75, w / 1460);
+  for (const { x, y, phase } of reflections) {
+    const age = (t + phase) % 1.28;
+    if (age > .76) continue;
+    const radius = (h * .01 + h * .038 * age) * (.3 + y * .8);
+    ctx.globalAlpha = (1 - age / .76) * .5;
+    ctx.beginPath(); ctx.ellipse(x*w, y*h, radius, radius*.19, -.04, 0, Math.PI*2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawMeteors(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, speed: number) {
+  ctx.lineCap = 'round';
+  const scale = Math.min(w, h), dx = .77 * scale, dy = .45 * scale;
+  for (const { x, y, phase, depth } of meteors) {
+    const age = (t * (.78 + .29 * depth) + phase) % 4.4;
+    if (age > 1.24) continue;
+    const xx = (x + .14) * w - dx * age, yy = (y - .1) * h + dy * age;
+    const tail = (.11 + depth * .35) * (.57 + .43 * speed);
+    const fade = Math.min(1, age * 6) * (1 - age / 1.24);
+    const light = ctx.createLinearGradient(xx, yy, xx + dx * tail, yy - dy * tail);
+    light.addColorStop(0, '#f4faff'); light.addColorStop(.16, '#abccffbb'); light.addColorStop(.55, '#ad8dff57'); light.addColorStop(1, '#ad8dff00');
+    ctx.strokeStyle = light;
+    ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + dx * tail, yy - dy * tail);
+    ctx.globalAlpha = fade * .26; ctx.lineWidth = Math.max(1.9, scale * .015 * depth); ctx.stroke();
+    ctx.globalAlpha = fade; ctx.lineWidth = Math.max(.9, scale * .0038 * depth); ctx.stroke();
+    ctx.fillStyle = '#e7f5ff'; ctx.beginPath(); ctx.arc(xx, yy, Math.max(.65, scale * .0032 * depth), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+const solarSparks = Array.from({ length: 64 }, () => ({
+  progress: scatter(), speed: .14 + scatter() * .16, glow: .4 + scatter() * .6,
+}));
+
+/** A wind field: all strands skim the corona, then fan out downstream. */
+function drawSolar(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, glow: number) {
+  const cx = w * .86, cy = h * .31, r = Math.min(w, h) * .134;
+  const filament = ctx.createLinearGradient(-.06 * w, 0, cx, 0);
+  filament.addColorStop(0, '#793aac00'); filament.addColorStop(.28, '#bb66ee59');
+  filament.addColorStop(.67, '#ff8a7ac8'); filament.addColorStop(.9, '#ffbf88e8'); filament.addColorStop(1, '#ffddbc00');
+  const corona = ctx.createRadialGradient(cx, cy, r * .65, cx, cy, r * 2.6);
+  corona.addColorStop(0, '#fff1bf'); corona.addColorStop(.20, '#ffb467b9'); corona.addColorStop(.43, '#ff674c52'); corona.addColorStop(1, '#ff6d4900');
+  ctx.fillStyle = corona; ctx.fillRect(cx - 2.6 * r, cy - 2.6 * r, 5.2 * r, 5.2 * r);
+  ctx.lineCap = 'round';
+  const count = 22;
+  for (let i = 0; i < count; i++) {
+    const band = (i / (count - 1) - .5) * 2, bend = Math.sin(t * .73 + i * .29);
+    const start = cx - r * (.5 + .22 * Math.cos(band * 2.6));
+    const x = (p: number) => start - (start + w * .15) * p;
+    const y = (p: number) => cy + r * band * .86 + h * (p * p * (.38 + band * .39) - .12 * Math.sin(p * Math.PI))
+      + h * .075 * p * Math.sin(p * 7.3 - t * 1.3 + band * 2.3) + bend * r * p * .15;
+    ctx.strokeStyle = filament; ctx.beginPath(); ctx.moveTo(start, y(0));
+    for (let j = 1; j <= 24; j++) { const p = j / 24; ctx.lineTo(x(p), y(p)); }
+    ctx.globalAlpha = (.12 + .06 * glow); ctx.lineWidth = Math.max(2.8, h * .016); ctx.stroke();
+    ctx.globalAlpha = .41 + .19 * glow; ctx.lineWidth = Math.max(.62, h * (.0018 + .0014 * (i % 3 === 0 ? 1 : 0))); ctx.stroke();
+    // Advect short light packets rather than moving the entire filament back and forth.
+    for (let k = i; k < solarSparks.length; k += count) {
+      const { progress, speed, glow: bright } = solarSparks[k], p = fraction(progress + t * speed);
+      const rear = Math.max(0, p - .04 - .045 * bright);
+      const packet = ctx.createLinearGradient(x(rear), y(rear), x(p), y(p));
+      packet.addColorStop(0, '#fdaafe00'); packet.addColorStop(.84, '#ffd5b0b8'); packet.addColorStop(1, '#ffefc6');
+      ctx.beginPath(); ctx.moveTo(x(rear), y(rear)); ctx.quadraticCurveTo(x((p + rear) / 2), y((p + rear) / 2), x(p), y(p));
+      ctx.lineWidth = Math.max(.85, h * .0037 * bright); ctx.strokeStyle = packet; ctx.globalAlpha = bright * Math.sin(Math.PI * p) ** .60; ctx.stroke();
+    }
+  }
+  // A feathered terminator covers the roots, so the wind blends into the illuminated limb.
+  ctx.globalAlpha = 1;
+  const planet = ctx.createRadialGradient(cx, cy, r * .87, cx, cy, r * 1.16);
+  planet.addColorStop(0, '#180f24'); planet.addColorStop(.33, '#281129'); planet.addColorStop(.52, '#be664ed9');
+  planet.addColorStop(.70, '#ffcf9b81'); planet.addColorStop(1, '#ffb16500');
+  ctx.fillStyle = planet; ctx.beginPath(); ctx.arc(cx, cy, r * 1.17, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawPulse(ctx: CanvasRenderingContext2D, w: number, h: number, onsets: number[], now: number, kick: number, motion: number, halo: CanvasGradient) {
+  const radius = Math.min(h, w) * .13;
+  const cx = w * .65, cy = h * .49;
+  ctx.globalAlpha = .48 + .52 * kick;
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#c0a9fa';
+  for (const onset of onsets) {
+    const age = now - onset;
+    const expansion = radius * (1.1 + 3.9 * age);
+    ctx.globalAlpha = .82 * motion * (1 - age / 1.22);
+    ctx.lineWidth = Math.max(1, radius * .065 * (1 - age / 1.47));
+    ctx.beginPath(); ctx.arc(cx, cy, expansion, 0, 2 * Math.PI); ctx.stroke();
+  }
+  ctx.strokeStyle = '#f2e8ff'; ctx.lineWidth = Math.max(1.25, radius * .031); ctx.globalAlpha = .39 + kick * .59;
+  ctx.beginPath(); ctx.arc(cx, cy, radius * (.95 + kick * .22), 0, 2 * Math.PI); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+/** Keep the scene clock across transport changes and only run animations for a visible surface. */
+export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
+  effect: CanvasEffect; playing: boolean; enabled: boolean; tempo: number; sample?: ReadSpectrum;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const speed = useRef(tempo);
-  speed.current = tempo;
+  const runtime = useRef({ playing, enabled, tempo, sample });
+  const wake = useRef<() => void>(undefined);
+  useEffect(() => {
+    runtime.current = { playing, enabled, tempo, sample };
+    wake.current?.();
+  }, [playing, enabled, tempo, sample]);
   useEffect(() => {
     const element = canvas.current;
     const context = element?.getContext('2d');
     if (!element || !context) return;
     const surface = element, ctx = context;
-    const bins = new Uint8Array(128);
-    const heights = Float32Array.from(idle);
-    const period = 1000 / (effect === 'spectrum' ? SPECTRUM_FPS : FIREWORKS_FPS);
-    let raf = 0, last = 0, previous = 0, t = 0;
-    let palettes: CanvasGradient[] = [];
+    const bins = new Uint8Array(512), beat = initialBeat();
+    const onsets: number[] = [];
+    const terrain = effect === 'spectrum' ? spectrumFrames() : undefined;
+    const bars = effect === 'columns' ? spectrumColumns() : undefined;
+    let barColors: ReturnType<typeof columnPalettes> | undefined;
+    const reactive = !!(bars || terrain) || effect === 'pulse';
+    const coast = CANVAS_EFFECTS[effect];
+    let period = 1000 / sceneFps(false, reactive);
+    let raf = 0, last = 0, previous = 0, t = 0, velocity = 0, elapsed = 0;
+    let pulseHalo: CanvasGradient | undefined;
+    function paint(dt: number) {
+      const { width: w, height: h } = surface;
+      if (!w || !h) return;
+      ctx.clearRect(0, 0, w, h);
+      elapsed += dt;
+      const { playing: active, enabled: canMove, sample: read } = runtime.current;
+      const live = dt > 0 && active && canMove && read?.(bins);
+      const onset = live ? sampleBeat(beat, bins, elapsed) : false;
+      if (!live && dt) beat.kick *= Math.exp(-dt * 8);
+      if (terrain) {
+        if (!canMove || (!active && !velocity)) flattenSpectrum(terrain);
+        else if (dt > 0) advanceSpectrum(terrain, dt, live ? { time: t, bins, kick: beat.kick }
+          : active && !read ? { time: t, kick: 0 } : undefined);
+        drawSpectrum(ctx, w, h, terrain);
+      } else if (bars && barColors) {
+        if (!canMove || (!active && !velocity)) bars.fill(0);
+        else if (dt > 0) advanceColumns(bars, dt, live ? { time: t, bins } : active && !read ? { time: t } : undefined);
+        drawColumns(ctx, w, h, bars, barColors);
+      } else if (effect === 'pulse' && pulseHalo) {
+        if (onset || (!live && runtime.current.playing && Math.floor(t / 1.25) !== Math.floor((t - dt * velocity / runtime.current.tempo) / 1.25))) onsets.push(t);
+        while (onsets.length && (t - onsets[0] >= 1.22 || !velocity)) onsets.shift();
+        drawPulse(ctx, w, h, onsets, t, velocity ? beat.kick : 0, velocity, pulseHalo);
+      } else if (effect === 'fireworks') fireworks(ctx, w, h, t + 1.05);
+      else if (effect === 'rain') drawRain(ctx, w, h, t);
+      else if (effect === 'meteors') drawMeteors(ctx, w, h, t, velocity);
+      else if (effect === 'solar') drawSolar(ctx, w, h, t, beat.kick);
+      else if (effect === 'aurora') drawAurora(ctx, w, h, t, beat.kick);
+      else if (effect === 'stars') drawStars(ctx, w, h, t, beat.kick);
+      else if (effect === 'orbits') drawOrbits(ctx, w, h, t);
+      else if (effect === 'prism') drawPrism(ctx, w, h, t, beat.kick);
+      else if (effect === 'notes') drawNotes(ctx, w, h, t, beat.kick);
+    }
+    function schedule() {
+      const { playing: active, enabled: canMove } = runtime.current;
+      if (!canMove || (!active && (!coast || !velocity))) {
+        if (raf) cancelAnimationFrame(raf);
+        if (velocity) { velocity = 0; paint(0); }
+        raf = last = previous = 0;
+      } else if (!raf) {
+        previous = 0;
+        raf = requestAnimationFrame(draw);
+      }
+    }
+    function draw(now: number) {
+      raf = 0;
+      const delta = now - last;
+      if (delta >= period - 1) {
+        const dt = previous ? Math.min((now - previous) / 1000, .105) : 0;
+        previous = now;
+        last = delta >= period ? now - delta % period : now;
+        const { playing: active, enabled: canMove, tempo: factor } = runtime.current;
+        const next = canMove ? coast ? coastSpeed(velocity, active, dt) : Number(active) : 0;
+        t += (next + velocity) * .5 * dt / factor;
+        velocity = next;
+        paint(dt);
+      }
+      if (runtime.current.enabled && (runtime.current.playing || (coast && velocity))) raf = requestAnimationFrame(draw);
+      else previous = last = 0;
+    }
     const resize = new ResizeObserver(([{ contentRect }]) => {
+      period = 1000 / sceneFps(compactScene(contentRect.width, contentRect.height), reactive);
       const { width, height } = sceneBufferSize(contentRect.width, contentRect.height, devicePixelRatio);
-      if (width === surface.width && height === surface.height && palettes.length) return;
+      if (width === surface.width && height === surface.height) return;
       surface.width = width;
       surface.height = height;
-      palettes = ['#bda5fd', '#78d8eb', '#f5b2a7'].map((color) => {
-        const gradient = ctx.createLinearGradient(0, height, 0, height * .09);
-        gradient.addColorStop(0, `${color}04`);
-        gradient.addColorStop(.69, `${color}b0`);
-        gradient.addColorStop(1, '#fff5eb');
-        return gradient;
-      });
-    });
-    resize.observe(surface);
-    function draw(now: number) {
-      t += (previous ? Math.min(now - previous, 100) : 0) / (1000 * speed.current);
-      previous = now;
-      const elapsed = now - last;
-      if (elapsed >= period - 1 && surface.width && surface.height && palettes.length) {
-        last = elapsed >= period ? now - elapsed % period : now;
-        const { width, height } = surface;
-        ctx.clearRect(0, 0, width, height);
-        if (effect === 'fireworks') fireworks(ctx, width, height, t + 1.05);
-        else {
-          const live = sample?.(bins);
-          const slot = width * .89 / idle.length;
-          const base = height * .94;
-          for (let i = 0; i < idle.length; i++) {
-            let target = idle[i] * (.74 + .19 * Math.sin(t * (2.35 + i * .11) + i * .88));
-            if (live) {
-              let energy = 0;
-              for (let bin = bands[i]; bin < bands[i + 1]; bin++) energy = Math.max(energy, bins[bin]);
-              target = .06 + .82 * (energy / 255) ** 1.22;
-            }
-            heights[i] += (target - heights[i]) * (target > heights[i] ? .56 : .29);
-            const x = width * .055 + i * slot, bar = heights[i] * base;
-            ctx.fillStyle = palettes[i % palettes.length];
-            ctx.fillRect(x, base - bar, slot * .68, bar);
-            ctx.fillStyle = '#f8efffd9';
-            ctx.fillRect(x, base - bar, slot * .68, Math.max(1, height * .004));
-          }
-        }
+      if (bars && width && height) barColors = columnPalettes(ctx, height);
+      if (effect === 'pulse' && width && height) {
+        pulseHalo = ctx.createRadialGradient(width * .65, height * .49, 0, width * .65, height * .49, .45 * Math.min(width, height));
+        pulseHalo.addColorStop(0, '#f1c9face'); pulseHalo.addColorStop(.28, '#b883e371'); pulseHalo.addColorStop(1, '#853ae500');
       }
-      raf = requestAnimationFrame(draw);
-    }
-    raf = requestAnimationFrame(draw);
-    return () => { resize.disconnect(); cancelAnimationFrame(raf); };
-  }, [effect, sample]);
+      paint(0);
+    });
+    surface.width = surface.height = 0;
+    resize.observe(surface);
+    wake.current = schedule;
+    schedule();
+    return () => { resize.disconnect(); cancelAnimationFrame(raf); wake.current = undefined; };
+  }, [effect]);
   return <canvas className="scene-canvas" ref={canvas} aria-hidden="true" />;
 }

@@ -1,0 +1,90 @@
+import type { FloatStatus } from '../shared/float-output';
+import type { DesktopBridge } from '../shared/media';
+import url from './float.worklet.js?url';
+
+// Chromium's silent sink keeps its decoding and DSP running but releases the system endpoint.
+// It is not a hardware mode by itself: report success only after WASAPI opened the exact format.
+type SwitchableContext = AudioContext & { setSinkId?(value: string | { type: 'none' }): Promise<void> };
+export class FloatSink {
+  private revision = 0;
+  private chain = Promise.resolve();
+  private module?: Promise<void>;
+  private node?: AudioWorkletNode;
+  private silent = false;
+  private stopListening: () => void;
+  private closed = false;
+  private deviceChanged = () => {
+    if (this.silent && !this.node && !this.closed) void this.set(false);
+  };
+  constructor(private context: SwitchableContext, private master: GainNode, private bridge: DesktopBridge['floatOutput'], private status: (status: FloatStatus) => void) {
+    this.stopListening = bridge.onLost(() => { void this.set(false, 'failed'); });
+    navigator.mediaDevices?.addEventListener('devicechange', this.deviceChanged);
+  }
+  private async restoreSystem(): Promise<'system' | 'no-device' | 'failed'> {
+    if (this.node) {
+      try { this.master.disconnect(this.node); } catch { /* Audio graph already closed or never connected. */ }
+      this.node.disconnect();
+      this.node.port.close();
+      this.node = undefined;
+    }
+    await this.bridge.stop().catch(() => {});
+    if (this.silent && this.context.state !== 'closed') {
+      try { await this.context.setSinkId?.(''); }
+      catch (error) { return error instanceof DOMException && error.name === 'NotFoundError' ? 'no-device' : 'failed'; }
+      this.silent = false;
+    }
+    return 'system';
+  }
+  set(wanted: boolean, stopped: 'system' | 'failed' = 'system') {
+    if (this.closed && wanted) return this.chain;
+    const id = ++this.revision;
+    const current = () => this.revision === id;
+    const status = (value: FloatStatus) => { if (current() && !this.closed) this.status(value); };
+    this.chain = this.chain.then(async () => {
+      if (!current()) return;
+      try {
+        if (!wanted) {
+          const result = await this.restoreSystem();
+          status(result === 'system' ? stopped : result);
+          return;
+        }
+        if (this.node) return;
+        if (!this.context.setSinkId || !this.context.audioWorklet) { status('missing'); return; }
+        if (!await this.bridge.available() || !current()) { status('missing'); return; }
+        this.module ??= this.context.audioWorklet.addModule(url).catch((error) => { this.module = undefined; throw error; });
+        await this.module;
+        if (!current()) return;
+        status('starting');
+        await this.context.setSinkId({ type: 'none' });
+        this.silent = true;
+        if (!current()) { await this.restoreSystem(); return; }
+        const result = await this.bridge.start(this.context.sampleRate);
+        if (result !== 'running' || !current()) {
+          const fallback = await this.restoreSystem();
+          status(fallback === 'system' ? result : fallback);
+          return;
+        }
+        const node = new AudioWorkletNode(this.context, 'luma-float-tap', {
+          numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit', outputChannelCount: [2],
+        });
+        this.node = node;
+        node.port.onmessage = ({ data }) => {
+          if (this.node === node && data instanceof ArrayBuffer) { this.bridge.write(data); node.port.postMessage(1); }
+        };
+        node.onprocessorerror = () => { if (this.node === node) void this.set(false, 'failed'); };
+        this.master.connect(node).connect(this.context.destination);
+        status('running');
+      } catch {
+        const fallback = await this.restoreSystem().catch(() => 'failed' as const);
+        status(fallback === 'no-device' ? fallback : 'failed');
+      }
+    });
+    return this.chain;
+  }
+  close() {
+    this.closed = true;
+    this.stopListening();
+    navigator.mediaDevices?.removeEventListener('devicechange', this.deviceChanged);
+    return this.set(false);
+  }
+}

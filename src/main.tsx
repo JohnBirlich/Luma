@@ -5,6 +5,8 @@ import App from './App';
 import { startDiagnostics } from './data/diagnostics';
 import './styles.css';
 import './scenes.css';
+import './components/home.css';
+import './macos.css';
 
 startDiagnostics();
 createRoot(document.getElementById('root')!).render(<App />);

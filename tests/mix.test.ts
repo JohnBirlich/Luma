@@ -43,3 +43,16 @@ test('home picks use listening history and real tracks, skip demos, favor simila
   assert.deepEqual(homeRecommendations([demo], [demo], new Set(), false), { recent: [], related: [], discoveries: [] });
   assert.deepEqual(homeRecommendations([...local, online], [], new Set([known.id]), true).discoveries, [related, discovery]);
 });
+
+test('disliked tracks are excluded from recommendations and all mix seeds without modifying history', () => {
+  const [known, related, discovery] = local;
+  const history = [known, related];
+  const disliked = new Set([known.id, related.id]);
+  const favorites = new Set([related.id]);
+  const picks = homeRecommendations(local, history, favorites, true, disliked);
+  assert.deepEqual(picks, { recent: [], related: [], discoveries: [discovery] });
+  const settings = { type: 'library' as const, favorites, recent: history, offline: true, seed: 42, disliked };
+  assert.deepEqual(makeMix(local, settings), [discovery]);
+  assert.deepEqual(makeMix(local, { ...settings, type: 'recent' }), []);
+  assert.deepEqual(history, [known, related]);
+});

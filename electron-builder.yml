@@ -1,5 +1,6 @@
-appId: app.lumaplayer.desktop
+appId: LumaPlayer.exe
 productName: Luma Player
+executableName: LumaPlayer
 asar: true
 electronLanguages:
   - ru
@@ -14,12 +15,24 @@ files:
   - LICENSE
 asarUnpack:
   - dist/demo/*.mp3
+extraResources:
+  - from: dist-native
+    to: audio
+    filter: [LumaFloat.exe]
+extraFiles:
+  - from: dist-native
+    to: .
+    filter: [LumaVerify.exe]
 win:
   icon: Assets/icon.ico
   target:
     - nsis
     - portable
 nsis:
+  include: Assets/installer.nsh
+  # Preserve the upgrade/uninstall identity of app.lumaplayer.desktop.
+  guid: 05d31eca-e044-513b-8c10-678775f8445d
+  shortcutName: Luma Player
   installerLanguages:
     - ru_RU
   language: '1049'

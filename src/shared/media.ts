@@ -1,13 +1,21 @@
+import type { InstallResult, UpdateReport } from './release-updates.js';
+import type { DiscordStatus, DiscordTrack } from './discord-presence.js';
+import type { SharedPlaylist } from './playlist-share.js';
+import type { FloatStart } from './float-output.js';
+import type { UiLanguage } from './ui-language.js';
 import { formatCount } from './customization.js';
+import { readIsrc } from './recording-match.js';
 import type { AudioFormat } from './audio-quality.js';
 import type { AppInfo } from './app-info.js';
 import type { DiagnosticsBridge } from './diagnostics.js';
 import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
 import { cleanTrackText, musicSearchKey, readTrackTag } from './russian.js';
-import type { Mp3ExportResult, OnlineCreditData, OnlineTrack } from './online.js';
+import type { DesktopCatalogSource, Mp3ExportResult, OnlineCreditData, OnlineTrack } from './online.js';
+import type { StreamCacheInfo } from './stream-cache.js';
+import type { LastFmStatus, ListeningEvent } from './lastfm.js';
 import type { Lyrics, LyricsQuery } from './lyrics.js';
-import type { VkCoverImage, VkPlaylist, VkViewBounds, VkWebsiteState } from './vk.js';
 import type { Fingerprint, MetadataCandidate } from './recognition.js';
+import type { MusicBrainzQuery } from './musicbrainz.js';
 
 export const AUDIO_MIMES = {
   mp3: 'audio/mpeg',
@@ -31,8 +39,11 @@ export interface Track {
   album: string;
   duration: number;
   genres?: string[];
+  isrc?: string;
   format?: AudioFormat;
   embeddedLyrics?: string;
+  /** Local basename, used for matching an imported playlist. Never a readable path. */
+  fileName?: string;
   audioUrl: string;
   artworkUrl?: string;
   backdropUrl?: string;
@@ -51,31 +62,69 @@ export interface ImportResult {
 }
 
 export interface DesktopBridge {
+  setUiLanguage(value: UiLanguage): Promise<void>;
   getAppInfo(): Promise<AppInfo>;
   openReleases(): Promise<void>;
+  updates: { check(): Promise<UpdateReport>; install(version: string): Promise<InstallResult> };
+  searchCommunity(id: number, query: string, source: DesktopCatalogSource): Promise<OnlineTrack[]>;
+  cancelCatalogSearch(id: number): Promise<void>;
   openOnlineLink(url: string): Promise<void>;
   getTracks(): Promise<Track[]>;
   getAudioFormat(id: string): Promise<AudioFormat | null>;
   chooseTracks(): Promise<ImportResult>;
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
-  openVkLink(url: string): Promise<void>;
-  vk: {
-    open(url: string, bounds: VkViewBounds): Promise<void>;
-    layout(bounds: VkViewBounds): Promise<void>;
-    command(action: 'back' | 'reload' | 'return'): Promise<void>;
-    close(): Promise<void>;
-    reset(): Promise<boolean>;
-    onState(callback: (state: VkWebsiteState) => void): () => void;
+  saveSharedPlaylist(share: SharedPlaylist): Promise<boolean>;
+  discord: {
+    status(): Promise<DiscordStatus>;
+    update(clientId: string, track: DiscordTrack | null): void;
+    onChange(callback: (status: DiscordStatus) => void): () => void;
   };
-  getVkCover(playlist: VkPlaylist): Promise<VkCoverImage | null>;
-  lyrics: { lookup(query: LyricsQuery): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null> };
+  musicLinks: {
+    take(): Promise<string | undefined>;
+    onAvailable(callback: () => void): () => void;
+    openBrowser(url: string): Promise<void>;
+    copy(url: string): Promise<void>;
+  };
+  clearLegacyVkSession(): Promise<void>;
+  lyrics: {
+    lookup(query: LyricsQuery, refresh?: boolean): Promise<Lyrics | null>;
+    lookupPlain(query: Pick<LyricsQuery, 'title' | 'artist'>): Promise<Lyrics | null>;
+    local(id: string): Promise<Lyrics | null>;
+    openEdition(url: string): Promise<void>;
+  };
   exportMp3(track: OnlineTrack, saveLyrics: boolean): Promise<Mp3ExportResult>;
   recognition: {
     search(query: string, locale: string): Promise<MetadataCandidate[]>;
+    searchAudioDb(query: { title: string; artist: string }): Promise<MetadataCandidate[]>;
+    searchMusicBrainz(query: MusicBrainzQuery): Promise<MetadataCandidate[]>;
     hasAcoustid(): Promise<boolean>;
     identify(fingerprint: Fingerprint): Promise<MetadataCandidate[]>;
     openSource(url: string): Promise<void>;
+  };
+  floatOutput: {
+    available(): Promise<boolean>;
+    start(rate: number): Promise<FloatStart>;
+    stop(): Promise<void>;
+    write(stereo: ArrayBuffer): void;
+    onLost(callback: () => void): () => void;
+  };
+  streamCache: {
+    url(track: Track): Promise<string | null>;
+    save(track: OnlineTrack): Promise<boolean>;
+    info(): Promise<StreamCacheInfo>;
+    clear(): Promise<StreamCacheInfo>;
+  };
+  lastfm: {
+    status(): Promise<LastFmStatus>;
+    configure(key: string, secret: string): Promise<LastFmStatus>;
+    forgetCredentials(): Promise<LastFmStatus>;
+    begin(): Promise<LastFmStatus>;
+    finish(): Promise<LastFmStatus>;
+    enable(enabled: boolean): Promise<LastFmStatus>;
+    disconnect(): Promise<LastFmStatus>;
+    record(event: ListeningEvent): void;
+    onChange(callback: (status: LastFmStatus) => void): () => void;
   };
   diagnostics: DiagnosticsBridge;
   window: {
@@ -85,6 +134,8 @@ export interface DesktopBridge {
     isMaximized(): Promise<boolean>;
     setFullscreen(fullscreen: boolean): Promise<void>;
     setWidget(enabled: boolean): Promise<boolean>;
+    onWidgetShortcut(callback: () => void): () => void;
+    onResume(callback: () => void): () => void;
     onFullscreen(callback: (fullscreen: boolean) => void): () => void;
     onMaximized(callback: (maximized: boolean) => void): () => void;
   };
@@ -116,12 +167,13 @@ export function readGenres(input: unknown, clean: (value: string) => string = cl
 
 export function trackInfo(
   filename: string,
-  tags?: { title?: string; artist?: string; albumartist?: string; album?: string; genre?: string[] },
+  tags?: { title?: string; artist?: string; albumartist?: string; album?: string; genre?: string[]; isrc?: string[] | string },
   duration?: number,
-): Pick<Track, 'title' | 'artist' | 'album' | 'duration' | 'genres'> {
+): Pick<Track, 'title' | 'artist' | 'album' | 'duration' | 'genres' | 'isrc'> {
   const genres = readGenres(tags?.genre, readTrackTag);
+  const isrc = readIsrc(tags?.isrc);
   return {
-    ...(genres && { genres }),
+    ...(genres && { genres }), ...(isrc && { isrc }),
     title: readTrackTag(tags?.title) || cleanTrackText(filename.replace(/\.[^.]+$/, '')) || cleanTrackText(filename) || 'Без названия',
     artist: readTrackTag(tags?.artist) || readTrackTag(tags?.albumartist) || 'Неизвестный исполнитель',
     album: readTrackTag(tags?.album) || 'Без альбома',
@@ -152,7 +204,8 @@ export function formatTime(seconds: number): string {
     : `${minutes}:${remainder}`;
 }
 
-export function trackCount(count: number, full = true): string {
+export function trackCount(count: number, full = true, language: UiLanguage = 'ru'): string {
+  if (language === 'en') return `${formatCount(count, full, language)} ${count === 1 ? 'track' : 'tracks'}`;
   const lastTwo = count % 100;
   const last = count % 10;
   const many = (!full && count >= 1000) || (lastTwo >= 11 && lastTwo <= 14);

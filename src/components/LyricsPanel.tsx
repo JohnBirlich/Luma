@@ -1,60 +1,135 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlignLeft, Music2 } from 'lucide-react';
-import { createLyricsService } from '../shared/lyrics-service';
-import { ONLINE_SOURCES } from '../shared/online';
-import { activeLyricLine, readLocalLyrics, readLyricsQuery, timedLines } from '../shared/lyrics';
-import type { Lyrics } from '../shared/lyrics';
-import type { Track } from '../shared/media';
+import { memo, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { CSSProperties, RefObject } from 'react';
+import { createPortal } from 'react-dom';
+import { AlignLeft, FileUp, Music2 } from 'lucide-react';
+import { useText } from '../i18n/context';
+import type { TrackLyrics } from '../player/useTrackLyrics';
+import type { KaraokeStyle } from '../shared/karaoke-style';
+import { activeLyricLine, activeLyricWord } from '../shared/lyrics';
+import type { LyricLine, LyricSource } from '../shared/lyrics';
+import { KaraokeTextSettings } from './KaraokeTextSettings';
 
-const webLyrics = createLyricsService();
+const SOURCE_NAMES = { auto: 'Авто', local: 'Из файла', attached: 'Открытый файл', lrclib: 'LRCLIB', lyricsovh: 'Lyrics.ovh', edition: 'Викитека' } as const;
 
-export function LyricsPanel({ track, elapsed, playing, auto, connected }: {
-  track: Track; elapsed: number; playing: boolean; auto: boolean; connected: boolean;
+function lyricPosition(lines: LyricLine[], seconds: number) {
+  const index = activeLyricLine(lines, seconds);
+  return { index, word: activeLyricWord(lines[index], seconds) };
+}
+
+const TimedLyricRow = memo(function TimedLyricRow({ item, past, activeWord, currentRef, seek }: {
+  item: LyricLine; past: boolean; activeWord: number; currentRef?: RefObject<HTMLParagraphElement | null>; seek?(seconds: number): void;
 }) {
-  const query = useMemo(() => readLyricsQuery({ ...track, album: track.online && track.album === ONLINE_SOURCES[track.online.source] ? undefined : track.album }), [track]);
-  const [attempt, setAttempt] = useState(0);
-  const [started, setStarted] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [remote, setRemote] = useState<Lyrics | null | undefined>();
-  const [local, setLocal] = useState<Lyrics | null | undefined>(() => track.online || !window.luma ? readLocalLyrics(track.embeddedLyrics) : undefined);
-  const result = local ?? remote;
-  const [error, setError] = useState(false);
+  const t = useText();
+  const content = item.words ? item.words.map(({ text }, index) => (
+    <span className="lyric-word" key={index} data-current-word={index === activeWord || undefined}>{text}</span>
+  )) : item.text || '\u00a0';
+  return <p ref={currentRef} aria-current={currentRef ? 'true' : undefined} data-past={past || undefined}>
+    {item.text && seek ? <button className="lyric-line-seek" type="button" title={t('Перейти к строке')} onClick={() => seek(item.time)}>{content}</button> : content}
+  </p>;
+});
+
+const TimedText = memo(function TimedText({ lines, elapsed, clock, follow, layout, seek }: {
+  lines: LyricLine[]; elapsed: number; clock?: () => number; follow: boolean; layout?: KaraokeStyle; seek?(seconds: number): void;
+}) {
+  const t = useText();
   const scroll = useRef<HTMLDivElement>(null);
   const line = useRef<HTMLParagraphElement>(null);
-  const lines = useMemo(() => result?.synced ? timedLines(result.synced) : [], [result]);
-  const current = activeLyricLine(lines, elapsed);
-  useEffect(() => {
-    if (!window.luma || track.online) return;
-    let stale = false;
-    void window.luma.lyrics.local(track.id).then((lyrics) => { if (!stale) setLocal(lyrics); }, () => { if (!stale) setLocal(null); });
-    return () => { stale = true; };
-  }, [track.id, track.online]);
-  useEffect(() => { if (auto && playing) setStarted(true); }, [auto, playing]);
-  useEffect(() => {
-    if (local !== null || !query || !connected || (!attempt && !(auto && started))) return;
-    const request = new AbortController();
-    setBusy(true); setError(false); setRemote(undefined);
-    const lookup = window.luma?.lyrics.lookup(query) ?? webLyrics(query, request.signal);
-    void lookup.then((lyrics) => { if (!request.signal.aborted) setRemote(lyrics); }, () => {
-      if (!request.signal.aborted) setError(true);
-    }).finally(() => { if (!request.signal.aborted) setBusy(false); });
-    return () => { request.abort(); setBusy(false); };
-  }, [attempt, auto, started, query, connected, local]);
-  useEffect(() => {
+  const [live, setLive] = useState(() => lyricPosition(lines, elapsed));
+  useLayoutEffect(() => {
+    if (!clock) return;
+    const update = () => {
+      if (document.hidden) return;
+      const next = lyricPosition(lines, clock());
+      setLive((prior) => prior.index === next.index && prior.word === next.word ? prior : next);
+    };
+    update();
+    // Follow the actual deck clock without rerendering the whole player between lines or words.
+    const timer = window.setInterval(update, 64);
+    return () => window.clearInterval(timer);
+  }, [lines, clock]);
+  const { index: current, word } = clock ? live : lyricPosition(lines, elapsed);
+  useLayoutEffect(() => {
     const pane = scroll.current, item = line.current;
-    if (pane && item) pane.scrollTop = item.offsetTop - pane.clientHeight / 2 + item.offsetHeight / 2;
-  }, [current, result]);
-  if (!query && !local) return null;
-  return <section className="lyrics-card" aria-labelledby="lyrics-title">
-    <header><AlignLeft size={19} /><div><h2 id="lyrics-title">Текст песни</h2><p>{local ? 'Из файла' : 'LRCLIB'}{lines.length ? ' · синхронизированный текст' : ''}</p></div>
-      {!result && <button className="button outline-button" type="button" disabled={busy || !connected || local === undefined} onClick={() => setAttempt((value) => value + 1)}>{busy && connected ? 'Ищем…' : error || result === null ? 'Повторить' : 'Найти текст'}</button>}</header>
-    {!connected && !result && <p className="lyrics-status" role="status">Для поиска нужна сеть.</p>}
-    {connected && error && <p className="lyrics-status" role="status">LRCLIB не ответил. Попробуйте позже.</p>}
-    {result === null && <p className="lyrics-status" role="status">Для этой записи текст не найден.</p>}
-    {result?.instrumental && <p className="lyrics-status"><Music2 size={14} /> Инструментальная запись</p>}
-    {lines.length ? <div className="lyrics-scroll" ref={scroll} tabIndex={0} role="region" aria-label="Строки песни">
-      {lines.map(({ time, text }, index) => <p key={`${time}-${index}`} ref={index === current ? line : undefined} aria-current={index === current ? 'true' : undefined}>{text || '\u00a0'}</p>)}
-    </div> : result?.plain && <div className="lyrics-scroll lyrics-plain" tabIndex={0} role="region" aria-label="Текст песни">{result.plain}</div>}
-    {!busy && result === undefined && !error && connected && <p className="lyrics-status">Поиск отправит название, исполнителя и, если известны, альбом и длительность.</p>}
+    if (!pane || !follow) return;
+    const center = () => {
+      // Do not fight a user's text selection; the next line can resume following.
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && pane.contains(selection.anchorNode)) return;
+      pane.scrollTop = item ? pane.scrollTop + item.getBoundingClientRect().top - pane.getBoundingClientRect().top
+        + item.offsetHeight / 2 - pane.clientHeight * .38 : 0;
+    };
+    center();
+    window.addEventListener('resize', center);
+    return () => window.removeEventListener('resize', center);
+  }, [current, lines, follow, layout]);
+  return <div className="lyrics-scroll lyrics-timed" ref={scroll} tabIndex={0} role="region" aria-label={t('Строки песни')}>
+    {lines.map((item, index) => <TimedLyricRow key={`${item.time}-${index}`} item={item} past={index < current}
+      currentRef={index === current ? line : undefined} activeWord={index === current ? word : -1} seek={seek} />)}
+  </div>;
+});
+
+export function LyricsPanel({ state, elapsed, clock, seek, karaoke, demo = false }: {
+  state: TrackLyrics; elapsed: number; clock?: () => number; seek?(seconds: number): void; karaoke?: { style: KaraokeStyle; change(style: KaraokeStyle): void; tools: HTMLElement | null }; demo?: boolean;
+}) {
+  const t = useText();
+  const id = useId();
+  const input = useRef<HTMLInputElement>(null);
+  const [follow, setFollow] = useState(true);
+  const { lyrics, lines, source, edition, choice, busy, error, missing, offline, canSearch, loadingLocal } = state;
+  const showEdition = source === 'edition' && edition;
+  const sources: LyricSource[] = ['auto'];
+  if (state.local) sources.push('local');
+  if (state.attached) sources.push('attached');
+  if (state.canSearchOnline || choice === 'lrclib') sources.push('lrclib');
+  if (state.canSearchPlain || choice === 'lyricsovh') sources.push('lyricsovh');
+  if (edition) sources.push('edition');
+  const nameOf = (item: LyricSource) => t(item === 'attached' && state.attachment === 'text' ? 'Свой текст' : SOURCE_NAMES[item]);
+  const description = showEdition ? t('Викитека · {0}', showEdition.author) : source ? nameOf(source) : t('Источник не выбран');
+  const timing = lyrics?.wordLines ? t('Синхронизация по словам') : lines.length ? t('С метками времени') : lyrics?.plain ? t('Без синхронизации') : '';
+  const versions = <label className="lyrics-version">{t(karaoke ? 'Версия текста' : 'Источник текста')}<select value={choice} onChange={(event) => state.select(event.currentTarget.value as LyricSource)}>
+    {sources.map((item) => <option key={item} value={item}>{item === 'lyricsovh' ? t('Lyrics.ovh (только текст)') : nameOf(item)}</option>)}
+  </select></label>;
+  const search = canSearch && (!lyrics || error) && <button className="button outline-button" type="button" disabled={busy || offline} onClick={state.search}>
+    {busy ? t('Ищем…') : error || missing ? t('Повторить') : t('Найти текст')}
+  </button>;
+  const editionLink = showEdition && <a className="text-button" href={showEdition.page} target="_blank" rel="noopener noreferrer" onClick={(event) => {
+    if (window.luma) { event.preventDefault(); void window.luma.lyrics.openEdition(showEdition.page).catch(() => {}); }
+  }}>{t('Источник издания')}</a>;
+  const openFile = () => input.current?.click();
+  return <section className={`lyrics-card${karaoke ? ' karaoke-lyrics' : ''}`} aria-labelledby={id} aria-busy={busy || loadingLocal}
+    style={karaoke && { '--karaoke-size': `${karaoke.style.size}px`, '--karaoke-weight': karaoke.style.weight,
+      '--karaoke-spacing': `${karaoke.style.spacing}px`, '--karaoke-align': karaoke.style.align } as CSSProperties}>
+    <header><AlignLeft size={19} aria-hidden="true" /><div><h2 id={id}>{t('Текст песни')}</h2><p>{description}{timing && ` · ${timing}`}</p></div>
+      {!karaoke && search}
+    </header>
+    {karaoke?.tools && createPortal(<KaraokeTextSettings style={karaoke.style} change={karaoke.change} state={state} versions={versions}
+      hasTiming={lines.length > 0} follow={follow} setFollow={setFollow} openFile={openFile} removeAttachment={state.clear} />, karaoke.tools)}
+    {lines.length > 0 ? <TimedText lines={lines} elapsed={elapsed} clock={clock} follow={follow} layout={karaoke?.style} seek={seek} />
+      : lyrics?.plain ? <div className="lyrics-scroll lyrics-plain" tabIndex={0} role="region" aria-label={t('Текст песни')}>{lyrics.plain}</div>
+      : <div className="lyrics-empty">
+        <Music2 size={24} aria-hidden="true" />
+        <p role="status">{lyrics?.instrumental ? t('Инструментальная запись') : busy || loadingLocal ? t('Загружаем текст…') : error ? t(choice === 'lyricsovh' ? 'Lyrics.ovh не ответил. Попробуйте позже.' : 'LRCLIB не ответил. Попробуйте позже.')
+          : missing ? t(choice === 'lyricsovh' ? 'Lyrics.ovh не нашёл текст для этого названия и исполнителя.' : 'Для этой записи текст не найден.') : offline && canSearch ? t('Для поиска нужна сеть.') : demo ? t('У этого демотрека нет текста.') : t('Текст песни пока не найден.')}</p>
+        {!lyrics?.instrumental && !busy && !loadingLocal && <small>{t(canSearch && !error && !missing && !offline
+          ? choice === 'lyricsovh' ? 'Lyrics.ovh получает только название и исполнителя.' : 'Поиск отправит название, исполнителя и, если известны, альбом и длительность.'
+          : 'Чтобы добавить синхронизацию, откройте .lrc для этой записи.')}</small>}
+        {karaoke && !lyrics?.instrumental && <div className="karaoke-empty-actions">{search}<button className="button outline-button" type="button" onClick={openFile}>
+          <FileUp size={15} />{t('Открыть .lrc / .txt')}
+        </button></div>}
+      </div>}
+    <input hidden type="file" ref={input} accept=".lrc,.txt" onChange={(event) => {
+      const file = event.currentTarget.files?.[0];
+      if (file) void state.attach(file);
+      event.currentTarget.value = '';
+    }} />
+    {!karaoke && <div className="lyrics-sources">
+      {versions}
+      <button className="text-button" type="button" onClick={openFile}><FileUp size={14} />{t('Открыть .lrc / .txt')}</button>
+      {state.attached && <button className="text-button" type="button" onClick={state.clear}>{t(state.attachment === 'text' ? 'Убрать свой текст' : 'Убрать текст из файла')}</button>}
+      {editionLink}
+    </div>}
+    {source === 'lyricsovh' && lyrics?.plain && <p className="lyrics-status">{t('Текст по названию и исполнителю. Версия записи не подтверждена.')}</p>}
+    {state.attachError && <p className="lyrics-status" role="status">{t('Нужен непустой файл UTF-8 .lrc или .txt до 128 КБ.')}</p>}
+    {showEdition && <p className="lyrics-status">{t('Общественное достояние. Текст издания может отличаться от исполнения.')} {karaoke && editionLink}</p>}
   </section>;
 }
