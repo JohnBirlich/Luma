@@ -147,13 +147,14 @@ export function readSearchedLyrics(input: unknown, query: LyricsQuery): Lyrics |
   return candidate ? readMatchedLyrics(candidate) : null;
 }
 
-export type LyricSource = 'auto' | 'attached' | 'local' | 'lrclib' | 'edition';
+export type LyricSource = 'auto' | 'attached' | 'local' | 'lrclib' | 'lyricsovh' | 'edition';
 
 /** An edition is prose, not a recording match. Explicit sources never silently substitute another text. */
 export function selectLyrics(choice: LyricSource, inputs: {
-  attached?: Lyrics; local?: Lyrics | null; lrclib?: Lyrics | null; edition?: { plain: string };
+  attached?: Lyrics; local?: Lyrics | null; lrclib?: Lyrics | null; lyricsovh?: Lyrics | null; edition?: { plain: string };
 }): { source?: Exclude<LyricSource, 'auto'>; lyrics?: Lyrics } {
-  const { attached, local, lrclib, edition } = inputs;
+  const { attached, local, lrclib, lyricsovh, edition } = inputs;
+  if (choice === 'lyricsovh') return { source: 'lyricsovh', lyrics: readLocalLyrics(lyricsovh?.plain) ?? undefined };
   if (choice === 'edition') return { source: 'edition', lyrics: edition && { plain: edition.plain, instrumental: false } };
   if (choice === 'attached' || (choice === 'auto' && attached)) return { source: 'attached', lyrics: attached };
   if (choice === 'local' || (choice === 'auto' && local)) return { source: 'local', lyrics: local ?? undefined };

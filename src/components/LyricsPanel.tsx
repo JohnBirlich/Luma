@@ -9,7 +9,7 @@ import { activeLyricLine, activeLyricWord } from '../shared/lyrics';
 import type { LyricLine, LyricSource } from '../shared/lyrics';
 import { KaraokeTextSettings } from './KaraokeTextSettings';
 
-const SOURCE_NAMES = { auto: 'Авто', local: 'Из файла', attached: 'Открытый файл', lrclib: 'LRCLIB', edition: 'Викитека' } as const;
+const SOURCE_NAMES = { auto: 'Авто', local: 'Из файла', attached: 'Открытый файл', lrclib: 'LRCLIB', lyricsovh: 'Lyrics.ovh', edition: 'Викитека' } as const;
 
 function lyricPosition(lines: LyricLine[], seconds: number) {
   const index = activeLyricLine(lines, seconds);
@@ -80,13 +80,14 @@ export function LyricsPanel({ state, elapsed, clock, seek, karaoke, demo = false
   const sources: LyricSource[] = ['auto'];
   if (state.local) sources.push('local');
   if (state.attached) sources.push('attached');
-  if (state.canSearchOnline) sources.push('lrclib');
+  if (state.canSearchOnline || choice === 'lrclib') sources.push('lrclib');
+  if (state.canSearchPlain || choice === 'lyricsovh') sources.push('lyricsovh');
   if (edition) sources.push('edition');
   const nameOf = (item: LyricSource) => t(item === 'attached' && state.attachment === 'text' ? 'Свой текст' : SOURCE_NAMES[item]);
   const description = showEdition ? t('Викитека · {0}', showEdition.author) : source ? nameOf(source) : t('Источник не выбран');
   const timing = lyrics?.wordLines ? t('Синхронизация по словам') : lines.length ? t('С метками времени') : lyrics?.plain ? t('Без синхронизации') : '';
   const versions = <label className="lyrics-version">{t(karaoke ? 'Версия текста' : 'Источник текста')}<select value={choice} onChange={(event) => state.select(event.currentTarget.value as LyricSource)}>
-    {sources.map((item) => <option key={item} value={item}>{nameOf(item)}</option>)}
+    {sources.map((item) => <option key={item} value={item}>{item === 'lyricsovh' ? t('Lyrics.ovh (только текст)') : nameOf(item)}</option>)}
   </select></label>;
   const search = canSearch && (!lyrics || error) && <button className="button outline-button" type="button" disabled={busy || offline} onClick={state.search}>
     {busy ? t('Ищем…') : error || missing ? t('Повторить') : t('Найти текст')}
@@ -107,10 +108,10 @@ export function LyricsPanel({ state, elapsed, clock, seek, karaoke, demo = false
       : lyrics?.plain ? <div className="lyrics-scroll lyrics-plain" tabIndex={0} role="region" aria-label={t('Текст песни')}>{lyrics.plain}</div>
       : <div className="lyrics-empty">
         <Music2 size={24} aria-hidden="true" />
-        <p role="status">{lyrics?.instrumental ? t('Инструментальная запись') : busy || loadingLocal ? t('Загружаем текст…') : error ? t('LRCLIB не ответил. Попробуйте позже.')
-          : missing ? t('Для этой записи текст не найден.') : offline && canSearch ? t('Для поиска нужна сеть.') : demo ? t('У этого демотрека нет текста.') : t('Текст песни пока не найден.')}</p>
+        <p role="status">{lyrics?.instrumental ? t('Инструментальная запись') : busy || loadingLocal ? t('Загружаем текст…') : error ? t(choice === 'lyricsovh' ? 'Lyrics.ovh не ответил. Попробуйте позже.' : 'LRCLIB не ответил. Попробуйте позже.')
+          : missing ? t(choice === 'lyricsovh' ? 'Lyrics.ovh не нашёл текст для этого названия и исполнителя.' : 'Для этой записи текст не найден.') : offline && canSearch ? t('Для поиска нужна сеть.') : demo ? t('У этого демотрека нет текста.') : t('Текст песни пока не найден.')}</p>
         {!lyrics?.instrumental && !busy && !loadingLocal && <small>{t(canSearch && !error && !missing && !offline
-          ? 'Поиск отправит название, исполнителя и, если известны, альбом и длительность.'
+          ? choice === 'lyricsovh' ? 'Lyrics.ovh получает только название и исполнителя.' : 'Поиск отправит название, исполнителя и, если известны, альбом и длительность.'
           : 'Чтобы добавить синхронизацию, откройте .lrc для этой записи.')}</small>}
         {karaoke && !lyrics?.instrumental && <div className="karaoke-empty-actions">{search}<button className="button outline-button" type="button" onClick={openFile}>
           <FileUp size={15} />{t('Открыть .lrc / .txt')}
@@ -127,6 +128,7 @@ export function LyricsPanel({ state, elapsed, clock, seek, karaoke, demo = false
       {state.attached && <button className="text-button" type="button" onClick={state.clear}>{t(state.attachment === 'text' ? 'Убрать свой текст' : 'Убрать текст из файла')}</button>}
       {editionLink}
     </div>}
+    {source === 'lyricsovh' && lyrics?.plain && <p className="lyrics-status">{t('Текст по названию и исполнителю. Версия записи не подтверждена.')}</p>}
     {state.attachError && <p className="lyrics-status" role="status">{t('Нужен непустой файл UTF-8 .lrc или .txt до 128 КБ.')}</p>}
     {showEdition && <p className="lyrics-status">{t('Общественное достояние. Текст издания может отличаться от исполнения.')} {karaoke && editionLink}</p>}
   </section>;

@@ -12,6 +12,7 @@ import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/s
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
 import { alternateRecording, recording } from './fixtures/musicbrainz.mjs';
+import { audioDbTrack, phishSong, phishTrack, untimedLyrics } from './fixtures/free-sources.mjs';
 import { wordLyrics } from './fixtures/word-lyrics.mjs';
 import { installerName, LATEST_RELEASE_API, RELEASE_REPO } from '../dist-electron/src/shared/release-updates.js';
 import { musicLaunchUrl, readMusicLink } from '../dist-electron/src/shared/music-links.js';
@@ -432,34 +433,40 @@ async function smoke() {
     assert.equal(updateLookups, 1, 'settings and an explicit check reuse the same release request');
   } finally { session.defaultSession.protocol.unhandle('https'); }
   await go('Меню');
-  const vkEntry = '.sidebar-shortcuts [aria-label="Эквалайзер из боковой панели"] + a[aria-label="Зайти в VK"]';
+  const radioSidebar = '.sidebar-shortcuts [aria-label="Эквалайзер из боковой панели"] + button.radio-sidebar';
+  const radioTitle = '.title-bar button.radio-title';
   const externalOpens = [];
   const systemBrowser = shell.openExternal;
-  shell.openExternal = async (url) => {
-    externalOpens.push(url);
-    if (externalOpens.length === 1) throw new Error('fixture browser unavailable');
-  };
+  shell.openExternal = async (url) => { externalOpens.push(url); };
+  const originalBounds = window.getBounds();
+  const originalUrl = window.webContents.getURL();
   try {
-    await waitFor('VK sign-in in sidebar shortcuts directly below equalizer', () => run(`!!document.querySelector('${vkEntry}')`));
-    assert.deepEqual(await run(`(() => {
-      const link = document.querySelector('${vkEntry}');
-      return [link.href, link.target, link.rel, link.closest('section').getAttribute('aria-label')];
-    })()`), [VK_MUSIC_URL, '_blank', 'noopener noreferrer', 'Быстрый доступ']);
-    assert.equal(await run(`!!document.querySelector('.menu-page [aria-label="Зайти в VK"]')`), false);
-    assert.match(await run(`document.querySelector('${vkEntry}').getAttribute('aria-description')`), /в браузере, без синхронизации/);
-    assert.deepEqual(externalOpens, [], 'rendering the row does not make a VK request');
-    const appUrl = window.webContents.getURL();
-    await click(vkEntry);
-    await waitFor('browser launch failure is explained next to the link', () => run(`document.querySelector('${vkEntry} + [role="status"]').textContent.includes('Не удалось открыть VK')`));
-    await click(vkEntry);
-    await waitFor('VK handed to the browser on retry', () => externalOpens.length === 2);
-    assert.deepEqual(externalOpens, [VK_MUSIC_URL, VK_MUSIC_URL]);
-    assert.equal(window.webContents.getURL(), appUrl);
+    assert.equal(await run(`document.querySelector('${radioSidebar}')?.getAttribute('aria-label')`), 'Радио');
+    assert.equal(await run(`!!document.querySelector('[aria-label="Зайти в VK"], [aria-label="Музыка онлайн"]') || 'openVkMusic' in window.luma`), false);
+    await go('Главная');
+    await waitFor('home search field', () => run(`!!document.querySelector('.hub-search input')`));
+    await fill('.hub-search input', 'local search to clear');
+    await click(radioSidebar);
+    await waitFor('sidebar Radio replaces the previous search and opens the built-in station list', () => run(`!!document.querySelector('.radio-shelves')
+      && document.querySelector('.hub-search input')?.value === ''
+      && document.querySelector('[data-home-tab="radio"]')?.getAttribute('aria-current') === 'page'
+      && document.querySelector('${radioSidebar}')?.getAttribute('aria-current') === 'page'`));
+    assert.equal(await run(`document.querySelector('nav[aria-label="Разделы плеера"] [aria-label="Главная"]')?.getAttribute('aria-current') ?? null`), null);
+    window.setSize(640, originalBounds.height);
+    await waitFor('narrow native window shows the Radio button in the title bar', () => run(`innerWidth <= 700
+      && getComputedStyle(document.querySelector('${radioTitle}')).display !== 'none'`));
+    await go('Меню');
+    await click(radioTitle);
+    await waitFor('title-bar Radio selects the same station list', () => run(`!!document.querySelector('.radio-shelves')
+      && document.querySelector('${radioTitle}')?.getAttribute('aria-current') === 'page'`));
+    assert.deepEqual(externalOpens, [], 'navigating to Radio does not open the browser');
+    assert.equal(window.webContents.getURL(), originalUrl);
     assert.equal(BrowserWindow.getAllWindows().length, 1);
-    assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused`), true);
-    assert.ok(await run(`window.luma.diagnostics.snapshot().then(({entries}) => ['vk.browserFailed', 'vk.browserOpened'].every(name => entries.some(({event}) => event === name)))`));
-  } finally { shell.openExternal = systemBrowser; }
-  console.log('::notice title=VK handoff::The link opens only the official site in the system browser on request; failure and retry pass without a new Electron window.');
+    assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused
+      && !document.querySelector('audio[data-online-audio]').getAttribute('src')`), true, 'Radio does not start or replace the paused track');
+  } finally { window.setBounds(originalBounds); shell.openExternal = systemBrowser; }
+  await go('Меню');
+  console.log('::notice title=Radio shortcut::Sidebar and narrow title bar open the station list without autoplay or external handoff.');
   assert.equal(await run(`!!document.querySelector('.menu-page [aria-label="Импортировать треки"]')`), false);
   assert.ok(await run(`!!document.querySelector('.title-bar [aria-label="Добавить музыку"]')`), 'file import remains in the main toolbar');
   assert.equal(await run(`document.querySelector('.title-caption') === null && getComputedStyle(document.querySelector('.sidebar')).userSelect === 'none'`), true);
@@ -584,6 +591,9 @@ async function smoke() {
   const recordPlay = `${recordTile} .station-play`;
   const titleQueries = [];
   const musicBrainzQueries = [];
+  const audioDbQueries = [];
+  const plainLyricQueries = [];
+  const phishCalls = [];
   const fingerprints = [];
   const legacyVk = session.fromPartition(LEGACY_VK_SESSION);
   const legacyBookmarks = { selected: '-31_4', playlists: [{ ownerId: -31, playlistId: 4, name: 'Старая закладка', hash: 'legacy-1' }] };
@@ -627,6 +637,21 @@ async function smoke() {
     if (url.origin === 'https://musicbrainz.org' && url.pathname === '/ws/2/recording') {
       musicBrainzQueries.push({ query: url.searchParams.get('query'), agent: request.headers.get('User-Agent') });
       return Response.json({ recordings: [recording, alternateRecording] });
+    }
+    if (url.origin === 'https://www.theaudiodb.com' && url.pathname === '/api/v1/json/123/searchtrack.php') {
+      audioDbQueries.push(Object.fromEntries(url.searchParams));
+      return Response.json({ track: [audioDbTrack] });
+    }
+    if (url.href === `${audioDbTrack.strTrackThumb}/small`) return new Response(cover, { headers: { 'Content-Type': 'image/webp' } });
+    if (url.origin === 'https://api.lyrics.ovh') {
+      plainLyricQueries.push(url.pathname.split('/').map(decodeURIComponent));
+      return Response.json({ lyrics: untimedLyrics, synced: lrcText });
+    }
+    if (url.origin === 'https://phish.in' && url.pathname.startsWith('/api/v2/')) {
+      phishCalls.push(url.pathname);
+      return Response.json(url.pathname.endsWith('/tracks')
+        ? { tracks: [phishTrack, { ...phishTrack, id: 30345, title: 'Partial', audio_status: 'partial' }] }
+        : { songs: url.pathname.endsWith('/search/Llama') ? [phishSong] : [] }, { headers: fixtureHeaders });
     }
     if (url.origin === 'https://api.acoustid.org' && url.pathname === '/v2/lookup') {
       assert.equal(request.method, 'POST');
@@ -674,7 +699,7 @@ async function smoke() {
     if (url.href === 'https://archive.org/metadata/SCL108') return Response.json(archiveRelease);
     if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
     const radioFixture = radioFixtureUrls.has(url.href);
-    if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, storageStream].includes(url.href)) {
+    if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, storageStream, phishTrack.mp3_url].includes(url.href)) {
       // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
       (radioFixture ? radioCalls : streamCalls).push(url.href);
       const range = request.headers.get('Range');
@@ -734,6 +759,27 @@ async function smoke() {
     assert.equal((await readFile(broken)).equals(taggedMp3(sample, {
       title: "Ty Zdes'", picture: { mime: 'image/png', data: Buffer.from('89504e470d0a1a0a', 'hex') },
     })), true, 'the music file and embedded data remain unchanged');
+    await click('.track-details-button');
+    await waitFor('reopened details editor', () => run(`!!document.querySelector('.track-details-dialog[open]')`));
+    await click('.metadata-lookup summary');
+    await select('.metadata-source select', 'theaudiodb');
+    await fill('.metadata-search-controls input', 'Yellow');
+    assert.equal(await run(`document.querySelector('.metadata-search-controls button').disabled`), true);
+    await fill('.track-details-fields label:nth-child(2) input', 'Coldplay');
+    assert.deepEqual(audioDbQueries, [], 'selecting a catalog and typing does not contact TheAudioDB');
+    await click('.metadata-search-controls button');
+    await waitFor('TheAudioDB shows a credited metadata candidate and a decoded thumbnail', () => run(`(() => {
+      const row = document.querySelector('.metadata-results li');
+      const image = row?.querySelector('.metadata-artwork img');
+      return row?.textContent.includes('TheAudioDB') && row.textContent.includes('Parachutes')
+        && image?.src === ${JSON.stringify(`${audioDbTrack.strTrackThumb}/small`)} && image.naturalWidth > 0;
+    })()`));
+    assert.deepEqual(audioDbQueries, [{ s: 'Coldplay', t: 'Yellow' }]);
+    assert.equal(await run(`document.querySelector('.metadata-results li a').href`), 'https://www.theaudiodb.com/track/32724184');
+    await click('.metadata-result-actions button:nth-child(2)');
+    assert.deepEqual(await run(`[...document.querySelectorAll('.track-details-fields input')].slice(0, 3).map((field) => field.value)`), ['Yellow', 'Coldplay', 'Parachutes']);
+    await click('.track-details-dialog .dialog-header button');
+    assert.equal(await run(`document.querySelector('.hero h2').textContent`), 'Мадам Брошкина', 'cancelling leaves values and cover unchanged');
     await click('.hero-action');
     await waitFor('local track is playing', () => run(`!document.querySelector('audio').paused && document.querySelector('audio').currentTime > 4.15`));
     await run(`(() => { const audio = document.querySelector('audio'); audio.currentTime = audio.duration - 4.8; })()`);
@@ -1208,6 +1254,17 @@ async function smoke() {
     await click('.karaoke-lyrics .lyrics-scroll p:nth-child(2) .lyric-line-seek');
     await waitFor('the ordinary timed line still seeks the same online deck', () => run(`document.querySelector('.karaoke-lyrics [aria-current="true"]')?.textContent === 'Второй'
       && !document.querySelector('.karaoke-lyrics [data-current-word]') && Math.abs(document.querySelector('${onlineAudio}').currentTime - 1.25) < .05`));
+    assert.deepEqual(plainLyricQueries, [], 'Lyrics.ovh was not contacted automatically');
+    await click('.karaoke-settings-toggle');
+    await select('.karaoke-settings .lyrics-version select', 'lyricsovh');
+    await waitFor('Lyrics.ovh only displays plain text, even when the response has timecodes', () => run(`document.querySelector('.karaoke-lyrics .lyrics-plain')?.textContent === ${JSON.stringify(untimedLyrics)}
+      && document.querySelector('.karaoke-lyrics header').textContent.includes('Без синхронизации')
+      && !document.querySelector('.karaoke-lyrics .lyrics-timed, .karaoke-settings .karaoke-follow')`));
+    assert.deepEqual(plainLyricQueries, [['', 'v1', 'Исполнитель', synced.title]]);
+    await select('.karaoke-settings .lyrics-version select', 'lrclib');
+    await waitFor('the original timed version is still available without another search', () => run(`!!document.querySelector('.karaoke-lyrics .lyrics-timed .lyric-line-seek')`));
+    assert.equal(lyricSearchQueries.length, 1);
+    await click('.karaoke-settings-toggle');
     await click('.immersive-collapse');
     await waitFor('leave the online karaoke stage', async () => !window.isFullScreen() && await run(`!document.querySelector('.immersive-player')`));
 
@@ -1228,7 +1285,7 @@ async function smoke() {
     assert.equal(await run(`document.querySelector('.app-shell').dataset.layout === 'glass' && !document.querySelector('.sidebar')
       && !!document.querySelector('.glass-navigation') && getComputedStyle(document.querySelector('.app-shell')).colorScheme === 'light'`), true);
     assert.equal(await run(`document.querySelectorAll('.glass-dock-icon').length`), 7);
-    assert.equal(await run(`document.querySelector('.glass-navigation .vk-dock')?.getAttribute('href')`), VK_MUSIC_URL);
+    assert.equal(await run(`document.querySelector('.glass-navigation button.radio-dock')?.getAttribute('aria-label')`), 'Радио');
     await click('.glass-sound');
     await waitFor('the glass Dock opens the same EQ', () => run(`!!document.querySelector('.equalizer-dialog[open] .eq-response-path')`));
     await click('.equalizer-content .dialog-footer .primary-button');
@@ -1265,6 +1322,10 @@ async function smoke() {
     await click('.title-settings');
     await waitFor('settings index reopens after using the back arrow', () => run(`!!document.querySelector('.settings-reset') && !!document.querySelector('.settings-page [aria-label="Appearance"]')`));
     await closeSettings();
+    await click('.glass-navigation button.radio-dock[aria-label="Radio"]');
+    await waitFor('glass Dock Radio opens the native station list in English', () => run(`!!document.querySelector('.radio-shelves')
+      && document.querySelector('.glass-navigation button.radio-dock')?.getAttribute('aria-current') === 'page'
+      && document.querySelector('${onlineAudio}').paused`));
     const reloaded = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
     window.webContents.reload();
     await reloaded;
@@ -1312,6 +1373,26 @@ async function smoke() {
     await run(`delete navigator.onLine; window.dispatchEvent(new Event('online'));`);
     console.log('::notice title=Cache and localization::Applied all five themes; MacOS, EN and parametric EQ survived reload. Verified offline MP3, byte ranges, seek and cache cleanup.');
 
+    assert.deepEqual(phishCalls, [], 'other search terms did not contact the concert archive');
+    await go('Поиск');
+    await waitFor('catalog search field', () => run(`!!document.querySelector('main input[type="search"]')`));
+    await fill('main input[type="search"]', 'Phish Llama');
+    const phishResult = '.online-results > li[data-source="phishin"]';
+    await waitFor('Phish.in reports only the complete concert recording with its actual date', () => run(`document.querySelectorAll('${phishResult}').length === 1
+      && document.querySelector('${phishResult}').textContent.includes('2015-08-14')`));
+    assert.deepEqual(phishCalls, ['/api/v2/search/Llama', '/api/v2/tracks']);
+    assert.equal(await run(`document.querySelectorAll('${phishResult} .online-result-actions button').length`), 2, 'only play and queue');
+    await click(`${phishResult} .online-result-actions button:first-child`);
+    await waitFor('concert archive plays on the normal audio deck', () => run(`(() => {
+      const audio = document.querySelector('${onlineAudio}');
+      return audio.currentSrc === ${JSON.stringify(phishTrack.mp3_url)} && audio.currentTime > .12 && !audio.paused;
+    })()`));
+    assert.equal(await run(`document.querySelector('.player-bar .karaoke-toggle')?.disabled`), true);
+    assert.doesNotMatch(JSON.stringify(await preferences()), /phish-30344|phish\.in/, 'no archive playback references in the saved profile');
+    await click('.player-bar .play-button');
+    console.log('::notice title=Phish.in::Complete concert result decodes on the streaming deck and stays session-only.');
+
+
   } finally {
     session.defaultSession.protocol.unhandle('https');
     await legacyVk.clearStorageData();
@@ -1319,6 +1400,19 @@ async function smoke() {
   console.log('::notice title=Catalogs and playlists::Merged Home, parallel catalog search without site shortcuts, playlist import, radio tuning in both directions, and preservation of legacy profile data verified.');
   console.log('Desktop smoke: monitor fullscreen; both widget layouts restore bounds and reuse audio; Apple/MusicBrainz/WASM; metered MP3; LRCLIB word sync and lyrics export; isolated legacy reset.');
   if (liveServices) {
+    const audioDb = await run(`window.luma.recognition.searchAudioDb({ title: 'Yellow', artist: 'Coldplay' })`);
+    assert.ok(audioDb.some(({ title, album, artworkUrl }) => title === 'Yellow' && album === 'Parachutes' && artworkUrl));
+    const image = await run(`(async () => {
+      const art = new Image();
+      art.src = ${JSON.stringify(audioDb[0].artworkUrl)};
+      await Promise.race([art.decode(), new Promise((_, reject) => setTimeout(() => reject(new Error('Artwork timed out')), 10_000))]);
+      return art.naturalWidth;
+    })()`);
+    assert.ok(image > 0, 'live TheAudioDB thumbnail decodes');
+    console.log('::notice title=Live TheAudioDB::The free v1 API returned the recording metadata and a readable thumbnail.');
+    const plainOvh = await run(`window.luma.lyrics.lookupPlain({ title: 'Yellow', artist: 'Coldplay' })`);
+    assert.ok(plainOvh?.plain?.length > 40 && !plainOvh.synced && !plainOvh.wordLines, 'live Lyrics.ovh plain text');
+    console.log('::notice title=Live Lyrics.ovh::The API returned plain lyrics, not a timed recording match.');
     const suggestions = await run(`window.luma.recognition.search('Madam Broshkina', 'ru-RU')`);
     assert.ok(suggestions.some(({ title }) => title === 'Мадам Брошкина'), 'live Apple Music transliteration lookup');
     console.log('::notice title=Live Apple Music::Cyrillic recording candidates returned for a transliterated title.');
@@ -1390,7 +1484,7 @@ async function smoke() {
     const { webRequest } = session.defaultSession;
     const network = [];
     // Network diagnostics are limited to statuses, MIME, and origins.
-    const upstream = { urls: ['https://api.audius.co/*', 'https://creatornode.audius.co/*', `${new URL(storageStream).origin}/*`] };
+    const upstream = { urls: ['https://phish.in/*', 'https://api.audius.co/*', 'https://creatornode.audius.co/*', `${new URL(storageStream).origin}/*`] };
     const label = (url) => {
       const { hostname, pathname } = new URL(url);
       return `${hostname}${pathname.endsWith('/stream') ? '(resolve)' : pathname.includes('/cidstream/') || hostname.endsWith('.r2.cloudflarestorage.com') ? '(media)' : '(query)'}`;
@@ -1406,6 +1500,7 @@ async function smoke() {
       if (url && event.violatedDirective === 'media-src') (window.catalogPolicyBlocks ??= []).push(url.origin);
     });`);
     const sources = [
+      ['phishin', 'phishin', 'Phish Llama', 'phish.in'],
       ['audius', 'audius', 'jazz', 'app'],
       ['jamendo', 'openverse', 'jazz', 'storage.jamendo.com'], ['wikimedia_audio', 'openverse', 'Bach chaconne', 'upload.wikimedia.org'],
       ['netlabels', 'netlabels', 'Anatoly Nikulin', 'archive.org'], ['netlabels', 'southern_city', 'Газ', 'archive.org'],
@@ -1431,8 +1526,10 @@ async function smoke() {
             return outcome;
           });
           const failures = [];
-          for (const { aria, title } of options.slice(0, 3)) {
-            await click(`.online-result-actions button[aria-label=${JSON.stringify(aria)}]`);
+          for (const [index, { aria, title }] of options.slice(0, 3).entries()) {
+            if (target === 'phishin') {
+              await run(`document.querySelectorAll('.online-results > li[data-source="phishin"] .online-result-actions button:first-child')[${index}].click()`);
+            } else await click(`.online-result-actions button[aria-label=${JSON.stringify(aria)}]`);
             const decoded = await waitFor(`${target}/${source} audio attempt`, () => run(`(() => {
               const media = document.querySelector('${onlineAudio}');
               const url = URL.parse(media.currentSrc || media.getAttribute('src') || '');
@@ -1444,6 +1541,13 @@ async function smoke() {
               return null;
             })()`)).catch(() => ({ code: 'timeout' }));
             if (decoded.format === (source === 'jamendo' ? 'mp31' : 'original')) {
+              if (target === 'phishin') {
+                await run(`document.querySelector('${onlineAudio}').currentTime = 75;`);
+                await waitFor('Phish.in seeks beyond preview length', () => run(`(() => {
+                  const media = document.querySelector('${onlineAudio}');
+                  return media.duration > 80 && !media.seeking && media.currentTime > 75.15 && !media.paused;
+                })()`));
+              }
               if (target === 'audius') {
                 const seek = await run(`(async () => {
                   const url = document.querySelector('${onlineAudio}').currentSrc;

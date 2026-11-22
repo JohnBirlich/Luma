@@ -15,11 +15,13 @@ import { createCommunitySearch } from '../src/shared/community-catalogs.js';
 import { isOnlineExternalUrl } from '../src/shared/online.js';
 import { isLyricEditionPage } from '../src/shared/lyric-editions.js';
 import { createLyricsService } from '../src/shared/lyrics-service.js';
+import { createLyricsOvhLookup } from '../src/shared/lyrics-ovh.js';
 import { DesktopLastFm, lastFmConfig } from './lastfm.js';
 import { createOnlineExporter } from './online-export.js';
 import { MAIN_MINIMUM, widgetController } from './desktop-widget.js';
 import { createMetadataService, validAcoustidClient } from '../src/shared/metadata-service.js';
 import { createMusicBrainzLookup } from '../src/shared/musicbrainz.js';
+import { createAudioDbLookup } from '../src/shared/theaudiodb.js';
 import { isMetadataPage } from '../src/shared/recognition.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
@@ -27,7 +29,7 @@ import { isStationPage } from '../src/shared/radio.js';
 import { musicLaunchUrl, musicLinkArgument, readMusicLink } from '../src/shared/music-links.js';
 import { LATEST_RELEASE_API, readSignerSha256 } from '../src/shared/release-updates.js';
 import { readSharedPlaylist } from '../src/shared/playlist-share.js';
-import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
+import { LEGACY_VK_SESSION } from '../src/shared/vk.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { DesktopDiscord } from './discord-presence.js';
 import { DesktopFloatOutput } from './float-output.js';
@@ -123,17 +125,6 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     try { appWindow(event); } catch { return; }
     void lastfm.record(data);
   });
-  ipcMain.handle('vk:open-music', async (event) => {
-    appWindow(event);
-    // The browser owns any sign-in. No URL, session or credentials cross this bridge.
-    try {
-      await shell.openExternal(VK_MUSIC_URL);
-      logs.main('vk.browserOpened');
-    } catch {
-      logs.main('vk.browserFailed');
-      throw new Error('Could not open VK Music in the browser');
-    }
-  });
   ipcMain.handle('music-link:take', (event) => {
     appWindow(event);
     const url = pendingMusicLink;
@@ -183,6 +174,11 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     appWindow(event);
     return lookupLyrics(query, AbortSignal.timeout(9000), refresh === true);
   });
+  const lookupPlainLyrics = createLyricsOvhLookup(net.fetch);
+  ipcMain.handle('lyrics:lookup-plain', (event, query: unknown) => {
+    appWindow(event);
+    return lookupPlainLyrics(query, AbortSignal.timeout(9000));
+  });
   ipcMain.handle('cache:url', (event, track: unknown) => { appWindow(event); return cache.url(track); });
   ipcMain.handle('cache:save', (event, track: unknown) => { appWindow(event); return cache.save(track); });
   ipcMain.handle('cache:info', (event) => { appWindow(event); return cache.info(); });
@@ -198,6 +194,11 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('metadata:musicbrainz', (event, query: unknown) => {
     appWindow(event);
     return searchMusicBrainz(query, AbortSignal.timeout(9000));
+  });
+  const searchAudioDb = createAudioDbLookup(net.fetch);
+  ipcMain.handle('metadata:theaudiodb', (event, query: unknown) => {
+    appWindow(event);
+    return searchAudioDb(query, AbortSignal.timeout(9000));
   });
   ipcMain.handle('metadata:has-acoustid', (event) => { appWindow(event); return validAcoustidClient(acoustidClient); });
   ipcMain.handle('metadata:identify', (event, fingerprint: unknown) => {

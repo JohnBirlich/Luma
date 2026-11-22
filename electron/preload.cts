@@ -18,7 +18,6 @@ const bridge: DesktopBridge = {
   chooseTracks: () => ipcRenderer.invoke('library:choose'),
   importDroppedFiles: (files) => ipcRenderer.invoke('library:drop', files.map((file) => webUtils.getPathForFile(file)).filter(Boolean)),
   removeTrack: (id) => ipcRenderer.invoke('library:remove', id),
-  openVkMusic: () => ipcRenderer.invoke('vk:open-music'),
   saveSharedPlaylist: (share) => ipcRenderer.invoke('playlist:share', share),
   discord: {
     status: () => ipcRenderer.invoke('discord:status'),
@@ -40,10 +39,16 @@ const bridge: DesktopBridge = {
     copy: (url) => ipcRenderer.invoke('music-link:copy', url),
   },
   clearLegacyVkSession: () => ipcRenderer.invoke('vk:reset'),
-  lyrics: { lookup: (query, refresh) => ipcRenderer.invoke('lyrics:lookup', query, refresh), local: (id) => ipcRenderer.invoke('lyrics:local', id), openEdition: (url) => ipcRenderer.invoke('lyrics:edition', url) },
+  lyrics: {
+    lookup: (query, refresh) => ipcRenderer.invoke('lyrics:lookup', query, refresh),
+    lookupPlain: (query) => ipcRenderer.invoke('lyrics:lookup-plain', query),
+    local: (id) => ipcRenderer.invoke('lyrics:local', id),
+    openEdition: (url) => ipcRenderer.invoke('lyrics:edition', url),
+  },
   exportMp3: (track, withLyrics) => ipcRenderer.invoke('online:export-mp3', track, withLyrics),
   recognition: {
     search: (query, locale) => ipcRenderer.invoke('metadata:search', query, locale),
+    searchAudioDb: (query) => ipcRenderer.invoke('metadata:theaudiodb', query),
     searchMusicBrainz: (query) => ipcRenderer.invoke('metadata:musicbrainz', query),
     hasAcoustid: () => ipcRenderer.invoke('metadata:has-acoustid'),
     identify: (fingerprint) => ipcRenderer.invoke('metadata:identify', fingerprint),

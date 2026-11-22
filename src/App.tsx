@@ -707,6 +707,11 @@ export default function App() {
     setHomeTab(tab); setHomeQuery('');
     scrollArea.current?.scrollTo({ top: 0 });
   }, []);
+  const openRadio = useCallback(() => {
+    navigate('player');
+    selectHomeTab('radio');
+  }, [navigate, selectHomeTab]);
+  const radioActive = page === 'player' && homeTab === 'radio' && !homeQuery.trim();
   const openEqualizer = () => setShowEqualizer(true);
   const toggleQueue = () => setQueueOpen((open) => !open);
   const changeAppearance = (appearance: Appearance) => setPreferences((data) => ({ ...data, appearance }));
@@ -764,8 +769,8 @@ export default function App() {
         setDropActive(false);
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
-      {!widget && <TitleBar glass={glass} openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready} />}
-      {!widget && (glass ? <GlassNavigation page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled} /> : <Sidebar page={page} navigate={navigate} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
+      {!widget && <TitleBar glass={glass} openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready} openRadio={openRadio} radioActive={radioActive} />}
+      {!widget && (glass ? <GlassNavigation page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled} openRadio={openRadio} radioActive={radioActive} /> : <Sidebar page={page} navigate={navigate} openRadio={openRadio} radioActive={radioActive} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
         fullNumbers={appearance.fullNumbers} queued={queued.length} queueOpen={queueOpen} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
         compact={appearance.compactSidebar} toggleCompact={toggleCompact} />)}
       <main className="main-pane" ref={scrollArea}>

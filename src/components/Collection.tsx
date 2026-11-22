@@ -118,7 +118,7 @@ export function NowPlayingCard(props: NowPlayingProps) {
             onClick={() => props.shareTrack(track)} aria-label={t('Поделиться треком')} title={t('Поделиться треком')}><Share2 size={16} /></button>}
           {track && !track.demo && !track.online && <button type="button" className="button outline-button track-details-button" onClick={() => props.editDetails(track.id)}
             aria-label={t("Редактировать данные трека")} title={t("Редактировать данные трека")} aria-haspopup="dialog"><Pencil size={16} /></button>}
-          {track && track.online?.source !== 'broadcast' && track.online?.source !== 'audius' && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
+          {track && track.online?.source !== 'broadcast' && !sessionCatalogId(track.id) && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
             aria-label={t("Редактировать обложку")} title={t("Редактировать обложку")} aria-haspopup="dialog"><ImagePlus size={17} /></button>}
 
         </div>

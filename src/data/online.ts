@@ -1,6 +1,9 @@
 import { catalogRetryDelay, decodeOpenverse, onlineSearchUrl, OPENVERSE_API, openverseLinkId } from '../shared/online';
 import type { DesktopCatalogSource, OnlineFilter, OnlineTrack } from '../shared/online';
 
+import { createPhishSearch } from '../shared/phishin';
+
+const findPhishTracks = createPhishSearch();
 const MAX_JSON = 512 * 1024;
 
 export class CatalogRateLimit extends Error {
@@ -55,6 +58,7 @@ async function communityTracks(query: string, source: DesktopCatalogSource, sign
 }
 
 export async function findOnlineTracks(query: string, source: OnlineFilter, signal: AbortSignal): Promise<OnlineTrack[]> {
+  if (source === 'phishin') return findPhishTracks(query, signal);
   if (source === 'southern_city' || source === 'netlabels' || source === 'audius') return communityTracks(query, source, signal);
   const data = await getJson(onlineSearchUrl(query, source), signal) as { results?: unknown[] } | null;
   if (!Array.isArray(data?.results)) throw new Error('Каталог вернул неожиданный ответ.');

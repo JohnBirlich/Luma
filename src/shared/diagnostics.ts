@@ -30,8 +30,6 @@ export const LOG_EVENTS = {
   'renderer.rejection': ['renderer', 'app', 'error', 'Необработанная ошибка фоновой операции'],
   'network.online': ['renderer', 'network', 'info', 'Устройство в сети'],
   'network.offline': ['renderer', 'network', 'warn', 'Устройство вне сети'],
-  'vk.browserOpened': ['main', 'network', 'info', 'Страница VK передана браузеру; вход проверяет VK'],
-  'vk.browserFailed': ['main', 'network', 'warn', 'Не удалось открыть браузер для VK'],
   'vk.websiteOpening': ['main', 'network', 'info', 'Открывается официальный сайт VK Музыки'],
   'vk.websiteOpened': ['main', 'network', 'info', 'Страница VK загружена; вход и доступ проверяет VK'],
   'vk.websiteFailed': ['main', 'network', 'warn', 'Не удалось загрузить страницу VK', 'code'],

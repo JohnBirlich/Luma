@@ -41,7 +41,7 @@ export function KaraokeTextSettings({ style, change, state, versions, follow, se
       </div>
       {hasTiming && <label className="karaoke-follow"><input type="checkbox" checked={follow} onChange={(event) => setFollow(event.currentTarget.checked)} />{t('Следить за строкой')}</label>}
       <div className="karaoke-sources">
-        {state.error && <small role="status">{t('LRCLIB не ответил. Попробуйте позже.')}</small>}
+        {state.error && <small role="status">{t(state.choice === 'lyricsovh' ? 'Lyrics.ovh не ответил. Попробуйте позже.' : 'LRCLIB не ответил. Попробуйте позже.')}</small>}
         {versions}
         {state.canSearchOnline && <button className="text-button" type="button" disabled={state.busy || state.offline} onClick={state.searchOnline}>
           <Search size={15} />{t(state.busy ? 'Ищем…' : 'Искать заново в LRCLIB')}

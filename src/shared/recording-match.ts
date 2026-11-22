@@ -29,6 +29,7 @@ function albumName(track: Track) {
 
 export function recordingEvidence(left: Track, right: Track): 'verified' | 'choice' | undefined {
   if (left.demo || right.demo || left.online?.source === 'broadcast' || right.online?.source === 'broadcast'
+    || left.online?.source === 'phishin' || right.online?.source === 'phishin'
     || !knownRecordingName(left) || !knownRecordingName(right) || recordingKey(left) !== recordingKey(right)
     || !Number.isFinite(left.duration) || !Number.isFinite(right.duration) || Math.min(left.duration, right.duration) < 10
     || Math.abs(left.duration - right.duration) > 2) return;

@@ -4,10 +4,13 @@ import { findLyricEdition } from '../shared/lyric-editions';
 import { MAX_LYRIC_FILE, readCustomLyrics, readLocalLyrics, readLyricsQuery, selectLyrics, timedLines } from '../shared/lyrics';
 import type { Lyrics, LyricSource } from '../shared/lyrics';
 import { createLyricsService } from '../shared/lyrics-service';
+import { createLyricsOvhLookup, readPlainLyricsQuery } from '../shared/lyrics-ovh';
 import type { Track } from '../shared/media';
 import { ONLINE_SOURCES, sessionCatalogId } from '../shared/online';
 
 const webLyrics = createLyricsService(fetch, false, webAppInfo.version);
+const webPlainLyrics = createLyricsOvhLookup();
+type LookupResult = { key: string; attempt: number; value: Lyrics | null; failed: boolean };
 interface Workspace {
   id?: string;
   token: symbol;
@@ -15,7 +18,9 @@ interface Workspace {
   started: boolean;
   attempt: number;
   local?: Lyrics | null;
-  remote?: { key: string; attempt: number; value: Lyrics | null; failed: boolean };
+  remote?: LookupResult;
+  plainAttempt?: number;
+  plainRemote?: LookupResult;
   attached?: Lyrics;
   attachment?: 'file' | 'text';
   attachError: boolean;
@@ -47,6 +52,14 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
   const query = useMemo(() => demo || sessionOnly || online?.source === 'broadcast' ? undefined : readLyricsQuery({ title, artist,
     album: online && album === ONLINE_SOURCES[online.source] ? undefined : album, duration: length }), [title, artist, album, length, online, demo, sessionOnly]);
   const key = query ? JSON.stringify(query) : '';
+  const plainQuery = useMemo(() => demo || sessionOnly || online?.source === 'broadcast' ? undefined : readPlainLyricsQuery({ title, artist }),
+    [title, artist, demo, sessionOnly, online?.source]);
+  const plainKey = plainQuery ? JSON.stringify(plainQuery) : '';
+  const plainAttempt = state.plainAttempt ?? 0;
+  const plainCached = state.plainRemote?.key === plainKey ? state.plainRemote : undefined;
+  const plainDone = plainCached?.attempt === plainAttempt;
+  const plainSelected = choice === 'lyricsovh' && Boolean(plainQuery);
+  const plainBusy = enabled && connected && plainSelected && !plainDone;
   const cached = remote && remote.key === key ? remote : undefined;
   const done = cached?.attempt === attempt;
   const showLocal = choice === 'auto' || choice === 'local';
@@ -76,6 +89,18 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
     return () => request.abort();
   }, [busy, query, key, attempt, update]);
 
+  useEffect(() => {
+    if (!plainBusy || !plainQuery) return;
+    const request = new AbortController();
+    const lookup = window.luma?.lyrics.lookupPlain?.(plainQuery) ?? webPlainLyrics(plainQuery, request.signal);
+    void lookup.then((value) => {
+      if (!request.signal.aborted) update(() => ({ plainRemote: { key: plainKey, attempt: plainAttempt, value, failed: false } }));
+    }, () => {
+      if (!request.signal.aborted) update(() => ({ plainRemote: { key: plainKey, attempt: plainAttempt, value: null, failed: true } }));
+    });
+    return () => request.abort();
+  }, [plainBusy, plainQuery, plainKey, plainAttempt, update]);
+
   const attachIntent = useRef(0);
   const attach = useCallback(async (file: File) => {
     const intent = ++attachIntent.current;
@@ -100,14 +125,18 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
     attachIntent.current++;
     update((previous) => ({ attached: undefined, attachment: undefined, attachError: false, choice: previous.choice === 'attached' ? 'auto' : previous.choice }));
   }, [update]);
-  const search = useCallback(() => update((previous) => ({ attempt: previous.attempt + 1 })), [update]);
+  const search = useCallback(() => update((previous) => previous.choice === 'lyricsovh'
+    ? { plainAttempt: (previous.plainAttempt ?? 0) + 1 } : { attempt: previous.attempt + 1 }), [update]);
   const searchOnline = useCallback(() => update((previous) => ({ choice: 'lrclib', attempt: previous.attempt + 1 })), [update]);
-  const result = useMemo(() => selectLyrics(choice, { local, attached, lrclib: cached?.value, edition }), [choice, local, attached, cached?.value, edition]);
+  const result = useMemo(() => selectLyrics(choice, { local, attached, lrclib: cached?.value, lyricsovh: plainCached?.value, edition }),
+    [choice, local, attached, cached?.value, plainCached?.value, edition]);
+  const visibleLookup = plainSelected && plainDone ? plainCached : allowed && done ? cached : undefined;
   const lines = useMemo(() => result.lyrics?.wordLines ?? (result.lyrics?.synced ? timedLines(result.lyrics.synced) : []), [result.lyrics]);
   return {
     ...result, choice, select, local: Boolean(local), attached: Boolean(attached), edition, clear, attach, attachText, attachment: state.attachment, search, searchOnline, lines,
-    attachError: state.attachError, busy, offline: !connected, loadingLocal: showLocal && canReadSidecar && local === undefined,
-    canSearch: allowed, canSearchOnline: Boolean(query), error: Boolean(allowed && done && cached?.failed), missing: Boolean(allowed && done && cached?.value === null && !cached.failed),
+    attachError: state.attachError, busy: busy || plainBusy, offline: !connected, loadingLocal: showLocal && canReadSidecar && local === undefined,
+    canSearch: allowed || plainSelected, canSearchOnline: Boolean(query), canSearchPlain: Boolean(plainQuery),
+    error: Boolean(visibleLookup?.failed), missing: visibleLookup?.value === null && !visibleLookup.failed,
   };
 }
 

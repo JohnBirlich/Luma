@@ -5,10 +5,13 @@ const OPENVERSE = { id: 'openverse', source: 'all', name: 'Jamendo + Wikimedia C
 const NETLABELS = { id: 'netlabels', source: 'netlabels', name: 'Internet Archive · Netlabels' } as const;
 const SOUTHERN_CITY = { id: 'southern_city', source: 'southern_city', name: 'Southern City’s Lab · Internet Archive' } as const;
 const AUDIUS = { id: 'audius', source: 'audius', name: 'Audius' } as const;
-export type CatalogTarget = typeof OPENVERSE | typeof NETLABELS | typeof SOUTHERN_CITY | typeof AUDIUS;
+const PHISH = { id: 'phishin', source: 'phishin', name: 'Phish.in · концерты' } as const;
+export type CatalogTarget = typeof OPENVERSE | typeof NETLABELS | typeof SOUTHERN_CITY | typeof AUDIUS | typeof PHISH;
 export type CatalogId = CatalogTarget['id'];
 export type CatalogResult = { id: CatalogId; tracks: OnlineTrack[] } | { id: CatalogId; error: unknown };
-export const catalogTargets = (desktop: boolean): readonly CatalogTarget[] => desktop ? [OPENVERSE, NETLABELS, AUDIUS, SOUTHERN_CITY] : [OPENVERSE];
+export const catalogTargets = (desktop: boolean, phish = false): readonly CatalogTarget[] => [
+  OPENVERSE, ...(desktop ? [NETLABELS, AUDIUS, SOUTHERN_CITY] : []), ...(phish ? [PHISH] : []),
+];
 export const CATALOG_DEBOUNCE_MS = 650;
 
 export function catalogQuery(text: string) {

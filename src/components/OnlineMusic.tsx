@@ -10,8 +10,9 @@ import { importOnlineTrack } from '../data/online';
 import { formatTime } from '../shared/media';
 import type { Track } from '../shared/media';
 import { bundleRecordings, recordingEvidence } from '../shared/recording-match';
-import { AUDIUS_LEGAL, commonsMp3Export, ONLINE_SOURCES } from '../shared/online';
+import { AUDIUS_LEGAL, commonsMp3Export, ONLINE_SOURCES, PHISH_LEGAL, sessionCatalogId } from '../shared/online';
 import type { OnlineCreditData, OnlineTrack } from '../shared/online';
+import { phishSongQuery } from '../shared/phishin';
 import { Artwork } from './Artwork';
 
 export type OnlineAction = 'play' | 'queue' | 'save' | 'export' | 'cache';
@@ -60,7 +61,7 @@ function OnlineResultActions({ track, saved, disabled, connected, choose }: {
   return <div className="online-result-actions">
     <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("Слушать онлайн: {0}", track.title)} title={t("Слушать онлайн")} onClick={() => choose(track, 'play')}><Play size={17} /></button>
     <button type="button" className="icon-button" disabled={disabled} aria-label={t("В очередь: {0}", track.title)} title={t("В очередь")} onClick={() => choose(track, 'queue')}><ListPlus size={17} /></button>
-    {track.online.source !== 'audius' && <button type="button" className="icon-button" disabled={disabled || saved.has(track.id)} aria-label={saved.has(track.id) ? t("Сохранено: {0}", track.title) : t("Сохранить: {0}", track.title)} title={t("Сохранить ссылку в медиатеке")} onClick={() => choose(track, 'save')}>
+    {!sessionCatalogId(track.id) && <button type="button" className="icon-button" disabled={disabled || saved.has(track.id)} aria-label={saved.has(track.id) ? t("Сохранено: {0}", track.title) : t("Сохранить: {0}", track.title)} title={t("Сохранить ссылку в медиатеке")} onClick={() => choose(track, 'save')}>
       {saved.has(track.id) ? <Check size={17} /> : <BookmarkPlus size={17} />}
     </button>}
     {window.luma?.streamCache && commonsMp3Export(track) && <button type="button" className="icon-button" disabled={disabled || !connected} aria-label={t("В кэш: {0}", track.title)} title={t("Сохранить временную копию для офлайн-прослушивания")} onClick={() => choose(track, 'cache')}><HardDriveDownload size={17} /></button>}
@@ -77,8 +78,9 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
   const foreground = useSyncExternalStore(subscribeVisibility, visibleDocument);
   const desktop = !!window.luma?.searchCommunity;
-  const targets = useMemo(() => catalogTargets(desktop), [desktop]);
   const term = catalogQuery(query);
+  const phish = Boolean(phishSongQuery(term));
+  const targets = useMemo(() => catalogTargets(desktop, phish), [desktop, phish]);
   const [manual, setManual] = useState<SearchAttempt>();
   const attempt = manual?.term === term ? manual : undefined;
   // A manual request (including a retry) never carries over to later input.
@@ -154,8 +156,10 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
         })}
       </ul>
       <p className="catalog-privacy">{t(desktop ? 'При поиске каталоги получают только текущий запрос.'
-        : 'В веб-версии запрос отправляется только в Openverse. Другие каталоги доступны в Windows.')}</p>
+        : 'В веб-версии доступны Openverse и концертный архив Phish.in.')}</p>
       <p className="catalog-privacy">{t('Закладка сохраняет ссылку, а не аудиофайл.')}</p>
+      <p className="catalog-privacy">{t('Для концертов Phish.in введите Phish и точное название песни, например Phish Llama.')}{' · '}
+        <SourceLink url={PHISH_LEGAL.terms}>{t('Условия Phish.in')}</SourceLink></p>
       {desktop && <p className="catalog-privacy"><SourceLink url={AUDIUS_LEGAL.terms}>{t('Условия API Audius')}</SourceLink>
         {' · '}<SourceLink url={AUDIUS_LEGAL.privacy}>{t('Конфиденциальность Audius')}</SourceLink></p>}
     </details>
@@ -169,6 +173,7 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
       {bundles.map(([track, ...alternatives]) => <li key={track.id} data-source={track.online?.source ?? 'file'}>
         <Artwork track={track} />
         <div className="online-result-copy"><strong title={track.title}>{track.title}</strong><span>{track.artist}{track.duration > 0 ? ` · ${formatTime(track.duration)}` : ''}</span>
+          {track.online?.source === 'phishin' && <span>{track.album}</span>}
           {credit(track)}</div>
         {actions(track)}
         {alternatives.length > 0 && <details className="recording-sources">

@@ -353,7 +353,7 @@ export function SettingsPage(props: SettingsProps) {
             <SettingCard title={t("Сервисы")}>
               <LastFmSettings connected={props.connected} />
               <Service title={t("Тексты песен")} status="LRCLIB">
-                <p>{t("Теги и локальные .lrc / .lyrics.txt, LRCLIB и несколько оригинальных изданий из Викитеки. Для полного каталога Musixmatch нужен отдельный договор.")}</p>
+                <p>{t("Теги, локальные .lrc / .lyrics.txt, LRCLIB и избранные издания Викитеки. Lyrics.ovh — обычный текст по названию и исполнителю, без таймингов.")}</p>
                 <ToggleRow title={t("Автопоиск текстов")} detail={t("Искать для играющего трека на главной и в караоке. LRCLIB получит название, исполнителя, альбом и длительность, если они известны.")} enabled={props.autoLyrics} change={() => props.toggleLyrics('autoLyrics')} />
                 {window.luma && <ToggleRow title={t("Сохранять текст с новым MP3")} detail={t("Для личной копии MP3: синхронный текст в соседний .lrc, обычный — в тег MP3. Если найдены оба, сохраняются оба. Существующие файлы не меняются.")} enabled={props.exportLyrics} change={() => props.toggleLyrics('exportLyrics')} />}
               </Service>

@@ -23,6 +23,12 @@ export async function lookupByMusicBrainz(track: Track, title: string, artist: s
   return candidates;
 }
 
+export async function lookupByAudioDb(title: string, artist: string, signal: AbortSignal) {
+  const candidates = await window.luma?.recognition.searchAudioDb({ title, artist }) ?? [];
+  signal.throwIfAborted();
+  return candidates;
+}
+
 export function canFingerprint(track: Track) {
   return !track.demo && !track.online && track.duration >= MIN_AUDIO_SECONDS && track.duration <= MAX_AUDIO_SECONDS
     && (track.audioUrl.startsWith('blob:') || track.audioUrl.startsWith('luma://app/media/audio/'));

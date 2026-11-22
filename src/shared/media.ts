@@ -74,7 +74,6 @@ export interface DesktopBridge {
   chooseTracks(): Promise<ImportResult>;
   importDroppedFiles(files: File[]): Promise<ImportResult>;
   removeTrack(id: string): Promise<Track[]>;
-  openVkMusic(): Promise<void>;
   saveSharedPlaylist(share: SharedPlaylist): Promise<boolean>;
   discord: {
     status(): Promise<DiscordStatus>;
@@ -88,10 +87,16 @@ export interface DesktopBridge {
     copy(url: string): Promise<void>;
   };
   clearLegacyVkSession(): Promise<void>;
-  lyrics: { lookup(query: LyricsQuery, refresh?: boolean): Promise<Lyrics | null>; local(id: string): Promise<Lyrics | null>; openEdition(url: string): Promise<void> };
+  lyrics: {
+    lookup(query: LyricsQuery, refresh?: boolean): Promise<Lyrics | null>;
+    lookupPlain(query: Pick<LyricsQuery, 'title' | 'artist'>): Promise<Lyrics | null>;
+    local(id: string): Promise<Lyrics | null>;
+    openEdition(url: string): Promise<void>;
+  };
   exportMp3(track: OnlineTrack, saveLyrics: boolean): Promise<Mp3ExportResult>;
   recognition: {
     search(query: string, locale: string): Promise<MetadataCandidate[]>;
+    searchAudioDb(query: { title: string; artist: string }): Promise<MetadataCandidate[]>;
     searchMusicBrainz(query: MusicBrainzQuery): Promise<MetadataCandidate[]>;
     hasAcoustid(): Promise<boolean>;
     identify(fingerprint: Fingerprint): Promise<MetadataCandidate[]>;

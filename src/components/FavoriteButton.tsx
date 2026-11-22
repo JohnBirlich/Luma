@@ -1,12 +1,13 @@
 import { useText } from '../i18n/context';
 import { Heart, ThumbsDown } from 'lucide-react';
 import type { Track } from '../shared/media';
+import { sessionCatalogId } from '../shared/online';
 
 export function FavoriteButton({ track, selected, toggle, immersive }: {
   track: Track; selected: boolean; toggle(id: string): void; immersive?: boolean;
 }) {
   const t = useText();
-  if (track.online?.source === 'audius') return null;
+  if (sessionCatalogId(track.id)) return null;
   const label = selected ? t("Убрать из избранного") : t("В избранное");
   return <button type="button" className={`icon-button like-button ${immersive ? 'immersive-favorite' : 'favorite-toggle'}`}
     aria-pressed={selected} aria-label={immersive ? label : `${label}: ${track.title}`} title={label} onClick={({ currentTarget }) => {
@@ -29,7 +30,7 @@ export function DislikeButton({ track, selected, toggle, immersive }: {
   track: Track; selected: boolean; toggle(id: string): void; immersive?: boolean;
 }) {
   const t = useText();
-  if (track.online?.source === 'audius') return null;
+  if (sessionCatalogId(track.id)) return null;
   const label = selected ? t("Вернуть в рекомендации") : t("Не рекомендовать");
   return <button type="button" className={`icon-button dislike-toggle${immersive ? ' immersive-favorite' : ''}`}
     aria-pressed={selected} aria-label={immersive ? label : `${label}: ${track.title}`} title={label} onClick={() => toggle(track.id)}>
