@@ -48,6 +48,9 @@ async function waitFor(label, check) {
 const liveCatalog = process.env.LUMA_LIVE_CATALOG === '1';
 const liveServices = process.env.LUMA_LIVE_SERVICES === '1';
 const liveRadio = process.env.LUMA_LIVE_RADIO === '1';
+// GitHub limits notices per step. Leave that budget for actual provider results in live runs.
+const fixtureNotice = (title, message) => console.log(liveCatalog || liveServices || liveRadio
+  ? `${title}: ${message}` : `::notice title=${title}::${message}`);
 const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), liveRadio ? 410_000 : liveCatalog ? 400_000 : liveServices ? 260_000 : 170_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
@@ -167,7 +170,7 @@ async function smoke() {
     })()`);
     assert.ok(['ok', 'no-system-output'].includes(graphCheck), `Chromium Float audio graph preflight: ${graphCheck}`);
     hasSystemSink = graphCheck === 'ok';
-    console.log(`::notice title=WASAPI Float probe::Driver result for stereo 48 kHz Float32 on the runner: ${mode}.`);
+    fixtureNotice('WASAPI Float probe', `Driver result for stereo 48 kHz Float32 on the runner: ${mode}.`);
   }
   assert.equal(await run('window.luma.lastfm.status().then(({ enabled }) => enabled)'), false);
   assert.equal(await run('window.luma.discord.status()'), process.platform === 'win32' ? 'off' : 'unsupported');
@@ -327,7 +330,7 @@ async function smoke() {
   window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
   await waitFor('Esc exits native fullscreen', async () => !window.isFullScreen() && await run(`!document.querySelector('.immersive-player')`));
   assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused && Math.abs(window.testAudio.currentTime - 4) < .2`), true);
-  console.log(`::notice title=Native fullscreen::Electron fullscreen reached ${display.bounds.width}×${display.bounds.height} monitor bounds; button, Esc, and host exit passed.`);
+  fixtureNotice('Native fullscreen', `Electron fullscreen reached ${display.bounds.width}×${display.bounds.height} monitor bounds; button, Esc, and host exit passed.`);
   await click('.scene-open');
   await waitFor('scene dialog reopens', () => run(`!!document.querySelector('.scene-dialog[open]')`));
   for (const [label, effect] of [['Спектр', 'spectrum'], ['Столбцы', 'columns'], ['Ноты', 'notes']]) {
@@ -466,7 +469,7 @@ async function smoke() {
       && !document.querySelector('audio[data-online-audio]').getAttribute('src')`), true, 'Radio does not start or replace the paused track');
   } finally { window.setBounds(originalBounds); shell.openExternal = systemBrowser; }
   await go('Меню');
-  console.log('::notice title=Radio shortcut::Sidebar and narrow title bar open the station list without autoplay or external handoff.');
+  fixtureNotice('Radio shortcut', 'Sidebar and narrow title bar open the station list without autoplay or external handoff.');
   assert.equal(await run(`!!document.querySelector('.menu-page [aria-label="Импортировать треки"]')`), false);
   assert.ok(await run(`!!document.querySelector('.title-bar [aria-label="Добавить музыку"]')`), 'file import remains in the main toolbar');
   assert.equal(await run(`document.querySelector('.title-caption') === null && getComputedStyle(document.querySelector('.sidebar')).userSelect === 'none'`), true);
@@ -519,7 +522,7 @@ async function smoke() {
     assert.deepEqual(window.getBounds(), widgetBounds);
     assert.equal(await run('document.querySelector("audio").currentTime'), widgetTime);
     assert.equal(navigations, 0, 'Ctrl+Shift+R must not reload the renderer');
-    console.log('::notice title=Widget shortcut::Focused Ctrl+Shift+R opens and restores Luma without reload; Esc restores it too.');
+    fixtureNotice('Widget shortcut', 'Focused Ctrl+Shift+R opens and restores Luma without reload; Esc restores it too.');
   } finally { window.webContents.off('did-start-navigation', watchReload); }
   assert.equal(await run(`!!document.querySelector('.settings-return')`), false);
 
@@ -561,7 +564,7 @@ async function smoke() {
     cacheSession.protocol.unhandle('https');
     shell.openExternal = originalOpen;
   }
-  console.log('::notice title=Widget and Last.fm::Widget shortcut and restore; key setup UI, API error 11 and retry with a fixture verified.');
+  fixtureNotice('Widget and Last.fm', 'Widget shortcut and restore; key setup UI, API error 11 and retry with a fixture verified.');
   await click('[aria-label="Сохранять текст с новым MP3"]');
   await waitFor('opt-in to MP3 lyric tagging', async () => (await preferences()).exportLyrics);
   await click('.settings-back');
@@ -789,7 +792,7 @@ async function smoke() {
     })()`));
     await click('.player-bar .play-button');
     await waitFor('pause cancels the retiring deck', () => run(`[...document.querySelectorAll('audio')].every((item) => item.paused) && !document.querySelector('audio').hasAttribute('src')`));
-    console.log('::notice title=Local crossfade::Two decoded tracks overlap before the first ends. Pausing stops both decks immediately.');
+    fixtureNotice('Local crossfade', 'Two decoded tracks overlap before the first ends. Pausing stops both decks immediately.');
 
     if (process.platform === 'win32') {
       await settings('Качество аудио');
@@ -809,7 +812,7 @@ async function smoke() {
       await waitFor('system output fallback or explicit missing device', () => run(`document.querySelector(${JSON.stringify(statusSelector)})?.textContent === ${JSON.stringify(systemLabel)}`));
       await click('.player-bar .play-button');
       await closeSettings();
-      console.log(`::notice title=Float output in playback::${status}`);
+      fixtureNotice('Float output in playback', status);
     }
 
     await go('Поиск');
@@ -1102,7 +1105,7 @@ async function smoke() {
         await run(`window.luma.musicLinks.copy(${JSON.stringify(expected)})`);
         if (realClipboard) {
           await waitFor('canonical link in the system clipboard', () => readMusicLink(clipboard.readText())?.url === expected);
-          console.log('::notice title=Windows clipboard::Copied a canonical music link and read it back through the system clipboard.');
+          fixtureNotice('Windows clipboard', 'Copied a canonical music link and read it back through the system clipboard.');
         } else assert.equal(readMusicLink(copied)?.url, expected);
       } finally { clipboard.writeText = copyText; if (hostedWindows) clipboard.clear(); }
 
@@ -1371,7 +1374,7 @@ async function smoke() {
     assert.ok((await preferences()).onlineTracks.some(({ id }) => id === `ov-${synced.id}`), 'cache cleanup keeps bookmarks');
     offlineFixture = false;
     await run(`delete navigator.onLine; window.dispatchEvent(new Event('online'));`);
-    console.log('::notice title=Cache and localization::Applied all five themes; MacOS, EN and parametric EQ survived reload. Verified offline MP3, byte ranges, seek and cache cleanup.');
+    fixtureNotice('Cache and localization', 'Applied all five themes; MacOS, EN and parametric EQ survived reload. Verified offline MP3, byte ranges, seek and cache cleanup.');
 
     assert.deepEqual(phishCalls, [], 'other search terms did not contact the concert archive');
     await go('Поиск');
@@ -1390,14 +1393,14 @@ async function smoke() {
     assert.equal(await run(`document.querySelector('.player-bar .karaoke-toggle')?.disabled`), true);
     assert.doesNotMatch(JSON.stringify(await preferences()), /phish-30344|phish\.in/, 'no archive playback references in the saved profile');
     await click('.player-bar .play-button');
-    console.log('::notice title=Phish.in::Complete concert result decodes on the streaming deck and stays session-only.');
+    fixtureNotice('Phish.in', 'Complete concert result decodes on the streaming deck and stays session-only.');
 
 
   } finally {
     session.defaultSession.protocol.unhandle('https');
     await legacyVk.clearStorageData();
   }
-  console.log('::notice title=Catalogs and playlists::Merged Home, parallel catalog search without site shortcuts, playlist import, radio tuning in both directions, and preservation of legacy profile data verified.');
+  fixtureNotice('Catalogs and playlists', 'Merged Home, parallel catalog search without site shortcuts, playlist import, radio tuning in both directions, and preservation of legacy profile data verified.');
   console.log('Desktop smoke: monitor fullscreen; both widget layouts restore bounds and reuse audio; Apple/MusicBrainz/WASM; metered MP3; LRCLIB word sync and lyrics export; isolated legacy reset.');
   if (liveServices) {
     const audioDb = await run(`window.luma.recognition.searchAudioDb({ title: 'Yellow', artist: 'Coldplay' })`);
