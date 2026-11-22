@@ -39,7 +39,7 @@ async function jsonRequest(fetcher: MetadataFetch, url: string, signal: AbortSig
   return JSON.parse(new TextDecoder().decode(body)) as unknown;
 }
 
-function wait(ms: number, signal: AbortSignal) {
+export function waitForRequestSpacing(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     signal.throwIfAborted();
     const abort = () => { clearTimeout(timer); reject(signal.reason); };
@@ -62,7 +62,7 @@ export function createMetadataService(fetcher: MetadataFetch = fetch, appleSpaci
       const candidates: MetadataCandidate[] = [];
       try {
         for (const term of terms) {
-          await wait(Math.max(0, appleAt - Date.now()), signal);
+          await waitForRequestSpacing(Math.max(0, appleAt - Date.now()), signal);
           appleAt = Date.now() + appleSpacing;
           const target = new URL(ITUNES_SEARCH_URL);
           target.search = new URLSearchParams({ term, country, media: 'music', entity: 'song', limit: '18' }).toString();

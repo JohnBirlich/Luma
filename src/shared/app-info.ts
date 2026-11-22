@@ -16,6 +16,11 @@ export const runtimeMode = {
 
 export const RELEASES_URL = `https://github.com/${RELEASE_REPO}/releases/latest`;
 
+/** Public client identification for catalog APIs; contains no installation or user identifier. */
+export function appApiAgent(version = 'dev') {
+  return `LumaPlayer/${version} (https://github.com/${RELEASE_REPO})`;
+}
+
 /** Some Chromium hosts return locale identifiers with ICU/POSIX separators or suffixes. */
 export function dataLocale(...candidates: Array<string | undefined>): string {
   for (const value of candidates) {

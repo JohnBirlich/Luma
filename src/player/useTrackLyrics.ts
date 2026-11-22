@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { webAppInfo } from '../data/app-info';
 import { findLyricEdition } from '../shared/lyric-editions';
 import { MAX_LYRIC_FILE, readCustomLyrics, readLocalLyrics, readLyricsQuery, selectLyrics, timedLines } from '../shared/lyrics';
 import type { Lyrics, LyricSource } from '../shared/lyrics';
@@ -6,7 +7,7 @@ import { createLyricsService } from '../shared/lyrics-service';
 import type { Track } from '../shared/media';
 import { ONLINE_SOURCES, sessionCatalogId } from '../shared/online';
 
-const webLyrics = createLyricsService();
+const webLyrics = createLyricsService(fetch, false, webAppInfo.version);
 interface Workspace {
   id?: string;
   token: symbol;
@@ -42,7 +43,7 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
   const demo = track?.demo;
   const title = track?.title, artist = track?.artist, album = track?.album;
   // Catalog duration belongs to that record. For files without a tag, use the decoded duration.
-  const length = track?.duration || Math.round(duration);
+  const length = track?.duration || duration;
   const query = useMemo(() => demo || sessionOnly || online?.source === 'broadcast' ? undefined : readLyricsQuery({ title, artist,
     album: online && album === ONLINE_SOURCES[online.source] ? undefined : album, duration: length }), [title, artist, album, length, online, demo, sessionOnly]);
   const key = query ? JSON.stringify(query) : '';
@@ -102,7 +103,7 @@ export function useTrackLyrics(track: Track | null, { enabled, connected, auto, 
   const search = useCallback(() => update((previous) => ({ attempt: previous.attempt + 1 })), [update]);
   const searchOnline = useCallback(() => update((previous) => ({ choice: 'lrclib', attempt: previous.attempt + 1 })), [update]);
   const result = useMemo(() => selectLyrics(choice, { local, attached, lrclib: cached?.value, edition }), [choice, local, attached, cached?.value, edition]);
-  const lines = useMemo(() => result.lyrics?.synced ? timedLines(result.lyrics.synced) : [], [result.lyrics?.synced]);
+  const lines = useMemo(() => result.lyrics?.wordLines ?? (result.lyrics?.synced ? timedLines(result.lyrics.synced) : []), [result.lyrics]);
   return {
     ...result, choice, select, local: Boolean(local), attached: Boolean(attached), edition, clear, attach, attachText, attachment: state.attachment, search, searchOnline, lines,
     attachError: state.attachError, busy, offline: !connected, loadingLocal: showLocal && canReadSidecar && local === undefined,

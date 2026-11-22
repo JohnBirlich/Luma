@@ -60,3 +60,8 @@ export function readTrackTag(value?: string): string {
 export function musicSearchKey(value: string): string {
   return value.normalize('NFC').toLocaleLowerCase(RUSSIAN_LOCALE).replaceAll('ё', 'е').replace(/\s+/gu, ' ').trim();
 }
+
+/** Catalog credits sometimes omit a stylized final exclamation mark. Preserve internal punctuation. */
+export function artistCreditKey(value: string) {
+  return musicSearchKey(value).replace(/[!！]+$/u, '').trimEnd();
+}

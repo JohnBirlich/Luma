@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
       live_services:
-        description: 'Check the live Apple Music and LRCLIB endpoints'
+        description: 'Check the live Apple Music, MusicBrainz and LRCLIB endpoints'
         type: boolean
         default: false
 

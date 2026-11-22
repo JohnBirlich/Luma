@@ -56,7 +56,7 @@ export function TrackDetailsEditor({ track, edited, locale, save, close }: Props
           <label>{t("Жанры")}<input type="text" value={genres} placeholder={t("Через запятую")} maxLength={TRACK_DETAIL_LIMIT}
             onChange={(event) => setGenres(event.currentTarget.value)} /></label>
         </div>
-        <MetadataLookup track={track} locale={locale} artistHint={draft.artist} select={(candidate, titleOnly) => setDraft((draft) => ({
+        <MetadataLookup track={track} locale={locale} artistHint={draft.artist} albumHint={draft.album} select={(candidate, titleOnly) => setDraft((draft) => ({
           ...draft, title: candidate.title,
           ...(!titleOnly && { artist: candidate.artist, album: candidate.album ?? draft.album }),
         }))} />

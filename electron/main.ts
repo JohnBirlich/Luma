@@ -19,6 +19,7 @@ import { DesktopLastFm, lastFmConfig } from './lastfm.js';
 import { createOnlineExporter } from './online-export.js';
 import { MAIN_MINIMUM, widgetController } from './desktop-widget.js';
 import { createMetadataService, validAcoustidClient } from '../src/shared/metadata-service.js';
+import { createMusicBrainzLookup } from '../src/shared/musicbrainz.js';
 import { isMetadataPage } from '../src/shared/recognition.js';
 import { AUDIO_EXTENSIONS, emptyImport } from '../src/shared/media.js';
 import { RUSSIAN_LOCALE } from '../src/shared/russian.js';
@@ -170,7 +171,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     await legacy.clearStorageData();
     await legacy.clearCache();
   });
-  const lookupLyrics = createLyricsService(net.fetch, true);
+  const lookupLyrics = createLyricsService(net.fetch, true, info.version);
   const exportMp3 = createOnlineExporter(lookupLyrics, (...args) => t(...args));
   ipcMain.handle('lyrics:local', (event, id: unknown) => { appWindow(event); return library.lyrics(id); });
   ipcMain.handle('lyrics:edition', (event, url: unknown) => {
@@ -192,6 +193,11 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('metadata:search', (event, query: unknown, locale: unknown) => {
     appWindow(event);
     return metadata.search(query, locale, AbortSignal.timeout(21_000));
+  });
+  const searchMusicBrainz = createMusicBrainzLookup(net.fetch, info.version);
+  ipcMain.handle('metadata:musicbrainz', (event, query: unknown) => {
+    appWindow(event);
+    return searchMusicBrainz(query, AbortSignal.timeout(9000));
   });
   ipcMain.handle('metadata:has-acoustid', (event) => { appWindow(event); return validAcoustidClient(acoustidClient); });
   ipcMain.handle('metadata:identify', (event, fingerprint: unknown) => {

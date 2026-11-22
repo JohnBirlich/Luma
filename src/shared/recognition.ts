@@ -7,13 +7,17 @@ export const MAX_AUDIO_SECONDS = 720;
 export const MIN_AUDIO_SECONDS = 8;
 
 export interface MetadataCandidate {
-  source: 'apple' | 'acoustid';
+  source: 'apple' | 'acoustid' | 'musicbrainz';
   page: string;
   title: string;
   artist: string;
   album?: string;
   duration?: number;
   score?: number;
+  disambiguation?: string;
+  releaseTitles?: string[];
+  year?: string;
+  isrc?: string;
 }
 
 export interface Fingerprint {

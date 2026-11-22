@@ -44,6 +44,7 @@ const bridge: DesktopBridge = {
   exportMp3: (track, withLyrics) => ipcRenderer.invoke('online:export-mp3', track, withLyrics),
   recognition: {
     search: (query, locale) => ipcRenderer.invoke('metadata:search', query, locale),
+    searchMusicBrainz: (query) => ipcRenderer.invoke('metadata:musicbrainz', query),
     hasAcoustid: () => ipcRenderer.invoke('metadata:has-acoustid'),
     identify: (fingerprint) => ipcRenderer.invoke('metadata:identify', fingerprint),
     openSource: (url) => ipcRenderer.invoke('metadata:open-link', url),

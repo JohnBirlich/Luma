@@ -1,15 +1,32 @@
 import { memo, useId, useLayoutEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { AlignLeft, FileUp, Music2 } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { TrackLyrics } from '../player/useTrackLyrics';
 import type { KaraokeStyle } from '../shared/karaoke-style';
-import { activeLyricLine } from '../shared/lyrics';
+import { activeLyricLine, activeLyricWord } from '../shared/lyrics';
 import type { LyricLine, LyricSource } from '../shared/lyrics';
 import { KaraokeTextSettings } from './KaraokeTextSettings';
 
 const SOURCE_NAMES = { auto: 'Авто', local: 'Из файла', attached: 'Открытый файл', lrclib: 'LRCLIB', edition: 'Викитека' } as const;
+
+function lyricPosition(lines: LyricLine[], seconds: number) {
+  const index = activeLyricLine(lines, seconds);
+  return { index, word: activeLyricWord(lines[index], seconds) };
+}
+
+const TimedLyricRow = memo(function TimedLyricRow({ item, past, activeWord, currentRef, seek }: {
+  item: LyricLine; past: boolean; activeWord: number; currentRef?: RefObject<HTMLParagraphElement | null>; seek?(seconds: number): void;
+}) {
+  const t = useText();
+  const content = item.words ? item.words.map(({ text }, index) => (
+    <span className="lyric-word" key={index} data-current-word={index === activeWord || undefined}>{text}</span>
+  )) : item.text || '\u00a0';
+  return <p ref={currentRef} aria-current={currentRef ? 'true' : undefined} data-past={past || undefined}>
+    {item.text && seek ? <button className="lyric-line-seek" type="button" title={t('Перейти к строке')} onClick={() => seek(item.time)}>{content}</button> : content}
+  </p>;
+});
 
 const TimedText = memo(function TimedText({ lines, elapsed, clock, follow, layout, seek }: {
   lines: LyricLine[]; elapsed: number; clock?: () => number; follow: boolean; layout?: KaraokeStyle; seek?(seconds: number): void;
@@ -17,16 +34,20 @@ const TimedText = memo(function TimedText({ lines, elapsed, clock, follow, layou
   const t = useText();
   const scroll = useRef<HTMLDivElement>(null);
   const line = useRef<HTMLParagraphElement>(null);
-  const [liveIndex, setLiveIndex] = useState(() => activeLyricLine(lines, elapsed));
+  const [live, setLive] = useState(() => lyricPosition(lines, elapsed));
   useLayoutEffect(() => {
     if (!clock) return;
-    const update = () => { if (!document.hidden) setLiveIndex(activeLyricLine(lines, clock())); };
+    const update = () => {
+      if (document.hidden) return;
+      const next = lyricPosition(lines, clock());
+      setLive((prior) => prior.index === next.index && prior.word === next.word ? prior : next);
+    };
     update();
-    // Follow the actual deck clock without rerendering the whole player between lines.
+    // Follow the actual deck clock without rerendering the whole player between lines or words.
     const timer = window.setInterval(update, 64);
     return () => window.clearInterval(timer);
   }, [lines, clock]);
-  const current = clock ? liveIndex : activeLyricLine(lines, elapsed);
+  const { index: current, word } = clock ? live : lyricPosition(lines, elapsed);
   useLayoutEffect(() => {
     const pane = scroll.current, item = line.current;
     if (!pane || !follow) return;
@@ -42,10 +63,8 @@ const TimedText = memo(function TimedText({ lines, elapsed, clock, follow, layou
     return () => window.removeEventListener('resize', center);
   }, [current, lines, follow, layout]);
   return <div className="lyrics-scroll lyrics-timed" ref={scroll} tabIndex={0} role="region" aria-label={t('Строки песни')}>
-    {lines.map(({ time, text }, index) => <p key={`${time}-${index}`} ref={index === current ? line : undefined}
-      aria-current={index === current ? 'true' : undefined} data-past={index < current || undefined}>
-      {text && seek ? <button className="lyric-line-seek" type="button" title={t('Перейти к строке')} onClick={() => seek(time)}>{text}</button> : text || '\u00a0'}
-    </p>)}
+    {lines.map((item, index) => <TimedLyricRow key={`${item.time}-${index}`} item={item} past={index < current}
+      currentRef={index === current ? line : undefined} activeWord={index === current ? word : -1} seek={seek} />)}
   </div>;
 });
 
@@ -65,7 +84,7 @@ export function LyricsPanel({ state, elapsed, clock, seek, karaoke, demo = false
   if (edition) sources.push('edition');
   const nameOf = (item: LyricSource) => t(item === 'attached' && state.attachment === 'text' ? 'Свой текст' : SOURCE_NAMES[item]);
   const description = showEdition ? t('Викитека · {0}', showEdition.author) : source ? nameOf(source) : t('Источник не выбран');
-  const timing = lines.length ? t('С метками времени') : lyrics?.plain ? t('Без синхронизации') : '';
+  const timing = lyrics?.wordLines ? t('Синхронизация по словам') : lines.length ? t('С метками времени') : lyrics?.plain ? t('Без синхронизации') : '';
   const versions = <label className="lyrics-version">{t(karaoke ? 'Версия текста' : 'Источник текста')}<select value={choice} onChange={(event) => state.select(event.currentTarget.value as LyricSource)}>
     {sources.map((item) => <option key={item} value={item}>{nameOf(item)}</option>)}
   </select></label>;

@@ -15,6 +15,7 @@ import type { StreamCacheInfo } from './stream-cache.js';
 import type { LastFmStatus, ListeningEvent } from './lastfm.js';
 import type { Lyrics, LyricsQuery } from './lyrics.js';
 import type { Fingerprint, MetadataCandidate } from './recognition.js';
+import type { MusicBrainzQuery } from './musicbrainz.js';
 
 export const AUDIO_MIMES = {
   mp3: 'audio/mpeg',
@@ -91,6 +92,7 @@ export interface DesktopBridge {
   exportMp3(track: OnlineTrack, saveLyrics: boolean): Promise<Mp3ExportResult>;
   recognition: {
     search(query: string, locale: string): Promise<MetadataCandidate[]>;
+    searchMusicBrainz(query: MusicBrainzQuery): Promise<MetadataCandidate[]>;
     hasAcoustid(): Promise<boolean>;
     identify(fingerprint: Fingerprint): Promise<MetadataCandidate[]>;
     openSource(url: string): Promise<void>;

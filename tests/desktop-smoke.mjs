@@ -11,6 +11,8 @@ import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js
 import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
+import { alternateRecording, recording } from './fixtures/musicbrainz.mjs';
+import { wordLyrics } from './fixtures/word-lyrics.mjs';
 import { installerName, LATEST_RELEASE_API, RELEASE_REPO } from '../dist-electron/src/shared/release-updates.js';
 import { musicLaunchUrl, readMusicLink } from '../dist-electron/src/shared/music-links.js';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
@@ -581,6 +583,7 @@ async function smoke() {
   const webTile = `[data-station=${JSON.stringify(webStation.id)}]`;
   const recordPlay = `${recordTile} .station-play`;
   const titleQueries = [];
+  const musicBrainzQueries = [];
   const fingerprints = [];
   const legacyVk = session.fromPartition(LEGACY_VK_SESSION);
   const legacyBookmarks = { selected: '-31_4', playlists: [{ ownerId: -31, playlistId: 4, name: 'Старая закладка', hash: 'legacy-1' }] };
@@ -608,6 +611,8 @@ async function smoke() {
   const lrcText = '[00:00.25] Первый куплет\n[00:01.25] Второй';
   const plainText = 'Первый куплет\nВторой';
   const lyricQueries = [];
+  const lyricSearchQueries = [];
+  let missLyricSignature = false;
   const economyUrl = jamendoRecording.url.replace('format=mp32', 'format=mp31');
 
   let offlineFixture = false;
@@ -618,6 +623,10 @@ async function smoke() {
       const term = url.searchParams.get('term');
       titleQueries.push(term);
       return Response.json({ results: term === 'мадам брошкина' ? [madam, remix] : [] });
+    }
+    if (url.origin === 'https://musicbrainz.org' && url.pathname === '/ws/2/recording') {
+      musicBrainzQueries.push({ query: url.searchParams.get('query'), agent: request.headers.get('User-Agent') });
+      return Response.json({ recordings: [recording, alternateRecording] });
     }
     if (url.origin === 'https://api.acoustid.org' && url.pathname === '/v2/lookup') {
       assert.equal(request.method, 'POST');
@@ -630,8 +639,14 @@ async function smoke() {
     if (url.origin === 'https://lrclib.net' && url.pathname === '/api/get') {
       const title = url.searchParams.get('track_name');
       lyricQueries.push(Object.fromEntries(url.searchParams));
-      return title === synced.title || title === plain.title ? Response.json({ trackName: title, artistName: 'Исполнитель', duration: 32,
-        plainLyrics: plainText, syncedLyrics: title === synced.title ? lrcText : null }) : new Response(null, { status: 404 });
+      if (title === synced.title && !missLyricSignature) return Response.json(wordLyrics(title, 'Исполнитель!', 32));
+      return title === plain.title ? Response.json({ trackName: title, artistName: 'Исполнитель', duration: 32, plainLyrics: plainText })
+        : new Response(null, { status: 404 });
+    }
+    if (url.origin === 'https://lrclib.net' && url.pathname === '/api/search') {
+      lyricSearchQueries.push(Object.fromEntries(url.searchParams));
+      return Response.json(url.searchParams.get('track_name') === synced.title
+        ? [wordLyrics(`${synced.title} (ремикс)`, 'Исполнитель!', 32), wordLyrics(synced.title, 'Исполнитель!', 32)] : []);
     }
     if (url.origin === 'https://api.openverse.org' && url.pathname.startsWith('/v1/audio/')) {
       catalogCalls.push(url);
@@ -691,6 +706,22 @@ async function smoke() {
     assert.equal(await run(`document.querySelector('.track-details-fields input').value`), 'Мадам Брошкина');
     assert.equal(await run(`document.querySelectorAll('.track-details-fields input')[1].value`), 'Неизвестный исполнитель');
     assert.equal(await run(`document.querySelector('.hero h2').textContent`), "Ty Zdes'", 'the draft is not applied automatically');
+    await select('.metadata-source select', 'musicbrainz');
+    await fill('.metadata-search-controls input', 'Крошка моя');
+    assert.equal(musicBrainzQueries.length, 0, 'selecting a catalog or typing does not send the request');
+    await click('.metadata-search-controls button');
+    await waitFor('MusicBrainz recording versions and ISRC', () => run(`document.querySelectorAll('.metadata-results li').length === 2
+      && document.querySelector('.metadata-results li').textContent.includes('ISRC RUA1B9800001')`));
+    assert.deepEqual(musicBrainzQueries, [{ query: '(recording:"Крошка моя") AND NOT video:true',
+      agent: `LumaPlayer/${version} (https://github.com/JohnBirlich/VKX-Modded)` }]);
+    assert.equal(await run(`document.querySelector('.metadata-results li a').href`), `https://musicbrainz.org/recording/${recording.id}`);
+    assert.equal(await run(`document.querySelector('.track-details-fields input').value`), 'Мадам Брошкина');
+    const draftAlbum = await run(`document.querySelector('.track-details-fields label:nth-child(3) input').value`);
+    await click('.metadata-results li .metadata-result-actions button:nth-child(2)');
+    assert.deepEqual(await run(`[...document.querySelectorAll('.track-details-fields input')].slice(0, 3).map((field) => field.value)`),
+      ['Крошка моя', 'Руки вверх!', draftAlbum], 'a recording with several editions does not change the album');
+    await fill('.track-details-fields label:nth-child(1) input', 'Мадам Брошкина');
+    await fill('.track-details-fields label:nth-child(2) input', 'Неизвестный исполнитель');
     await click('.metadata-sound button');
     await waitFor('decoded local audio fingerprint candidate', () => run(`document.querySelector('.metadata-results li')?.textContent.includes('Отблеск (тест)')`));
     assert.equal(fingerprints.length, 1);
@@ -1134,7 +1165,9 @@ async function smoke() {
       await waitFor('plain text embedded in MP3', () => run(`document.querySelector('.toast small')?.textContent.includes('в тег MP3')`));
       assert.equal((await parseFile(plainPath)).common.lyrics[0].text, plainText);
       await assert.rejects(readFile(plainPath.replace('.mp3', '.lrc')), { code: 'ENOENT' });
-      assert.deepEqual(lyricQueries.map(({ track_name, duration }) => [track_name, duration]), [[synced.title, '32'], [plain.title, '32']]);
+      assert.deepEqual(lyricQueries.map(({ track_name }) => track_name), [synced.title, plain.title]);
+      assert.ok(lyricQueries.every(({ duration }) => Math.abs(Number(duration) - 32) < .1));
+      assert.equal(lyricSearchQueries.length, 0, 'a verified signature is enough, even for plain lyrics');
       await click(`button[aria-label="Скачать MP3: ${plain.title}"]`);
       await waitFor('existing destination is not overwritten', () => run(`document.querySelector('.toast-error small')?.textContent.includes('Файл уже существует')`));
       assert.equal((await parseFile(plainPath)).common.lyrics[0].text, plainText);
@@ -1160,6 +1193,23 @@ async function smoke() {
     })()`));
     assert.equal(streamCalls.filter((url) => url === synced.url).length, beforeCache + 1, 'cached playback makes no request for the source audio');
     await click('.player-bar .play-button');
+    await waitFor('cached stream is paused', () => run(`document.querySelector('${onlineAudio}').paused`));
+    await click('.player-bar .karaoke-toggle');
+    await waitFor('LRCLIB search available for the cached online track', () => run(`!!document.querySelector('.karaoke-lyrics .karaoke-empty-actions button')`));
+    await delay(375); // A manual lookup may bypass the lyrics export's cache, not the request spacing.
+    missLyricSignature = true;
+    await click('.karaoke-lyrics .karaoke-empty-actions button');
+    await waitFor('karaoke finds word timings through the v1 search fallback', () => run(`document.querySelector('.karaoke-lyrics header').textContent.includes('Синхронизация по словам')`));
+    assert.deepEqual(lyricSearchQueries, [{ track_name: synced.title, artist_name: 'Исполнитель' }]);
+    await run(`document.querySelector('${onlineAudio}').currentTime = .35;`);
+    await waitFor('the first word is highlighted', () => run(`document.querySelector('.karaoke-lyrics [data-current-word]')?.textContent.trim() === 'Первый'`));
+    await run(`document.querySelector('${onlineAudio}').currentTime = .9;`);
+    await waitFor('seeking highlights the second word', () => run(`document.querySelector('.karaoke-lyrics [data-current-word]')?.textContent === 'куплет'`));
+    await click('.karaoke-lyrics .lyrics-scroll p:nth-child(2) .lyric-line-seek');
+    await waitFor('the ordinary timed line still seeks the same online deck', () => run(`document.querySelector('.karaoke-lyrics [aria-current="true"]')?.textContent === 'Второй'
+      && !document.querySelector('.karaoke-lyrics [data-current-word]') && Math.abs(document.querySelector('${onlineAudio}').currentTime - 1.25) < .05`));
+    await click('.immersive-collapse');
+    await waitFor('leave the online karaoke stage', async () => !window.isFullScreen() && await run(`!document.querySelector('.immersive-player')`));
 
     await settings('Внешний вид');
     await click('[aria-label="Автоматическая смена темы"]');
@@ -1267,11 +1317,18 @@ async function smoke() {
     await legacyVk.clearStorageData();
   }
   console.log('::notice title=Catalogs and playlists::Merged Home, parallel catalog search without site shortcuts, playlist import, radio tuning in both directions, and preservation of legacy profile data verified.');
-  console.log('Desktop smoke: monitor fullscreen; both widget layouts restore bounds and reuse audio; Apple/WASM; metered MP3; lyrics export; isolated legacy reset.');
+  console.log('Desktop smoke: monitor fullscreen; both widget layouts restore bounds and reuse audio; Apple/MusicBrainz/WASM; metered MP3; LRCLIB word sync and lyrics export; isolated legacy reset.');
   if (liveServices) {
     const suggestions = await run(`window.luma.recognition.search('Madam Broshkina', 'ru-RU')`);
     assert.ok(suggestions.some(({ title }) => title === 'Мадам Брошкина'), 'live Apple Music transliteration lookup');
     console.log('::notice title=Live Apple Music::Cyrillic recording candidates returned for a transliterated title.');
+    try {
+      const recordings = await run(`window.luma.recognition.searchMusicBrainz({ title: 'Крошка моя', artist: 'Руки Вверх', duration: 250 })`);
+      assert.ok(recordings.some(({ title, artist }) => title === 'Крошка моя' && /^руки вверх/iu.test(artist)));
+      console.log('::notice title=Live MusicBrainz::The official endpoint returned recording metadata, not audio.');
+    } catch {
+      console.log('::warning title=Live MusicBrainz::No matching metadata from this network. The controlled checks passed.');
+    }
     try {
       const text = await run(`window.luma.lyrics.lookup({ title: 'Yellow', artist: 'Coldplay', duration: 267 })`);
       assert.ok(text?.synced || text?.plain);
