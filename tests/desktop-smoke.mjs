@@ -656,6 +656,7 @@ async function smoke() {
   let offlineFixture = false;
   const youtubeRequests = [];
   const vkWidgetRequests = [];
+  const audiusFixtureHops = [];
   const testAudioPath = '/luma-smoke-audio.mp3';
   const isEmbedAudio = (url) => url.pathname === testAudioPath && [YOUTUBE_EMBED_ORIGIN, new URL(VK_WIDGET_URL).origin].includes(url.origin);
   session.defaultSession.protocol.handle('https', async (request) => {
@@ -749,9 +750,14 @@ async function smoke() {
       return Response.json({ data: url.searchParams.get('query') === 'jazz' ? [audiusRecording, { ...audiusRecording, id: '1233T', title: 'Restricted', is_stream_gated: true }] : [] });
     }
     if (url.origin === 'https://api.audius.co' && url.pathname === '/v1/tracks/DX0Xb/stream' && url.searchParams.get('no_redirect') === 'true') {
+      audiusFixtureHops.push('resolve');
       return Response.json({ data: creatorStream });
     }
-    if (url.href === creatorStream) return Response.redirect(storageStream, 307);
+    if (url.href === creatorStream) {
+      audiusFixtureHops.push('redirect');
+      return Response.redirect(storageStream, 307);
+    }
+    if (url.href === storageStream) audiusFixtureHops.push('media');
     if (url.href === 'https://archive.org/metadata/SCL108') return Response.json(archiveRelease);
     if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
     const radioFixture = radioFixtureUrls.has(url.href);
@@ -920,7 +926,21 @@ async function smoke() {
     assert.equal(await run(`document.querySelectorAll('.online-results li[data-source="audius"] button').length`), 2, 'Audius offers play and queue, not save or download');
     const ephemeralUrl = 'luma://app/media/audius/DX0Xb';
     await click('.online-results li[data-source="audius"] button:first-child');
-    await waitFor('Audius stream decodes through the private protocol', () => streamReady(ephemeralUrl));
+    try { await waitFor('Audius stream decodes through the private protocol', () => streamReady(ephemeralUrl)); }
+    catch (error) {
+      const media = await run(`(() => {
+        const el = document.querySelector('${onlineAudio}');
+        return { src: el.currentSrc, position: el.currentTime, duration: el.duration, paused: el.paused, ready: el.readyState,
+          error: el.error?.code, message: el.error?.message, notice: document.querySelector('.toast-error strong')?.textContent };
+      })()`);
+      const hops = [...audiusFixtureHops];
+      const diagnoseRange = () => run(`fetch(${JSON.stringify(ephemeralUrl)}, { headers: { Range: 'bytes=24-31' }, signal: AbortSignal.timeout(2500) })
+        .then(async response => [response.status, (await response.arrayBuffer()).byteLength], error => error.name)`);
+      const initialProbe = await diagnoseRange();
+      session.defaultSession.webRequest.onBeforeSendHeaders(null);
+      const noObserverProbe = await diagnoseRange();
+      throw new Error(`${error.message}: ${JSON.stringify({ hops, media, initialProbe, noObserverProbe, probeHops: audiusFixtureHops.slice(hops.length) })}`, { cause: error });
+    }
     assert.ok(streamCalls.includes(storageStream));
     await go('Главная');
     await waitFor('Audius does not offer lyrics or saved listening actions', () => run(`document.querySelector('.hero h2')?.textContent === 'Siberian Jazz'
