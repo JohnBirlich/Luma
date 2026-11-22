@@ -1,9 +1,12 @@
 import { AUDIUS_API, AUDIUS_APP_NAME, audiusId, audiusMediaUrl, catalogObject as object, readOnlineTrack } from './online.js';
 import type { OnlineTrack } from './online.js';
 
+const AUDIUS_SEARCH_LIMIT = 36;
+const AUDIUS_VISIBLE_LIMIT = 20;
+
 export function audiusSearchUrl(query: string) {
   const url = new URL('search', AUDIUS_API);
-  url.search = new URLSearchParams({ query: query.trim().slice(0, 140), limit: '12', app_name: AUDIUS_APP_NAME }).toString();
+  url.search = new URLSearchParams({ query: query.trim().slice(0, 140), limit: String(AUDIUS_SEARCH_LIMIT), app_name: AUDIUS_APP_NAME }).toString();
   return url;
 }
 
@@ -23,9 +26,10 @@ export function audiusTracks(data: unknown) {
   const rows = object(data).data;
   if (!Array.isArray(rows)) throw new Error('Каталог вернул неожиданный ответ.');
   const tracks = new Map<string, OnlineTrack>();
-  for (const row of rows.slice(0, 12)) {
+  for (const row of rows.slice(0, AUDIUS_SEARCH_LIMIT)) {
     const track = audiusTrack(row);
     if (track && !tracks.has(track.id)) tracks.set(track.id, track);
+    if (tracks.size >= AUDIUS_VISIBLE_LIMIT) break;
   }
   return [...tracks.values()];
 }

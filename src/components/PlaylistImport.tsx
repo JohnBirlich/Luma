@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, FileText, FileUp, ListMusic, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, FileText, FileUp, Link2, ListMusic, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { MAX_PLAYLIST_TRACKS, playlistTitle } from '../shared/luma-playlists';
 import type { Track } from '../shared/media';
@@ -8,6 +8,10 @@ import { ONLINE_SOURCES } from '../shared/online';
 import { musicSearchKey } from '../shared/russian';
 import { canChooseForPlaylist, checkPlaylistImportSize, IMPORT_STATUS, playlistImportFormat, previewPlaylist, readPlaylistImport } from '../shared/playlist-import';
 import type { PlaylistDraft } from '../shared/playlist-import';
+import { openwhydPlaylistUrl } from '../shared/openwhyd';
+import type { OpenwhydDraft } from '../shared/openwhyd';
+import { providerError } from '../data/music-services';
+import { SourceLink } from './OnlineMusic';
 import spotify from '../assets/playlist-sources/spotify.svg';
 import appleMusic from '../assets/playlist-sources/apple-music.svg';
 import deezer from '../assets/playlist-sources/deezer.svg';
@@ -20,6 +24,7 @@ import './playlist-import.css';
 const sources = [
   { id: 'luma', name: 'Luma', icon: ListMusic, hint: '.luma.json' },
   { id: 'unison', name: 'Unison', icon: FileText, hint: 'JSON' },
+  { id: 'openwhyd', name: 'Openwhyd', icon: Link2, hint: 'https://openwhyd.org/…' },
   { id: 'spotify', name: 'Spotify', logo: spotify, hint: 'Playlist*.json / CSV / TXT' },
   { id: 'apple', name: 'Apple Music', logo: appleMusic, hint: 'TXT / CSV' },
   { id: 'deezer', name: 'Deezer', logo: deezer, hint: 'CSV / TXT' },
@@ -74,7 +79,8 @@ export function PlaylistImport({ collection, save, close }: {
   const body = useRef<HTMLDivElement>(null);
   const request = useRef(0);
   const [source, setSource] = useState<ImportSource>();
-  const [drafts, setDrafts] = useState<PlaylistDraft[]>([]);
+  const [drafts, setDrafts] = useState<(PlaylistDraft | OpenwhydDraft)[]>([]);
+  const [playlistUrl, setPlaylistUrl] = useState('');
   const [list, setList] = useState(0);
   const [title, setTitle] = useState('');
   const [page, setPage] = useState(0);
@@ -82,6 +88,7 @@ export function PlaylistImport({ collection, save, close }: {
   const [error, setError] = useState('');
   const [choices, setChoices] = useState<Map<number, string | null>>(() => new Map());
   const draft = drafts[list];
+  const linked = draft && 'sourceLinks' in draft ? draft : undefined;
   const available = useMemo(() => collection.filter(canChooseForPlaylist), [collection]);
   const preview = useMemo(() => draft ? previewPlaylist(draft, collection, choices) : undefined, [draft, collection, choices]);
   function resolve(index: number, value: string | null | undefined) {
@@ -104,13 +111,29 @@ export function PlaylistImport({ collection, save, close }: {
     heading.current?.focus({ preventScroll: true });
   }, [step]);
 
-  function select(next: PlaylistDraft[], index: number) {
+  function select(next: (PlaylistDraft | OpenwhydDraft)[], index: number) {
     setChoices(new Map()); setDrafts(next); setList(index); setTitle(next[index]?.title || t('Импортированный плейлист')); setPage(0); setError('');
   }
   function goBack() {
     request.current++;
     if (preview) setDrafts([]); else setSource(undefined);
     setReading(false); setError('');
+  }
+  async function loadPublicPlaylist() {
+    const bridge = window.luma?.importOpenwhyd;
+    if (!bridge || reading) return;
+    if (!openwhydPlaylistUrl(playlistUrl)) { setError('Нужна публичная ссылка на плейлист Openwhyd.'); return; }
+    const current = ++request.current;
+    setReading(true); setError('');
+    try {
+      const result = await bridge(playlistUrl);
+      if (current === request.current) select([result], 0);
+    } catch (reason) {
+      if (current === request.current) setError(providerError(reason, [
+        'Нужна публичная ссылка на плейлист Openwhyd.', 'Плейлист Openwhyd не найден или не опубликован.',
+        'В открытом плейлисте Openwhyd нет записей.', 'Ответ Openwhyd не удалось прочитать.',
+      ], 'Не удалось загрузить плейлист Openwhyd. Проверьте сеть и ссылку.'));
+    } finally { if (current === request.current) setReading(false); }
   }
   async function read(file: File, provider: ImportSource) {
     const current = ++request.current;
@@ -143,7 +166,7 @@ export function PlaylistImport({ collection, save, close }: {
     <div className="playlist-import-body" ref={body}>
       {step === 1 && <>
         <h3>{t('Из какого сервиса переносим?')}</h3>
-        <p>{t('Выберите источник и откройте экспорт плейлиста. Luma сопоставит его с вашими локальными треками.')}</p>
+        <p>{t('Выберите источник. Luma сопоставит список с вашими локальными треками.')}</p>
         <ul className="playlist-import-sources">{sources.map((item) => <li key={item.id}>
           <button type="button" data-source={item.id} onClick={() => setSource(item)}>
             <span className="playlist-source-mark" aria-hidden="true">{'logo' in item
@@ -151,7 +174,16 @@ export function PlaylistImport({ collection, save, close }: {
             <span><strong>{t(item.name)}</strong><small>{item.hint}</small></span><ChevronRight size={17} aria-hidden="true" />
           </button></li>)}</ul>
       </>}
-      {step === 2 && source && <>
+      {step === 2 && source?.id === 'openwhyd' && <>
+        <h3>Openwhyd</h3>
+        <p>{t('Вставьте ссылку на публичный плейлист. Luma прочитает названия и ссылки для предпросмотра, но не загрузит аудио.')}</p>
+        {window.luma?.importOpenwhyd ? <form className="openwhyd-import-form" onSubmit={(event) => { event.preventDefault(); void loadPublicPlaylist(); }}>
+          <label className="playlist-import-field">{t('Ссылка на плейлист Openwhyd')}<input type="url" value={playlistUrl} required maxLength={1024} disabled={reading}
+            placeholder="https://openwhyd.org/adrien/playlist/10" onChange={(event) => { setPlaylistUrl(event.currentTarget.value); setError(''); }} /></label>
+          <button className="button primary-button" type="submit" disabled={reading || !playlistUrl.trim()}><Link2 size={16} />{t(reading ? 'Читаем список…' : 'Загрузить список')}</button>
+        </form> : <p>{t('Импорт ссылки Openwhyd доступен в настольной Luma.')}</p>}
+      </>}
+      {step === 2 && source && source.id !== 'openwhyd' && <>
         <h3>{t(source.name)}</h3>
         <p>{t(source.id === 'spotify' ? 'Откройте Playlist*.json из архива Spotify или экспорт CSV / TXT.'
           : source.id === 'apple' ? 'В приложении «Музыка» экспортируйте список в текстовый файл с данными о треках или выберите CSV.'
@@ -177,15 +209,18 @@ export function PlaylistImport({ collection, save, close }: {
         <label className="playlist-import-field">{t('Название плейлиста')}<input value={title} maxLength={64} onChange={(event) => { setTitle(event.currentTarget.value); setError(''); }} /></label>
         <p className="playlist-import-summary" role="status">{t('Будет добавлено {0} из {1} записей', preview.items.length, preview.rows.length + draft.skipped)}</p>
         <p>{t('Проверьте совпадения. Можно выбрать другой трек из медиатеки или пропустить строку. Порядок исходного списка сохранится (до {0}).', MAX_PLAYLIST_TRACKS)}</p>
+        {linked?.limited && <p>{t('Показаны первые 200 записей открытого плейлиста.')}</p>}
         {draft.skipped > 0 && <p>{t('Пропущено строк без подходящих данных: {0}', draft.skipped)}</p>}
         {!preview.items.length && <p>{t('Пока не выбран ни один трек. Проверьте варианты в списке.')}</p>}
         <ol className="playlist-import-preview" start={page * PAGE_SIZE + 1}>
           {preview.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(({ ref, match, status, candidates }, index) => {
             const row = page * PAGE_SIZE + index;
+            const link = linked?.sourceLinks[row];
             return <li key={`${list}:${row}`}>
               <span><strong>{ref.title}</strong><small>{[ref.artist, ref.album].filter(Boolean).join(' · ')}</small>
                 {match && (status === 'match' || status === 'chosen') && <small>{t('В плейлист: {0}', `${match.artist} — ${match.title}`)}</small>}</span>
               <span className="playlist-match" data-status={status}>{t(IMPORT_STATUS[status])}</span>
+              {link && <SourceLink url={link} className="playlist-origin-link">{t('Оригинальная страница')} <ArrowUpRight size={12} /></SourceLink>}
               <MatchOptions title={ref.title} choices={available} candidates={candidates} match={match} choice={choices.get(row)} change={(value) => resolve(row, value)} />
             </li>;
           })}

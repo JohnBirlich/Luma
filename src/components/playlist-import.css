@@ -44,3 +44,6 @@
 .playlist-match-options > summary { color: var(--accent-light); cursor: pointer; width: fit-content; }
 .playlist-match-options[open] > summary { margin-bottom: 9px; }
 .playlist-match-options .playlist-import-field { margin: 6px 0; }
+.openwhyd-import-form { display: grid; gap: 9px; width: 100%; }
+.openwhyd-import-form > button { justify-self: start; }
+.playlist-import-preview .playlist-origin-link { grid-column: 1 / -1; }

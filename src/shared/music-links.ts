@@ -1,4 +1,5 @@
 import { parseVkShareLink, vkShelfUrl } from './vk.js';
+import { readYouTubeId, youTubeWatchUrl } from './youtube.js';
 
 export const MUSIC_LINK_SCHEME = 'luma-player';
 const OPEN = `${MUSIC_LINK_SCHEME}://open`;
@@ -8,7 +9,7 @@ const overlayVK = /^audio(-?[1-9]\d{0,14}_[1-9]\d{0,14})$/;
 const trackYandex = /^\/album\/[1-9]\d{0,14}\/track\/[1-9]\d{0,14}\/?$/;
 const playlistYandex = /^\/(?:users\/[a-zA-Z0-9_.-]{1,64}\/playlists\/[1-9]\d{0,14}|playlists\/(?:[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}|[a-zA-Z0-9_-]{1,64}))\/?$/;
 const trackOpenverse = /^\/audio\/[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}\/?$/i;
-export interface MusicLink { provider: 'vk' | 'yandex' | 'openverse'; kind: 'track' | 'playlist'; url: string }
+export interface MusicLink { provider: 'vk' | 'yandex' | 'openverse' | 'youtube'; kind: 'track' | 'playlist'; url: string }
 
 function parse(value: unknown): URL | undefined {
   if (typeof value !== 'string' || value.length > maxLength || /[\\\p{Cc}]/u.test(value) || !/^[a-z-]+:\/\//i.test(value.trim())) return;
@@ -42,6 +43,8 @@ export function readMusicLink(value: unknown): MusicLink | undefined {
   } else if (url.hostname === 'openverse.org' && trackOpenverse.test(url.pathname)) {
     return { provider: 'openverse', kind: 'track', url: url.origin + url.pathname.toLowerCase().replace(/\/?$/, '/') };
   }
+  const youtubeId = readYouTubeId(url.href);
+  if (youtubeId) return { provider: 'youtube', kind: 'track', url: youTubeWatchUrl(youtubeId) };
 }
 
 export function musicLaunchUrl(link: MusicLink) {

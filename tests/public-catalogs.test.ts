@@ -32,9 +32,23 @@ test('Audius only offers available, ungated full streams and ignores search payl
   assert.ok(!isOnlineExternalUrl('https://audius.co/legal/api-terms?next=https://example.org'));
 });
 
+test('Audius can find a full-stream candidate beyond the old 12 results without widening entitlement', () => {
+  const filtered = Array.from({ length: 12 }, () => ({ ...audiusRecording, is_stream_gated: true, access: { stream: false }, preview: { url: 'https://example.invalid/preview' } }));
+  const later = { ...audiusRecording, id: 'QVlxV', title: 'Ambient New Start #2', user: { name: 'Ob_Sounds' },
+    duration: 344, permalink: '/Ob_sounds/ambient-new-start-2' };
+  const tracks = audiusTracks({ data: [...filtered, later] });
+  assert.deepEqual(tracks.map(({ id, title, duration, audioUrl }) => ({ id, title, duration, audioUrl })), [
+    { id: 'audius-QVlxV', title: 'Ambient New Start #2', duration: 344, audioUrl: 'luma://app/media/audius/QVlxV' },
+  ]);
+  assert.equal(commonsMp3Export(tracks[0]), false);
+  assert.equal(audiusTracks({ data: [...Array(36).fill(filtered[0]), later] }).length, 0);
+  const many = Array.from({ length: 36 }, (_, index) => ({ ...later, id: `F${100 + index}` }));
+  assert.equal(audiusTracks({ data: many }).length, 20);
+});
+
 test('Audius is bounded and throttled separately from Internet Archive', async () => {
   const query = 'Газ & jazz';
-  assert.equal(audiusSearchUrl(query).searchParams.get('limit'), '12');
+  assert.equal(audiusSearchUrl(query).searchParams.get('limit'), '36');
   const urls: URL[] = [];
   const catalog = createCommunitySearch(async (value, options) => {
     const url = new URL(value);

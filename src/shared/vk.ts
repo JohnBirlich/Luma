@@ -1,6 +1,9 @@
 export const LEGACY_VK_SESSION = 'persist:luma-vk-web';
 const VK_ORIGIN = 'https://vk.ru';
 export const VK_MUSIC_URL = `${VK_ORIGIN}/audio`;
+export const VK_WIDGET_URL = `${VK_ORIGIN}/widget_playlist.php`;
+export const VK_WIDGET_DOCS_URL = 'https://dev.vk.ru/ru/widgets/playlist';
+export const VK_WIDGET_FRAME_NAME = 'luma-vk-playlist';
 const playlistPath = '/music/playlist/';
 const idPattern = /^[1-9]\d{0,14}$/;
 const ownerPattern = /^-?[1-9]\d{0,14}$/;
@@ -59,6 +62,20 @@ export function parseVkPlaylist(input: string): VkPlaylist | null {
     try { return readWidgetUrl(new URL(frame[2].replaceAll('&amp;', '&'))); } catch { /* Invalid iframe URL. */ }
   }
   return null;
+}
+
+/** Rebuild the URL from validated widget fields, never the pasted document or its options. */
+export function vkWidgetUrl(playlist: VkPlaylist) {
+  const query = new URLSearchParams({ oid: String(playlist.ownerId), pid: String(playlist.playlistId), hash: playlist.hash });
+  return `${VK_WIDGET_URL}?${query}`;
+}
+
+/** The desktop navigation guard allows only the URL created by Luma. */
+export function isVkWidgetFrameUrl(value: string): boolean {
+  try {
+    const playlist = readWidgetUrl(new URL(value));
+    return !!playlist && value === vkWidgetUrl(playlist);
+  } catch { return false; }
 }
 
 const overlayPattern = /^audio_playlist(-?[1-9]\d{0,14})_([1-9]\d{0,14})(?:[\/_]([A-Za-z0-9_-]{1,128}))?\/?$/;

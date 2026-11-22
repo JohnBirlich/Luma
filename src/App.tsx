@@ -31,6 +31,9 @@ import { demoTracks } from './data/demos';
 import { connectionState, recordDiagnostic, subscribeConnection } from './data/diagnostics';
 import { saveSharedPlaylist } from './data/playlist-share';
 import { musicLaunchUrl, readMusicLink } from './shared/music-links';
+import { isYouTubeId } from './shared/youtube';
+import { isVkPlaylist } from './shared/vk';
+import type { MusicEmbed } from './shared/music-embeds';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
 import type { TrackDetails } from './data/track-details';
@@ -51,6 +54,8 @@ import { defaultAudioQuality, isMetered } from './shared/audio-quality';
 import { dataLocale } from './shared/app-info';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
 import { adjacentStationId, stationTracks, STATION_IDS, tuneStation } from './shared/radio';
+import { radioBrowserTrack } from './shared/radio-browser';
+import type { RadioBrowserStation } from './shared/radio-browser';
 import { MAX_PLAYLISTS, playlistTitle, playlistTrackIds } from './shared/luma-playlists';
 import { rememberSearch } from './shared/search-history';
 import { MAX_ONLINE_TRACKS, readOnlineTrack, sessionCatalogId } from './shared/online';
@@ -64,6 +69,7 @@ interface Notice { message: NoticeText; detail?: NoticeText; error?: boolean }
 const noticeText = (t: Text, message: NoticeText) => typeof message === 'function' ? message(t) : t(message);
 const demoIds = demoTracks.map((track) => track.id);
 const noop = () => undefined;
+const noMediaActions = {};
 const PlaylistImport = lazy(() => import('./components/PlaylistImport').then(({ PlaylistImport }) => ({ default: PlaylistImport })));
 const HomePage = lazy(() => import('./components/HomePage').then(({ HomePage }) => ({ default: HomePage })));
 const noTransition = { seconds: 0, next: (): Track | undefined => undefined, advance: (_id: string) => undefined as void };
@@ -89,11 +95,14 @@ export default function App() {
   }, []);
 
   const [localTracks, setLocalTracks] = useState<Track[]>([]);
+  const [discoveredStation, setDiscoveredStation] = useState<Track>();
   const [ready, setReady] = useState(false);
   const [working, setWorking] = useState(false);
   const [page, setPage] = useState<Page>(boot.playback.startPage === 'local' ? 'library' : boot.playback.startPage);
   const [homeTab, setHomeTab] = useState<HomeTab>('home');
   const [homeQuery, setHomeQuery] = useState('');
+  const [embed, setEmbed] = useState<MusicEmbed>();
+  const closeEmbed = useCallback(() => setEmbed(undefined), []);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>();
   const settingsFrom = useRef<{ page: Exclude<Page, 'settings'>; top: number }>({ page: 'player', top: 0 });
   const returningTop = useRef(0);
@@ -162,7 +171,7 @@ export default function App() {
   }), [originals, covers, details]);
   const stationIds = useMemo(() => new Set(preferences.stationIds), [preferences.stationIds]);
   const collection = useMemo(() => tracks.filter(({ online, id }) => !online || savedOnline.has(id)), [tracks, savedOnline]);
-  const byId = useMemo(() => new Map([...tracks, ...stationTracks].map((track) => [track.id, track])), [tracks]);
+  const byId = useMemo(() => new Map([...tracks, ...stationTracks, ...(discoveredStation ? [discoveredStation] : [])].map((track) => [track.id, track])), [tracks, discoveredStation]);
   const favoriteIds = useMemo(() => new Set(preferences.favorites), [preferences.favorites]);
   const dislikedIds = useMemo(() => new Set(preferences.disliked), [preferences.disliked]);
   const favorites = useMemo(() => tracks.filter(({ id }) => favoriteIds.has(id)), [tracks, favoriteIds]);
@@ -173,6 +182,18 @@ export default function App() {
   const modalOpen = Boolean(coverTarget || detailsTrack || showEqualizer || showAppearance || importPlaylist || (!widget && musicDialog));
   const { kind: presentationKind, show: showStage, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
   const presentationOpen = presentationKind !== null;
+  const homeVisible = page === 'player' && !widget && !modalOpen && !presentationOpen;
+  const embedsAvailable = homeVisible && !widgetPending && !homeQuery.trim() && connected && !dropActive
+    && !(queueOpen && window.matchMedia('(max-width: 1079px)').matches);
+  const embedOpen = embedsAvailable && embed?.kind === homeTab;
+  useLayoutEffect(() => { if (embed && !embedOpen) closeEmbed(); }, [closeEmbed, embedOpen, embed]);
+  useEffect(() => {
+    if (!embed) return;
+    const hide = () => { if (document.hidden) closeEmbed(); };
+    document.addEventListener('visibilitychange', hide);
+    hide();
+    return () => document.removeEventListener('visibilitychange', hide);
+  }, [closeEmbed, embed]);
   const canUseLyrics = !!current && !live && !sessionCatalogId(current.id);
   const karaokeOpen = presentationKind === 'karaoke' && canUseLyrics;
   const showPresentation = useCallback(() => showStage('player'), [showStage]);
@@ -308,6 +329,22 @@ export default function App() {
     load(track, true);
   }, [byId, commit, connected, load, toggle]);
 
+  const tuneDiscoveredStation = useCallback((station: RadioBrowserStation) => {
+    if (!ready || busy.current) return;
+    const track = radioBrowserTrack(station);
+    if (!track) return;
+    const state = queueRef.current;
+    if (state.currentId === track.id) { toggle(); return; }
+    if (!connected) return;
+    const previous = discoveredStation?.id;
+    // Keep only one dynamic radio reference in the session, even after a new search.
+    const queue = previous && previous !== state.currentId && previous !== track.id ? removeFromQueue(state, previous) : state;
+    setDiscoveredStation(track);
+    commit(tuneStation(queue, track.id));
+    load(track, true);
+    void window.luma?.radioBrowser?.click(track.id).catch(() => {});
+  }, [ready, connected, discoveredStation, commit, load, toggle]);
+
   const next = useCallback((finished = false) => {
     const state = queueRef.current;
     const station = adjacentStationId(state.currentId, 1);
@@ -356,7 +393,7 @@ export default function App() {
       seekbackward: ({ seekOffset }: MediaSessionActionDetails) => seek(-(seekOffset ?? playback.seekStep), true),
     }),
   }), [next, previous, play, pause, seek, live, connected, playback.seekStep]);
-  useMediaSession(current, player.playing, player.elapsed, player.duration, mediaActions, playback.publishTrack);
+  useMediaSession(embedOpen ? null : current, player.playing, player.elapsed, player.duration, embedOpen ? noMediaActions : mediaActions, playback.publishTrack);
 
   const setVolume = useCallback((value: number) => {
     const volume = clamp(value, 0, 1);
@@ -444,6 +481,7 @@ export default function App() {
         if (!event.repeat) choose();
         return;
       }
+      if (embedOpen) return; // The visible embed owns its transport controls.
       if (!event.altKey && !event.metaKey && !event.ctrlKey && event.code === 'KeyF' && current
         && !(event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]'))) {
         event.preventDefault();
@@ -467,7 +505,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [choose, mute, seek, toggle, next, previous, live, modalOpen, presentationOpen, presentationKind, showPresentation, showKaraoke, closePresentation, current, queueOpen, widget, changeWidget, openSettings, playback.seekStep]);
+  }, [choose, mute, seek, toggle, next, previous, live, modalOpen, presentationOpen, presentationKind, showPresentation, showKaraoke, closePresentation, current, queueOpen, widget, changeWidget, openSettings, playback.seekStep, embedOpen]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -711,6 +749,15 @@ export default function App() {
     navigate('player');
     selectHomeTab('radio');
   }, [navigate, selectHomeTab]);
+  const openEmbed = useCallback((selection: MusicEmbed) => {
+    if (!connected || document.hidden || !(selection.kind === 'youtube' ? isYouTubeId(selection.videoId) : isVkPlaylist(selection.playlist))) return;
+    pause(); // Keep the local queue and its position. The embed has its own controls.
+    if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
+    setPage('player');
+    setHomeTab(selection.kind);
+    setHomeQuery('');
+    setEmbed(selection);
+  }, [connected, pause]);
   const radioActive = page === 'player' && homeTab === 'radio' && !homeQuery.trim();
   const openEqualizer = () => setShowEqualizer(true);
   const toggleQueue = () => setQueueOpen((open) => !open);
@@ -780,8 +827,9 @@ export default function App() {
             tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
-            currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={page === 'player' && !widget && !modalOpen && !presentationOpen}
-            busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} loading={!!player.loading}
+            currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={homeVisible}
+            embed={embedOpen ? embed : undefined} embedsAvailable={embedsAvailable} openEmbed={openEmbed} closeEmbed={closeEmbed}
+            busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} tuneDiscoveredStation={tuneDiscoveredStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
             openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose} openMusicLink={() => setMusicDialog({})}
             sharePlaylist={sharePlaylist} seedFavorites={seedFavorites} openFavorites={() => navigate('favorites')}
@@ -841,9 +889,9 @@ export default function App() {
         favorite={(live ? stationIds : favoriteIds).has(current.id)} disliked={dislikedIds.has(current.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
         toggleQueue={() => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, fullscreenQueue: !data.appearance.fullscreenQueue } }))}
         openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} />}
-      <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />
-      <audio ref={player.blendRef} data-blend-audio crossOrigin="anonymous" preload="none" />
-      <audio ref={player.streamRef} data-online-audio preload="none" />
+      <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" onPlay={closeEmbed} />
+      <audio ref={player.blendRef} data-blend-audio crossOrigin="anonymous" preload="none" onPlay={closeEmbed} />
+      <audio ref={player.streamRef} data-online-audio preload="none" onPlay={closeEmbed} />
       <input type="file" ref={fileInput} hidden accept={AUDIO_ACCEPT} multiple onChange={(event) => {
         handleFiles(Array.from(event.currentTarget.files ?? []));
         event.currentTarget.value = '';
@@ -857,7 +905,7 @@ export default function App() {
         </div>}
       </div>
       {musicDialog && !widget && !presentationOpen && <MusicLinkDialog key={musicDialog.url ?? 'paste'} initial={musicDialog.url} close={() => setMusicDialog(undefined)}
-        connected={connected} disabled={working || !ready} choose={chooseOnline} />}
+        connected={connected} disabled={working || !ready} choose={chooseOnline} openYouTube={(videoId) => openEmbed({ kind: 'youtube', videoId })} />}
       {importPlaylist && <Suspense fallback={null}><PlaylistImport collection={collection} close={() => setImportPlaylist(false)} save={(title, items) => {
         if (!savePlaylist(title, items)) return false;
         setImportPlaylist(false);

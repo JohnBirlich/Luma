@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import type { FormEvent, ReactNode } from 'react';
 import { ArrowUpRight, BookmarkPlus, Check, ChevronDown, HardDriveDownload, Cloud, CloudOff, Download, Globe2, Link2, ListPlus, Play, RotateCw, Search } from 'lucide-react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
-import { CATALOG_DEBOUNCE_MS, catalogQuery, catalogTargets, mergeCatalogResults, searchCatalogs } from '../data/catalog-search';
+import { CATALOG_DEBOUNCE_MS, catalogQuery, catalogTargets, compareJamendo, mergeCatalogResults, searchCatalogs } from '../data/catalog-search';
 import type { CatalogId, CatalogResult } from '../data/catalog-search';
 import { importOnlineTrack } from '../data/online';
+import { useMusicServiceStatus } from '../data/music-services';
 import { formatTime } from '../shared/media';
 import type { Track } from '../shared/media';
 import { bundleRecordings, recordingEvidence } from '../shared/recording-match';
@@ -80,7 +81,8 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
   const desktop = !!window.luma?.searchCommunity;
   const term = catalogQuery(query);
   const phish = Boolean(phishSongQuery(term));
-  const targets = useMemo(() => catalogTargets(desktop, phish), [desktop, phish]);
+  const directJamendo = useMusicServiceStatus('jamendo').status?.configured === true;
+  const targets = useMemo(() => catalogTargets(desktop, phish, directJamendo), [desktop, phish, directJamendo]);
   const [manual, setManual] = useState<SearchAttempt>();
   const attempt = manual?.term === term ? manual : undefined;
   // A manual request (including a retry) never carries over to later input.
@@ -89,6 +91,9 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
   const active = !!term && connected && visible && foreground && (autoCatalogSearch || !!attempt);
   const results = active && snapshot?.term === term && snapshot.attempt === attempt ? snapshot.results : undefined;
   const settled = targets.flatMap(({ id }) => results?.[id] ?? []);
+  const indexed = results?.openverse, direct = results?.jamendo_direct;
+  const comparison = directJamendo && direct && indexed && 'tracks' in direct && 'tracks' in indexed
+    ? compareJamendo(indexed.tracks, direct.tracks) : undefined;
   const searching = active && settled.length < targets.length;
   const tracks = mergeCatalogResults(settled);
   const { bundles, bundledIds } = bundleRecordings(tracks, library.filter(({ online }) => !online));
@@ -155,6 +160,8 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
           </li>;
         })}
       </ul>
+      {comparison && <p className="catalog-privacy" data-jamendo-comparison>{t('Jamendo напрямую: {0} дополнительных записей · {1} совпали с выдачей Openverse.', comparison.additional, comparison.matches)}</p>}
+      {directJamendo && <p className="catalog-privacy">{t('Прямой Jamendo: воспроизведение и очередь только в текущей сессии.')}</p>}
       <p className="catalog-privacy">{t(desktop ? 'При поиске каталоги получают только текущий запрос.'
         : 'В веб-версии доступны Openverse и концертный архив Phish.in.')}</p>
       <p className="catalog-privacy">{t('Закладка сохраняет ссылку, а не аудиофайл.')}</p>

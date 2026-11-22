@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { MUSIC_EMBED_FRAME_SOURCES } from './src/shared/music-embeds';
+
+const headers = { 'Content-Security-Policy': `frame-src ${MUSIC_EMBED_FRAME_SOURCES}` };
 
 export default defineConfig({
   base: './',
@@ -10,6 +13,7 @@ export default defineConfig({
   build: { assetsInlineLimit: 0 },
   server: {
     allowedHosts: ['.e2b.app'],
-    headers: { 'Content-Security-Policy': "frame-src 'none'" },
+    headers,
   },
+  preview: { allowedHosts: ['.e2b.app'], headers },
 });

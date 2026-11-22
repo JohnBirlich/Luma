@@ -17,13 +17,17 @@ import type { OnlineAction } from './OnlineMusic';
 import { UpdatesPanel } from './UpdatesPanel';
 import { useInstalledBuild } from './About';
 import { RadioStations } from './RadioStations';
+import type { RadioBrowserStation } from '../shared/radio-browser';
 import { Shelf, Tile, TrackRows } from './MusicShelf';
 import { Discovery } from './Discovery';
 import { MyPlaylists } from './MyPlaylists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
 import { SceneBackground } from './SceneBackground';
+import { YouTubePanel } from './YouTubePanel';
+import { VkMusicPanel } from './VkMusicPanel';
+import type { MusicEmbed } from '../shared/music-embeds';
 
-const TABS = { home: 'Для вас', mine: 'Моя музыка', radio: 'Радио', updates: 'Обновления' } as const;
+const TABS = { home: 'Для вас', mine: 'Моя музыка', radio: 'Радио', vk: 'VK Музыка', youtube: 'YouTube', updates: 'Обновления' } as const;
 export type HomeTab = keyof typeof TABS;
 interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   tab: HomeTab;
@@ -48,6 +52,7 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   playCatalog(tracks: Track[], start?: string): boolean;
   stationIds: ReadonlySet<string>;
   saveStation(id: string): void;
+  tuneDiscoveredStation(station: RadioBrowserStation): void;
   loading: boolean;
   playlists: LumaPlaylist[];
   playlistTracks: ReadonlyMap<string, Track>;
@@ -55,6 +60,10 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   removePlaylist(id: string): void;
   openPlaylistImport(): void;
   openMusicLink(): void;
+  embed?: MusicEmbed;
+  embedsAvailable: boolean;
+  openEmbed(selection: MusicEmbed): void;
+  closeEmbed(): void;
   sharePlaylist(title: string, tracks: readonly Track[]): void;
   seedFavorites(tracks: readonly Track[]): void;
   openFavorites(): void;
@@ -80,7 +89,8 @@ function Updates({ tracks, play, currentId, playing }: Pick<HomeProps, 'tracks' 
 export const HomePage = memo(function HomePage(props: HomeProps) {
   const t = useText();
   const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary } = props;
-  const { tab, query, setQuery, selectTab } = props;
+  const { tab, query, setQuery, selectTab, embed, embedsAvailable, openEmbed, closeEmbed } = props;
+  const embedTab = tab === 'vk' || tab === 'youtube';
   const [composing, setComposing] = useState(false);
   const [tune, setTune] = useState(false);
   const [mixType, setMixType] = useState<MixType>('library');
@@ -117,10 +127,10 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       <div className="hub-heading"><div>
         <p className="overline page-kicker"><span />{t('Ваша коллекция')}</p>
         <h1>{t('Главная')}</h1>
-      </div><div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
+      </div>{!embedTab && <div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
         onKeyDown={(event) => { if (event.key === 'Enter' && !composing && !event.nativeEvent.isComposing) props.rememberSearch(query); }}
         onChange={(event) => setQuery(event.currentTarget.value)} onCompositionStart={() => setComposing(true)}
-        onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div></div>
+        onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div>}</div>
       <div className="hub-topline"><nav aria-label={t('Разделы на главной')} className="hub-tabs">
         {(Object.keys(TABS) as HomeTab[]).map((id) => <button type="button" key={id} data-home-tab={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => selectTab(id)}>{t(TABS[id])}</button>)}
       </nav><div className="hub-top-actions">
@@ -133,7 +143,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         <button type="button" className="icon-button" onClick={props.openMixes} title={t('Миксы Luma')} aria-label={t('Миксы Luma')}><ListMusic size={18} /></button>
       </div></div>
     </header>
-    <SearchHistory history={props.searchHistory} select={(value) => { setQuery(value); props.rememberSearch(value); formInput.current?.focus(); }} clear={props.clearSearchHistory} />
+    {!embedTab && <SearchHistory history={props.searchHistory} select={(value) => { setQuery(value); props.rememberSearch(value); formInput.current?.focus(); }} clear={props.clearSearchHistory} />}
     {term ? <OnlineSearch key={catalogTerm} query={query} visible={visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
       library={found} playLibrary={(id) => play(id, true)} remember={props.rememberSearch}
       renderLibrary={(items) => items.length > 0 || !found.length ? <Shelf title={t('В вашей медиатеке')}>
@@ -185,9 +195,13 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         {!mine.length && data.demos.length > 0 && <Shelf title={t('Демоколлекция')}><TrackRows {...rows} tracks={data.demos} strip /></Shelf>}
       </>}
       {tab === 'radio' && <RadioStations saved={props.stationIds} activeId={currentId} loading={props.loading} playing={playing} busy={props.busy}
-        connected={connected} toggleSave={props.saveStation} play={play} />}
+        connected={connected} toggleSave={props.saveStation} play={play} tuneDiscovered={props.tuneDiscoveredStation} />}
+      {tab === 'vk' && <VkMusicPanel playlist={embed?.kind === 'vk' ? embed.playlist : undefined} connected={connected} available={embedsAvailable}
+        open={(playlist) => openEmbed({ kind: 'vk', playlist })} close={closeEmbed} />}
+      {tab === 'youtube' && <YouTubePanel videoId={embed?.kind === 'youtube' ? embed.videoId : undefined} connected={connected} available={embedsAvailable}
+        open={(videoId) => openEmbed({ kind: 'youtube', videoId })} close={closeEmbed} />}
       {tab === 'updates' && <Updates tracks={tracks} {...rows} />}
     </>}
-    <footer className="hub-footer"><Headphones size={14} />{t('Для миксов Luma не нужен аккаунт.')}</footer>
+    {!embedTab && <footer className="hub-footer"><Headphones size={14} />{t('Для миксов Luma не нужен аккаунт.')}</footer>}
   </div>;
 });

@@ -16,6 +16,10 @@ import type { LastFmStatus, ListeningEvent } from './lastfm.js';
 import type { Lyrics, LyricsQuery } from './lyrics.js';
 import type { Fingerprint, MetadataCandidate } from './recognition.js';
 import type { MusicBrainzQuery } from './musicbrainz.js';
+import type { CredentialService, MusicServiceStatus } from './music-services.js';
+import type { GeniusAnnotation, GeniusSong } from './genius.js';
+import type { OpenwhydDraft } from './openwhyd.js';
+import type { RadioBrowserQuery, RadioBrowserStation } from './radio-browser.js';
 
 export const AUDIO_MIMES = {
   mp3: 'audio/mpeg',
@@ -126,6 +130,22 @@ export interface DesktopBridge {
     record(event: ListeningEvent): void;
     onChange(callback: (status: LastFmStatus) => void): () => void;
   };
+  musicServices: {
+    status(service: CredentialService): Promise<MusicServiceStatus>;
+    configure(service: CredentialService, value: string): Promise<MusicServiceStatus>;
+    remove(service: CredentialService): Promise<MusicServiceStatus>;
+    enableListens(enabled: boolean): Promise<MusicServiceStatus>;
+    recordLocalListen(id: string, event: ListeningEvent): void;
+    searchJamendo(id: number, query: string): Promise<OnlineTrack[]>;
+    searchGenius(query: string): Promise<GeniusSong[]>;
+    geniusAnnotations(id: number): Promise<GeniusAnnotation[]>;
+    onChange(callback: (service: CredentialService, status: MusicServiceStatus) => void): () => void;
+  };
+  radioBrowser: {
+    search(query: RadioBrowserQuery): Promise<RadioBrowserStation[]>;
+    click(id: string): Promise<void>;
+  };
+  importOpenwhyd(url: string): Promise<OpenwhydDraft>;
   diagnostics: DiagnosticsBridge;
   window: {
     minimize(): void;

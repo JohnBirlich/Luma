@@ -2,6 +2,7 @@ import { readGenres } from './media.js';
 import type { Track } from './media.js';
 import { cleanTrackText } from './russian.js';
 import { readIsrc } from './recording-match.js';
+import { radioBrowserUuid } from './radio-browser.js';
 
 export const OPENVERSE_API = 'https://api.openverse.org/v1/audio/';
 const OPENVERSE_ORIGIN = new URL(OPENVERSE_API).origin;
@@ -23,7 +24,7 @@ export const ONLINE_SOURCES = { jamendo: 'Jamendo', wikimedia_audio: 'Wikimedia 
 export type OnlineSource = keyof typeof ONLINE_SOURCES;
 export type CommunitySource = 'netlabels' | 'southern_city';
 export type DesktopCatalogSource = CommunitySource | 'audius';
-export type OnlineFilter = OnlineSource | DesktopCatalogSource | 'all';
+export type OnlineFilter = OnlineSource | DesktopCatalogSource | 'jamendo_direct' | 'all';
 export const MAX_ONLINE_TRACKS = 180;
 export interface OnlineCreditData { source: OnlineSource | 'broadcast'; page: string; license: string; licenseUrl: string }
 export interface OnlineTrack extends Track { online: OnlineCreditData & { source: OnlineSource } }
@@ -52,8 +53,17 @@ export const archiveId = (value: unknown): value is string => typeof value === '
 const audiusTrackPage = /^\/[\w-]{1,64}\/[\w-]{1,180}$/;
 export const audiusId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9]{3,16}$/.test(value);
 const phishId = (value: unknown): value is string => typeof value === 'string' && /^phish-[1-9]\d{0,11}$/.test(value);
+export function jamendoTrackId(value: unknown) {
+  const id = typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : value;
+  return typeof id === 'string' && /^[1-9]\d{0,11}$/.test(id) ? id : undefined;
+}
 export const sessionCatalogId = (value: unknown): boolean => typeof value === 'string' &&
-  ((value.startsWith('audius-') && audiusId(value.slice(7))) || phishId(value));
+  ((value.startsWith('audius-') && audiusId(value.slice(7))) ||
+    (value.startsWith('jamendo-') && !!jamendoTrackId(value.slice(8))) || !!radioBrowserUuid(value) || phishId(value));
+
+export function jamendoRecording(track: OnlineTrack) {
+  return track.online.source === 'jamendo' ? jamendoTrackId(track.online.page.split('/')[4]) : undefined;
+}
 export const phishSlug = (value: unknown): value is string => typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,99}$/.test(value);
 export const phishDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/.test(value);
 export const audiusMediaUrl = (id: string) => `luma://app/media/audius/${id}`;
@@ -139,7 +149,8 @@ export function readOnlineTrack(value: unknown): OnlineTrack | undefined {
   const id = typeof row.id === 'string' && row.id.startsWith('ov-') ? row.id.slice(3) : '';
   const source = info.source;
   if (source !== 'jamendo' && source !== 'wikimedia_audio' && source !== 'netlabels' && source !== 'audius' && source !== 'phishin') return;
-  const openverse = source === 'jamendo' || source === 'wikimedia_audio';
+  const jamendo = source === 'jamendo' && typeof row.id === 'string' && row.id.startsWith('jamendo-') ? jamendoTrackId(row.id.slice(8)) : undefined;
+  const openverse = (source === 'jamendo' && !jamendo) || source === 'wikimedia_audio';
   if (openverse && !uuid.test(id)) return;
   const pageUrl = webUrl(info.page), audioUrl = webUrl(row.audioUrl), licenseUrl = webUrl(info.licenseUrl);
   const page = pageUrl && sourcePage(pageUrl, source);
@@ -149,10 +160,10 @@ export function readOnlineTrack(value: unknown): OnlineTrack | undefined {
   const media = audius ? row.audioUrl === audiusMediaUrl(audius) && audiusMediaUrl(audius)
     : page && audioUrl && sourceMedia(audioUrl, source, page);
   const license = audius || phish ? { label: 'Только в этой сессии', url: phish ? PHISH_LEGAL.taping : '' } : licenseUrl && ccPage(licenseUrl);
-  if (!page || !media || !license) return;
+  if (!page || !media || !license || (jamendo && page.pathname !== `/track/${jamendo}`)) return;
   const name = title(row.title);
   if (!name) return;
-  const normalizedId = openverse ? `ov-${id.toLowerCase()}` : audius ? `audius-${audius}` : phish || archiveTrackId(media);
+  const normalizedId = openverse ? `ov-${id.toLowerCase()}` : audius ? `audius-${audius}` : jamendo ? `jamendo-${jamendo}` : phish || archiveTrackId(media);
   if (!openverse && row.id !== normalizedId && row.id !== undefined) return;
   const art = openverse ? webUrl(row.artworkUrl) : undefined;
   const cover = art?.origin === OPENVERSE_ORIGIN && art.pathname === `/v1/audio/${id}/thumb/` ? art.origin + art.pathname : undefined;

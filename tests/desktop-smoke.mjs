@@ -9,19 +9,23 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, clipboard, dialog, powerMonitor, screen, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
 import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
-import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
+import { editorialPlaylist, isVkWidgetFrameUrl, LEGACY_VK_SESSION, VK_MUSIC_URL, VK_WIDGET_DOCS_URL, VK_WIDGET_FRAME_NAME,
+  VK_WIDGET_URL, vkPlaylistUrl, vkWidgetUrl } from '../dist-electron/src/shared/vk.js';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
 import { alternateRecording, recording } from './fixtures/musicbrainz.mjs';
 import { audioDbTrack, phishSong, phishTrack, untimedLyrics } from './fixtures/free-sources.mjs';
 import { wordLyrics } from './fixtures/word-lyrics.mjs';
 import { installerName, LATEST_RELEASE_API, RELEASE_REPO } from '../dist-electron/src/shared/release-updates.js';
 import { musicLaunchUrl, readMusicLink } from '../dist-electron/src/shared/music-links.js';
+import { isYouTubeEmbedUrl, YOUTUBE_EMBED_ORIGIN, YOUTUBE_FRAME_NAME, youTubeEmbedUrl, youTubeWatchUrl } from '../dist-electron/src/shared/youtube.js';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
 import { audiusRecording, creatorStream, storageStream } from './fixtures/public-catalogs.mjs';
 import { parseFile } from 'music-metadata';
 import { taggedMp3 } from './fixtures/mp3.mjs';
 import { probeRadio } from './live-radio.mjs';
+import { browserStation, discoveryStation, geniusSearchResponse, geniusReferentsResponse, geniusToken, jamendoClient,
+  jamendoResponse, listenBrainzToken, openwhydExample, openwhydResponse } from './fixtures/music-providers.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
@@ -530,11 +534,18 @@ async function smoke() {
   const fakeToken = 'token-'.repeat(5), fakeSession = 'session-'.repeat(4);
   const authPages = [];
   let apiStatus = 11;
+  const listensPosted = [];
   const originalOpen = shell.openExternal;
   const cacheSession = session.defaultSession;
   shell.openExternal = async (url) => { authPages.push(url); };
   cacheSession.protocol.handle('https', async (request) => {
     const url = new URL(request.url);
+    if (url.origin === 'https://api.listenbrainz.org') {
+      assert.equal(request.headers.get('Authorization'), `Token ${listenBrainzToken}`);
+      assert.equal(url.search, '');
+      if (url.pathname === '/1/validate-token') return Response.json({ valid: true, user_name: 'Fixture listener' });
+      if (url.pathname === '/1/submit-listens') { listensPosted.push(await request.json()); return Response.json({ status: 'ok' }); }
+    }
     if (url.origin !== 'https://ws.audioscrobbler.com') return new Response(null, { status: 404 });
     if (url.searchParams.get('method') === 'auth.getToken') return apiStatus
       ? Response.json({ error: apiStatus }, { status: 503 }) : Response.json({ token: fakeToken });
@@ -560,6 +571,19 @@ async function smoke() {
     await waitFor('account is connected with scrobbling disabled', () => run(`document.querySelector('[aria-label="Last.fm"] .setting-status')?.textContent === 'Smoke Listener' && document.querySelector('[aria-label="Отправлять прослушивания в Last.fm"]')?.getAttribute('aria-checked') === 'false'`));
     await clickLastFm('Удалить ключи и отключить');
     await waitFor('credentials and session are cleared', () => run(`window.luma.lastfm.status().then((s) => !s.configured && !s.user && !s.enabled)`));
+    const listenBrainz = '.music-service[aria-label="ListenBrainz"]';
+    await waitFor('ListenBrainz uses its own token', () => run(`!!document.querySelector('${listenBrainz} input[type=password]')`));
+    await fill(`${listenBrainz} input[type=password]`, listenBrainzToken);
+    await click(`${listenBrainz} button[type=submit]`);
+    await waitFor('connection does not grant consent to publish', () => run(`document.querySelector('${listenBrainz} .setting-status')?.textContent === 'Fixture listener'
+      && document.querySelector('${listenBrainz} input[type=checkbox]')?.checked === false`));
+    await click(`${listenBrainz} input[type=checkbox]`);
+    await waitFor('ListenBrainz requires the separate opt-in switch', () => run(`window.luma.musicServices.status('listenbrainz').then(s => s.enabled)`));
+    assert.equal(await run(`window.luma.lastfm.status().then(s => s.enabled)`), false);
+    await run(`void [...document.querySelectorAll('${listenBrainz} button')].find(button => button.textContent === 'Удалить ключ').click()`);
+    await waitFor('removing the token turns off ListenBrainz', () => run(`window.luma.musicServices.status('listenbrainz').then(s => !s.configured && !s.enabled)`));
+    assert.deepEqual(listensPosted, []);
+
   } finally {
     cacheSession.protocol.unhandle('https');
     shell.openExternal = originalOpen;
@@ -584,7 +608,8 @@ async function smoke() {
   const radioCalls = [];
   const recordStation = STATIONS.find(({ id }) => id === 'radio-record-record');
   const piStation = STATIONS.find(({ id }) => id === 'radio-ru-pi-fm');
-  const radioFixtureUrls = new Set([recordStation.stream, piStation.stream]);
+  const radioFixtureUrls = new Set([recordStation.stream, piStation.stream, discoveryStation.url_resolved]);
+  const directorySearches = [];
   const recordTrack = stationTracks.find(({ id }) => id === recordStation.id);
   const webStation = RADIO_DIRECTORY.find(({ id }) => id === 'radio-ru-mir-far-east');
   const stationSection = '[aria-labelledby="radio-stations"]';
@@ -629,9 +654,37 @@ async function smoke() {
   const economyUrl = jamendoRecording.url.replace('format=mp32', 'format=mp31');
 
   let offlineFixture = false;
+  const youtubeRequests = [];
+  const vkWidgetRequests = [];
+  const testAudioPath = '/luma-smoke-audio.mp3';
+  const isEmbedAudio = (url) => url.pathname === testAudioPath && [YOUTUBE_EMBED_ORIGIN, new URL(VK_WIDGET_URL).origin].includes(url.origin);
   session.defaultSession.protocol.handle('https', async (request) => {
     if (offlineFixture) return new Response(null, { status: 503 });
     const url = new URL(request.url);
+    if (isYouTubeEmbedUrl(url.href) || isVkWidgetFrameUrl(url.href)) {
+      const isVk = isVkWidgetFrameUrl(url.href);
+      (isVk ? vkWidgetRequests : youtubeRequests).push(url.href);
+      return new Response(`<!doctype html><p id=embed-fixture>Visible ${isVk ? 'VK' : 'YouTube'} fixture</p>
+        <audio controls preload="none" src="${testAudioPath}"></audio>`,
+        { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+    }
+    if (url.origin === 'https://api.jamendo.com' && url.pathname === '/v3.0/tracks/') {
+      assert.equal(url.searchParams.get('client_id'), jamendoClient);
+      return Response.json(jamendoResponse);
+    }
+    if (url.origin === 'https://api.genius.com') {
+      assert.equal(request.headers.get('Authorization'), `Bearer ${geniusToken}`);
+      if (url.pathname === '/search') return Response.json(geniusSearchResponse);
+      if (url.pathname === '/referents') return Response.json(geniusReferentsResponse);
+    }
+    if (url.href === `${openwhydExample}?format=json&limit=201`) return Response.json(openwhydResponse);
+    if (/^[a-z0-9-]+\.api\.radio-browser\.info$/.test(url.hostname)) {
+      if (url.pathname === '/json/stations/search') {
+        directorySearches.push(Object.fromEntries(url.searchParams));
+        return Response.json([discoveryStation, browserStation]);
+      }
+      if (url.pathname === `/json/url/${discoveryStation.stationuuid}`) return Response.json({ ok: true });
+    }
     if (url.origin === 'https://itunes.apple.com' && url.pathname === '/search') {
       const term = url.searchParams.get('term');
       titleQueries.push(term);
@@ -702,9 +755,10 @@ async function smoke() {
     if (url.href === 'https://archive.org/metadata/SCL108') return Response.json(archiveRelease);
     if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
     const radioFixture = radioFixtureUrls.has(url.href);
-    if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, storageStream, phishTrack.mp3_url].includes(url.href)) {
+    const embedAudio = isEmbedAudio(url);
+    if (embedAudio || radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, storageStream, phishTrack.mp3_url].includes(url.href)) {
       // Exercise the production CSP and a real decoder without requiring network or a specific codec CDN.
-      (radioFixture ? radioCalls : streamCalls).push(url.href);
+      if (!embedAudio) (radioFixture ? radioCalls : streamCalls).push(url.href);
       const range = request.headers.get('Range');
       const bytes = range && parseByteRange(range, sample.length);
       const body = bytes ? sample.subarray(bytes.start, bytes.end + 1) : sample;
@@ -719,6 +773,16 @@ async function smoke() {
   const playOnline = '.online-result-actions button[aria-label="Слушать онлайн: All About Jazz"]';
   const queueOnline = '.online-result-actions button[aria-label="В очередь: Jazz-Sax"]';
   try {
+    const services = 'window.luma.musicServices';
+    try {
+      assert.equal(await run(`${services}.configure('jamendo', ${JSON.stringify(jamendoClient)}).then(s => s.configured)`), true);
+      assert.deepEqual(await run(`${services}.searchJamendo(531, 'jazz').then(rows => rows.map(({ id }) => id))`), ['jamendo-1348466', 'jamendo-1848357']);
+      assert.equal(await run(`${services}.configure('genius', ${JSON.stringify(geniusToken)}).then(s => s.configured)`), true);
+      assert.equal(await run(`${services}.searchGenius('Coldplay Yellow').then(rows => rows[0]?.page)`), 'https://genius.com/Coldplay-yellow-lyrics');
+      assert.deepEqual(await run(`${services}.geniusAnnotations(235729)`), [{ id: 903, excerpt: 'A short contextual note.' }]);
+    } finally {
+      await run(`(async () => { await ${services}.remove('jamendo'); await ${services}.remove('genius'); })()`);
+    }
     await go('Главная');
     await waitFor('local track metadata editor', () => run(`!!document.querySelector('.track-details-button')`));
     await click('.track-details-button');
@@ -924,7 +988,7 @@ async function smoke() {
         assert.equal(await run(`window.luma.openOnlineLink(${JSON.stringify(url)}).then(() => false, () => true)`), true);
       }
       assert.deepEqual(await run(`[...document.querySelectorAll('.hub-tabs button')].map(button => button.textContent)`),
-        ['Для вас', 'Моя музыка', 'Радио', 'Обновления']);
+        ['Для вас', 'Моя музыка', 'Радио', 'VK Музыка', 'YouTube', 'Обновления']);
       await click('[data-home-tab="home"]');
       await waitFor('genres, moods and former Browse collections are together, in order', () => run(`(() => {
         const headings = [...document.querySelectorAll('.home-page .hub-shelf-head h2')].map(h => h.textContent);
@@ -950,9 +1014,91 @@ async function smoke() {
       assert.deepEqual(opened.splice(0), [vkLink.url]);
       await click('.music-link-dialog header button');
       assert.equal(await run(`window.luma.musicLinks.openBrowser('https://example.invalid/').then(() => false, () => true)`), true);
+      const embedQueue = (await preferences()).queue;
+      const findEmbedFixture = (name, src, label) => waitFor(`actual Electron subframe loads the visible ${label} fixture`, () => {
+        const frame = window.webContents.mainFrame.frames.find(({ name: current, url }) => current === name && url === src);
+        return frame?.executeJavaScript(`document.querySelector('#embed-fixture')?.textContent === 'Visible ${label} fixture'
+          && typeof window.luma === 'undefined' && typeof window.require === 'undefined'`).then((ready) => ready && frame).catch(() => false);
+      });
+      const decodeEmbed = async (frame, label) => {
+        assert.equal(await frame.executeJavaScript(`document.querySelector('audio').paused`), true, `${label} does not autoplay`);
+        await frame.executeJavaScript(`document.querySelector('audio').play()`, true);
+        await waitFor(`${label} decodes fixture audio inside its sandbox`, () => frame.executeJavaScript(`document.querySelector('audio').currentTime > .1`));
+      };
+      const vkFrame = `iframe[name="${VK_WIDGET_FRAME_NAME}"]`;
+      const vkExampleSrc = vkWidgetUrl(editorialPlaylist);
+      const vkOwn = { ownerId: -31, playlistId: 4, hash: 'luma-smoke-widget' };
+      await click('[data-home-tab="vk"]');
+      await waitFor('VK space offers the official widget', () => run(`!!document.querySelector('.vk-widget-example')`));
+      assert.equal(await run(`document.querySelector('.vk-music-limit').textContent`), 'Первые 5 треков');
+      assert.deepEqual(vkWidgetRequests, [], 'opening the tab does not contact VK');
+      await fill('.vk-widget-form textarea', vkPlaylistUrl(vkOwn));
+      await click('.vk-widget-form button[type="submit"]');
+      await waitFor('a plain playlist link is not a widget', () => run(`!!document.querySelector('.vk-widget-error')`));
+      assert.deepEqual(vkWidgetRequests, []);
+      await click('.vk-widget-form a');
+      await waitFor('the official VK generator opens only after a click', () => opened.at(-1) === VK_WIDGET_DOCS_URL);
+      opened.length = 0;
+      await click('.vk-widget-example');
+      const currentVk = await findEmbedFixture(VK_WIDGET_FRAME_NAME, vkExampleSrc, 'VK');
+      assert.equal(await run(`(() => {
+        const delegate = document.querySelector('${vkFrame}');
+        const bounds = delegate.getBoundingClientRect();
+        return bounds.width >= 200 && bounds.height >= 200 && delegate.referrerPolicy === 'no-referrer'
+          && document.querySelector('${onlineAudio}').paused;
+      })()`), true, 'the visible VK widget pauses Luma');
+      assert.deepEqual((await preferences()).queue, embedQueue);
+      assert.deepEqual(opened, []);
+      await decodeEmbed(currentVk, 'VK');
+      await click('.vk-full-playlist');
+      await waitFor('VK fallback opens only the canonical full playlist', () => opened.at(-1) === vkPlaylistUrl(editorialPlaylist));
+      opened.length = 0;
+      await click('.vk-widget-stop');
+      await waitFor('closing VK unloads the remote widget', () => run(`!document.querySelector('${vkFrame}')`));
+      await fill('.vk-widget-form textarea', `<script>VK.Widgets.Playlist('playlist', ${vkOwn.ownerId}, ${vkOwn.playlistId}, '${vkOwn.hash}', {width: 300});</script>`);
+      await click('.vk-widget-form button[type="submit"]');
+      await findEmbedFixture(VK_WIDGET_FRAME_NAME, vkWidgetUrl(vkOwn), 'VK');
+      assert.deepEqual(vkWidgetRequests, [vkExampleSrc, vkWidgetUrl(vkOwn)]);
+      assert.equal(await run(`document.querySelector('.vk-full-playlist').href`), vkPlaylistUrl(vkOwn));
+      assert.equal(await run(`document.querySelectorAll('iframe').length`), 1);
+      assert.doesNotMatch(JSON.stringify(await preferences()), /luma-smoke-widget/);
+      const firstVideo = 'hZPrKy2WgAo', pastedVideo = 'plnfIj7dkJE';
+      const youtubeFrame = `iframe[name="${YOUTUBE_FRAME_NAME}"]`;
+      await click('[data-home-tab="youtube"]');
+      await waitFor('YouTube space has the original recordings', () => run(`document.querySelectorAll('.youtube-tracks [data-youtube-id]').length === 5`));
+      assert.equal(youtubeRequests.length, 0, 'opening the tab does not contact YouTube');
+      await click(`.youtube-tracks [data-youtube-id="${firstVideo}"]`);
+      const fixtureFrame = await findEmbedFixture(YOUTUBE_FRAME_NAME, youTubeEmbedUrl(firstVideo, 'ru'), 'YouTube');
+      assert.equal(await run(`!!document.querySelector('${vkFrame}')`), false, 'switching providers unloads the previous widget');
+      await decodeEmbed(fixtureFrame, 'YouTube');
+      assert.equal(await run(`(() => {
+        const bounds = document.querySelector('${youtubeFrame}').getBoundingClientRect();
+        return bounds.width >= 200 && bounds.height >= 200 && document.querySelector('${onlineAudio}').paused;
+      })()`), true, 'the visible frame pauses Luma without replacing its queue');
+      assert.deepEqual((await preferences()).queue, embedQueue);
+      assert.equal(BrowserWindow.getAllWindows().length, 1);
+      assert.equal(opened.length, 0);
+      await click('.youtube-player-foot a');
+      await waitFor('explicit fallback opens the canonical watch page', () => opened.at(-1) === youTubeWatchUrl(firstVideo));
+      opened.length = 0;
+      await click('.youtube-stop');
+      await waitFor('closing unloads the remote frame', () => run(`!document.querySelector('${youtubeFrame}')`));
+      await fill('.youtube-form input', `https://music.youtube.com/watch?v=${pastedVideo}&t=30&si=private`);
+      await click('.youtube-form button');
+      await waitFor('own link loads the recording without share parameters', () => youtubeRequests.includes(youTubeEmbedUrl(pastedVideo, 'ru')));
+      await click('[data-home-tab="home"]');
+      await waitFor('leaving YouTube unloads its player', () => run(`!document.querySelector('${youtubeFrame}')`));
+      assert.doesNotMatch(JSON.stringify(await preferences()), /hZPrKy2WgAo|plnfIj7dkJE|si=private/);
+      fixtureNotice('Embedded players', 'Official VK and YouTube frame routes decoded test audio in Electron without a native bridge or queue changes.');
       await run(`document.querySelector('${homeImport}').focus()`);
       await click(homeImport);
       await waitFor('Home shortcut opens the service picker', () => run(`!!document.querySelector('.playlist-import[open] [data-source="apple"]')`));
+      await click('.playlist-import [data-source="openwhyd"]');
+      await fill('.openwhyd-import-form input', openwhydExample);
+      await click('.openwhyd-import-form button');
+      await waitFor('Openwhyd presents ordered metadata and source links', () => run(`document.querySelectorAll('.playlist-import-preview li').length === 4
+        && document.querySelector('.playlist-origin-link')?.href === 'https://www.youtube.com/watch?v=AVUR778jnmE'`));
+      assert.ok(!(await run(`document.querySelector('.playlist-import-body').innerHTML.includes('example.invalid')`)));
       await click('.playlist-import-head button');
       await waitFor('closing the Home importer restores focus', () => run(`!document.querySelector('.playlist-import') && document.activeElement?.matches('${homeImport}')`));
       await click('[data-home-tab="mine"]');
@@ -1189,6 +1335,27 @@ async function smoke() {
       await waitFor('offline playback and tuning are unavailable without hiding saved stations', () => run(`document.querySelector('${savedStations} ${recordPlay}')?.disabled
         && document.querySelector('${nextStation}')?.disabled && document.querySelector('${previousStation}')?.disabled`));
       await run(`delete navigator.onLine; window.dispatchEvent(new Event('online'));`);
+      await click('[data-radio-view="browser"]');
+      await fill('.radio-browser-form input[placeholder="Например, SomaFM"]', 'Radio Record');
+      await fill('.radio-browser-form input[placeholder="Например, DE"]', 'RU');
+      await fill('.radio-browser-form input[placeholder="Например, german"]', 'russian');
+      await fill('.radio-browser-form input[placeholder="Например, jazz"]', 'house');
+      await click('.radio-browser-form button');
+      const direct = '.radio-browser-tile[data-mode=native]';
+      await waitFor('directory separates native and browser-only streams', () => run(`!!document.querySelector('${direct} .station-play')
+        && !!document.querySelector('.radio-browser-tile[data-mode=browser] .station-link')
+        && !document.querySelector('.radio-browser-tile[data-mode=browser] .station-play')`));
+      assert.equal(directorySearches.length, 1);
+      assert.equal(directorySearches[0].countrycode, 'RU');
+      assert.equal(directorySearches[0].language, 'russian');
+      assert.equal(directorySearches[0].tag, 'house');
+      await click('.radio-browser-tile[data-mode=browser] .station-link');
+      await waitFor('safe station fallback leaves the app', () => opened.at(-1) === `https://www.radio-browser.info/history/${browserStation.stationuuid}`);
+      await click(`${direct} .station-play`);
+      await waitForStation({ name: discoveryStation.name, stream: discoveryStation.url_resolved });
+      assert.ok(!(await preferences()).queue.order.includes(`radio-browser-${discoveryStation.stationuuid}`));
+      await click(`${direct} .station-play`);
+      await waitFor('stopping a discovered station also unloads its source', () => run(`!document.querySelector('${onlineAudio}').hasAttribute('src')`));
     } finally { shell.openExternal = openExternal; }
     await go('Поиск');
     await waitFor('MP3 catalog query', () => run(`!!document.querySelector('main input[type="search"]')`));

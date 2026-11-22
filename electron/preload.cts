@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer, webUtils } = electron;
 import type { IpcRendererEvent } from 'electron';
 import type { DesktopBridge } from '../src/shared/media.js';
 import type { LastFmStatus } from '../src/shared/lastfm.js';
+import type { CredentialService, MusicServiceStatus } from '../src/shared/music-services.js';
 
 const bridge: DesktopBridge = {
   setUiLanguage: (language) => ipcRenderer.invoke('ui:language', language),
@@ -86,6 +87,26 @@ const bridge: DesktopBridge = {
       return () => ipcRenderer.removeListener('lastfm:changed', listener);
     },
   },
+  musicServices: {
+    status: (service) => ipcRenderer.invoke('music-service:status', service),
+    configure: (service, value) => ipcRenderer.invoke('music-service:configure', service, value),
+    remove: (service) => ipcRenderer.invoke('music-service:remove', service),
+    enableListens: (enabled) => ipcRenderer.invoke('listenbrainz:enable', enabled),
+    recordLocalListen: (id, data) => ipcRenderer.send('listenbrainz:record-local', id, data),
+    searchJamendo: (id, query) => ipcRenderer.invoke('jamendo:search', id, query),
+    searchGenius: (query) => ipcRenderer.invoke('genius:search', query),
+    geniusAnnotations: (id) => ipcRenderer.invoke('genius:annotations', id),
+    onChange: (callback) => {
+      const listener = (_event: IpcRendererEvent, service: CredentialService, status: MusicServiceStatus) => callback(service, status);
+      ipcRenderer.on('music-service:changed', listener);
+      return () => ipcRenderer.removeListener('music-service:changed', listener);
+    },
+  },
+  radioBrowser: {
+    search: (query) => ipcRenderer.invoke('radio-browser:search', query),
+    click: (id) => ipcRenderer.invoke('radio-browser:click', id),
+  },
+  importOpenwhyd: (url) => ipcRenderer.invoke('openwhyd:playlist', url),
   diagnostics: {
     record: (event, values) => ipcRenderer.send('diagnostics:record', event, values),
     snapshot: () => ipcRenderer.invoke('diagnostics:snapshot'),

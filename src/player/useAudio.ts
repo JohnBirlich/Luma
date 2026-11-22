@@ -28,11 +28,11 @@ interface Transition {
 }
 interface Deck { audio: HTMLAudioElement; track: Track; listening?: ListeningClock; requested?: boolean }
 function markListening(deck: Deck) {
-  if (!window.luma?.lastfm || deck.audio.paused || deck.listening) return;
+  if ((!window.luma?.lastfm && !window.luma?.musicServices) || deck.track.online?.source === 'broadcast' || deck.audio.paused || deck.listening) return;
   deck.listening = ListeningClock.start(deck.track, Math.floor(Date.now() / 1000));
   if (deck.listening) {
     const duration = length(deck.audio, deck.track);
-    window.luma.lastfm.record(deck.listening.now(duration));
+    window.luma?.lastfm?.record(deck.listening.now(duration));
     deck.listening.sample(deck.audio.currentTime, performance.now() / 1000, duration, deck.audio.playbackRate);
   }
 }
@@ -251,7 +251,10 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
           setSnapshot((previous) => ({ ...previous, elapsed: audio.currentTime }));
           if (!audio.paused && !audio.seeking && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
             const event = deck.listening?.sample(audio.currentTime, performance.now() / 1000, length(audio, deck.track), audio.playbackRate);
-            if (event) window.luma?.lastfm?.record(event);
+            if (event) {
+              window.luma?.lastfm?.record(event);
+              if (!deck.track.online) window.luma?.musicServices?.recordLocalListen(deck.track.id, event);
+            }
           }
           advanceSmoothly(deck);
         },

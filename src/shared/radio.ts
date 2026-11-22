@@ -2,6 +2,7 @@ import type { Track } from './media.js';
 import { appendToQueue } from './queue.js';
 import type { QueueState } from './queue.js';
 import { RADIO_LINEUP } from './radio-lineup.js';
+import { radioBrowserUuid, RADIO_BROWSER_MEDIA } from './radio-browser.js';
 
 export const RADIO_GENRES = {
   all: 'Все жанры', dance: 'Танцевальная', pop: 'Поп', chill: 'Спокойная', indie: 'Рок и инди', jazz: 'Джаз',
@@ -59,9 +60,9 @@ export const EXTRA_STATIONS: readonly Station[] = [
 ];
 export const RADIO_LISTINGS = [...RADIO_DIRECTORY, ...EXTRA_STATIONS];
 export const STATIONS: readonly Station[] = RADIO_LISTINGS.filter((item): item is Station => !!item.stream);
-// Only statically selected media, no wildcard HTTPS and no playlist-supplied URLs in the CSP.
+// Curated paths plus dedicated public stream origins; no wildcard HTTPS or user-supplied URLs.
 const mediaPaths = STATIONS.map(({ stream }) => { const { origin, pathname } = new URL(stream); return `${origin}${pathname}`; });
-export const RADIO_ORIGINS = { images: `${recordLogos} ${somaLogos}`, media: [...new Set(mediaPaths)].join(' ') };
+export const RADIO_ORIGINS = { images: `${recordLogos} ${somaLogos}`, media: [...new Set(mediaPaths), RADIO_BROWSER_MEDIA].join(' ') };
 export const STATION_IDS = new Set(RADIO_LISTINGS.map(({ id }) => id));
 const STATION_PAGES = new Set(RADIO_LISTINGS.map(({ page }) => page));
 const streamIndex = new Map(STATIONS.map(({ id }, index) => [id, index]));
@@ -76,8 +77,9 @@ export function adjacentStationId(id: string | null, step: -1 | 1): string | nul
 /** When already on radio, replace its queue slot instead of adding every station visited. */
 export function tuneStation(queue: QueueState, id: string): QueueState {
   const current = queue.currentId;
-  if (!streamIndex.has(id) || id === current) return queue;
-  if (current === null || !streamIndex.has(current) || queue.order.includes(id)) {
+  const known = (value: string) => streamIndex.has(value) || !!radioBrowserUuid(value);
+  if (!known(id) || id === current) return queue;
+  if (current === null || !known(current) || queue.order.includes(id)) {
     return { ...appendToQueue(queue, [id]), currentId: id };
   }
   const replace = (order: string[]) => order.map((item) => item === current ? id : item);

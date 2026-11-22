@@ -1,16 +1,18 @@
 import { CatalogRateLimit, findOnlineTracks } from './online';
+import { jamendoRecording } from '../shared/online';
 import type { OnlineTrack } from '../shared/online';
 
 const OPENVERSE = { id: 'openverse', source: 'all', name: 'Jamendo + Wikimedia Commons' } as const;
 const NETLABELS = { id: 'netlabels', source: 'netlabels', name: 'Internet Archive · Netlabels' } as const;
 const SOUTHERN_CITY = { id: 'southern_city', source: 'southern_city', name: 'Southern City’s Lab · Internet Archive' } as const;
 const AUDIUS = { id: 'audius', source: 'audius', name: 'Audius' } as const;
+const JAMENDO = { id: 'jamendo_direct', source: 'jamendo_direct', name: 'Jamendo · напрямую' } as const;
 const PHISH = { id: 'phishin', source: 'phishin', name: 'Phish.in · концерты' } as const;
-export type CatalogTarget = typeof OPENVERSE | typeof NETLABELS | typeof SOUTHERN_CITY | typeof AUDIUS | typeof PHISH;
+export type CatalogTarget = typeof OPENVERSE | typeof NETLABELS | typeof SOUTHERN_CITY | typeof AUDIUS | typeof JAMENDO | typeof PHISH;
 export type CatalogId = CatalogTarget['id'];
 export type CatalogResult = { id: CatalogId; tracks: OnlineTrack[] } | { id: CatalogId; error: unknown };
-export const catalogTargets = (desktop: boolean, phish = false): readonly CatalogTarget[] => [
-  OPENVERSE, ...(desktop ? [NETLABELS, AUDIUS, SOUTHERN_CITY] : []), ...(phish ? [PHISH] : []),
+export const catalogTargets = (desktop: boolean, phish = false, jamendo = false): readonly CatalogTarget[] => [
+  OPENVERSE, ...(desktop ? [NETLABELS, AUDIUS, SOUTHERN_CITY, ...(jamendo ? [JAMENDO] : [])] : []), ...(phish ? [PHISH] : []),
 ];
 export const CATALOG_DEBOUNCE_MS = 650;
 
@@ -28,7 +30,8 @@ export function createCatalogSearch(find = findOnlineTracks, now = Date.now) {
     if (!text || signal.aborted) return;
     await Promise.all(targets.map(async ({ id, source }) => {
       const key = `${id}:${text}`;
-      const hit = cache.get(key);
+      // Direct Jamendo results depend on the locally configured app and are not reused after it changes.
+      const hit = id === 'jamendo_direct' ? undefined : cache.get(key);
       if (hit && hit.expires > now()) { report({ id, tracks: hit.tracks }); return; }
       const wait = id === 'openverse' ? openverseBlockedUntil - now() : 0;
       if (wait > 0) { report({ id, error: new CatalogRateLimit(wait) }); return; }
@@ -36,9 +39,11 @@ export function createCatalogSearch(find = findOnlineTracks, now = Date.now) {
       try {
         const tracks = await find(text, source, signal);
         if (signal.aborted) return;
-        cache.delete(key);
-        cache.set(key, { tracks, expires: now() + 2 * 60_000 });
-        if (cache.size > 24) cache.delete(cache.keys().next().value!);
+        if (id !== 'jamendo_direct') {
+          cache.delete(key);
+          cache.set(key, { tracks, expires: now() + 2 * 60_000 });
+          if (cache.size > 24) cache.delete(cache.keys().next().value!);
+        }
         result = { id, tracks };
       } catch (error) {
         if (signal.aborted) return;
@@ -52,9 +57,18 @@ export function createCatalogSearch(find = findOnlineTracks, now = Date.now) {
 
 export const searchCatalogs = createCatalogSearch();
 
-/** Keep per-catalog order, interleave sources fairly, and show overlapping Archive releases only once. */
+export function compareJamendo(openverse: readonly OnlineTrack[], direct: readonly OnlineTrack[]) {
+  const indexed = new Set(openverse.map(jamendoRecording).filter(Boolean));
+  const recordings = new Set(direct.map(jamendoRecording).filter(Boolean));
+  const matches = [...recordings].filter((id) => indexed.has(id)).length;
+  return { matches, additional: recordings.size - matches };
+}
+
+/** Keep per-catalog order, prefer Openverse for the same Jamendo ID, and keep distinct recordings. */
 export function mergeCatalogResults(results: readonly CatalogResult[]) {
-  const groups = results.flatMap((result) => 'tracks' in result ? [result.tracks] : []);
+  const indexed = new Set(results.flatMap((result) => result.id === 'openverse' && 'tracks' in result ? result.tracks.map(jamendoRecording).filter(Boolean) : []));
+  const groups = results.flatMap((result) => 'tracks' in result ? [result.id === 'jamendo_direct'
+    ? result.tracks.filter((track) => !indexed.has(jamendoRecording(track))) : result.tracks] : []);
   const merged = new Map<string, OnlineTrack>();
   for (let i = 0; groups.some((rows) => i < rows.length); i++) {
     for (const rows of groups) {

@@ -46,20 +46,28 @@ async function getJson(url: URL, signal: AbortSignal): Promise<unknown> {
 }
 
 let requestId = 0;
-async function communityTracks(query: string, source: DesktopCatalogSource, signal: AbortSignal) {
+async function communityTracks(query: string, source: DesktopCatalogSource | 'jamendo_direct', signal: AbortSignal) {
   if (!window.luma) throw new Error('Этот каталог доступен в настольной версии Luma.');
   signal.throwIfAborted();
   const id = ++requestId;
   const cancel = () => { void window.luma?.cancelCatalogSearch(id).catch(() => {}); };
   signal.addEventListener('abort', cancel, { once: true });
-  try { return await window.luma.searchCommunity(id, query.trim().slice(0, 140), source); }
-  catch { throw new Error('Каталог сейчас недоступен. Повторите попытку позже.'); }
+  try {
+    const text = query.trim().slice(0, 140);
+    return source === 'jamendo_direct' ? await window.luma.musicServices.searchJamendo(id, text) : await window.luma.searchCommunity(id, text, source);
+  } catch (error) {
+    if (source === 'jamendo_direct') {
+      if (error instanceof Error && error.message.includes('Jamendo не принял запрос.')) throw new Error('Jamendo не принял запрос. Проверьте Client ID в настройках.');
+      throw new Error('Jamendo сейчас недоступен. Проверьте сеть и Client ID.');
+    }
+    throw new Error('Каталог сейчас недоступен. Повторите попытку позже.');
+  }
   finally { signal.removeEventListener('abort', cancel); }
 }
 
 export async function findOnlineTracks(query: string, source: OnlineFilter, signal: AbortSignal): Promise<OnlineTrack[]> {
   if (source === 'phishin') return findPhishTracks(query, signal);
-  if (source === 'southern_city' || source === 'netlabels' || source === 'audius') return communityTracks(query, source, signal);
+  if (source === 'southern_city' || source === 'netlabels' || source === 'audius' || source === 'jamendo_direct') return communityTracks(query, source, signal);
   const data = await getJson(onlineSearchUrl(query, source), signal) as { results?: unknown[] } | null;
   if (!Array.isArray(data?.results)) throw new Error('Каталог вернул неожиданный ответ.');
   const tracks = new Map<string, OnlineTrack>();

@@ -108,7 +108,7 @@ test('Phish.in search is opt-in by title, keyless, and requests only one matchin
     calls.push(target);
     assert.equal(target.origin, 'https://phish.in');
     assert.equal(options.credentials, 'omit');
-    assert.deepEqual(options.headers, { Accept: 'application/json' });
+    assert.deepEqual(Object.fromEntries(new Headers(options.headers)), { accept: 'application/json' });
     return Response.json(target.pathname === '/api/v2/tracks' ? { tracks: [phishTrack] } : { songs: [phishSong] });
   });
   for (const invalid of ['Llama', 'LLama\t hi', 'Phish', 'Phish xy', 'Phish %llama', 'Phish https://example.invalid/']) {

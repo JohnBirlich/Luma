@@ -24,6 +24,7 @@ import type { VolumeProps } from './PlaybackControls';
 import { NowPlayingOptions } from './NowPlayingOptions';
 import { SceneBackground } from './SceneBackground';
 import { DiscordSettings } from './DiscordSettings';
+import { MusicServiceSettings } from './MusicServiceSettings';
 import type { DiscordPreferences } from '../shared/discord-presence';
 import { SleepTimer } from './SleepTimer';
 import type { SleepMinutes } from '../shared/sleep-timer';
@@ -352,6 +353,9 @@ export function SettingsPage(props: SettingsProps) {
             </SettingCard>
             <SettingCard title={t("Сервисы")}>
               <LastFmSettings connected={props.connected} />
+              <MusicServiceSettings service="listenbrainz" connected={props.connected} />
+              <MusicServiceSettings service="jamendo" connected={props.connected} />
+              <MusicServiceSettings service="genius" connected={props.connected} />
               <Service title={t("Тексты песен")} status="LRCLIB">
                 <p>{t("Теги, локальные .lrc / .lyrics.txt, LRCLIB и избранные издания Викитеки. Lyrics.ovh — обычный текст по названию и исполнителю, без таймингов.")}</p>
                 <ToggleRow title={t("Автопоиск текстов")} detail={t("Искать для играющего трека на главной и в караоке. LRCLIB получит название, исполнителя, альбом и длительность, если они известны.")} enabled={props.autoLyrics} change={() => props.toggleLyrics('autoLyrics')} />
