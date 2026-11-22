@@ -1481,13 +1481,19 @@ async function smoke() {
   }
   if (liveCatalog) {
     await session.defaultSession.clearCache();
+    // The DOM, current audio deck and catalog search cache contain fixtures. A network cache clear
+    // alone does not force a fresh provider query or a new media resource for the same track ID.
+    const fresh = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
+    window.webContents.reload();
+    await fresh;
+    await waitFor('fresh player for live catalogs', () => run(`!!document.querySelector('.app-shell') && document.documentElement.lang === 'ru'`));
     const { webRequest } = session.defaultSession;
     const network = [];
     // Network diagnostics are limited to statuses, MIME, and origins.
     const upstream = { urls: ['https://phish.in/*', 'https://api.audius.co/*', 'https://creatornode.audius.co/*', `${new URL(storageStream).origin}/*`] };
     const label = (url) => {
       const { hostname, pathname } = new URL(url);
-      return `${hostname}${pathname.endsWith('/stream') ? '(resolve)' : pathname.includes('/cidstream/') || hostname.endsWith('.r2.cloudflarestorage.com') ? '(media)' : '(query)'}`;
+      return `${hostname}${pathname.endsWith('/stream') ? '(resolve)' : pathname.startsWith('/blob/') || pathname.includes('/cidstream/') || hostname.endsWith('.r2.cloudflarestorage.com') ? '(media)' : '(query)'}`;
     };
     webRequest.onResponseStarted(upstream, ({ url, statusCode, responseHeaders }) => {
       const mime = Object.entries(responseHeaders ?? {}).find(([key]) => key.toLowerCase() === 'content-type')?.[1]?.[0]?.split(';')[0];
@@ -1547,6 +1553,7 @@ async function smoke() {
                   const media = document.querySelector('${onlineAudio}');
                   return media.duration > 80 && !media.seeking && media.currentTime > 75.15 && !media.paused;
                 })()`));
+                assert.ok(network.some((entry) => /^phish\.in\(media\) (?:200|206) audio\//.test(entry)), 'real archive audio response, not a fixture');
               }
               if (target === 'audius') {
                 const seek = await run(`(async () => {
@@ -1559,7 +1566,7 @@ async function smoke() {
                 })()`).catch(() => 'request failed');
                 if (seek !== '206') { failures.push(`${title}: range ${seek}`); continue; }
               }
-              result = `decoded ${title} (${decoded.format}${target === 'audius' ? ', range 206' : ''})`;
+              result = `decoded ${title} (${decoded.format}${target === 'audius' ? ', range 206' : target === 'phishin' ? ', seek past 75s' : ''})`;
               ok = true;
               break;
             }
