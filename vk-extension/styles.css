@@ -1,0 +1,22 @@
+.vk-dl{margin-left:8px;background:#0077ff !important;color:#fff !important;border:0;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;}
+#page_header,#top_nav{display:none !important;}
+html.vk-hide-ads [id*='ads'],html.vk-hide-ads #ads_left{display:none !important;}
+html,body{margin:0 !important;padding:0 !important;background:#edeef0 !important;color:#000 !important;}
+#page_wrap,#wrap{margin:0 !important;padding:0 !important;width:100% !important;max-width:none !important;background:#edeef0 !important;}
+#side_bar{display:none !important;width:0 !important;min-width:0 !important;margin:0 !important;padding:0 !important;}
+#narrow_column,.narrow_column,.narrow_column_wrap,#right_bar,.right_bar,[class*='narrow_column'],[class*='RightColumn'],[class*='right_column']{display:none !important;width:0 !important;min-width:0 !important;margin:0 !important;padding:0 !important;}
+#wide_column,.wide_column{width:100% !important;max-width:100% !important;margin:0 !important;float:none !important;}
+#page_layout{width:100% !important;max-width:100vw !important;margin:0 !important;padding:0 clamp(8px,1.5vw,24px) !important;padding-top:0 !important;box-sizing:border-box !important;display:block !important;background:#edeef0 !important;}
+#page_body{width:100% !important;max-width:100% !important;margin:0 !important;float:none !important;padding:0 clamp(8px,2vw,32px) !important;padding-top:0 !important;box-sizing:border-box !important;display:block !important;background:#edeef0 !important;color:#000 !important;}
+#content{margin:0 !important;padding:0 !important;width:100% !important;max-width:100% !important;box-sizing:border-box !important;background:transparent !important;}
+.page_block{width:100% !important;max-width:100% !important;box-sizing:border-box !important;margin-top:0 !important;background:#fff !important;color:#000 !important;}
+.audio_page,.audio_page__rows_wrap{width:100% !important;max-width:100% !important;box-sizing:border-box !important;background:#fff !important;color:#000 !important;}
+.audio_row{width:100% !important;max-width:100% !important;box-sizing:border-box !important;background:#fff !important;}
+.audio_row__title{color:#000 !important;}
+.audio_row__performers,.audio_row__duration{color:#626d7a !important;}
+hr,.sep,[class*='separator'],[class*='divider']{display:none !important;height:0 !important;border:0 !important;margin:0 !important;padding:0 !important;}
+@media (max-width:1100px){#page_body{padding:0 12px !important;}#page_layout{padding:0 8px !important;}}
+@media (max-width:700px){#page_body{padding:0 6px !important;}#page_layout{padding:0 4px !important;}.vk-dl{padding:2px 6px !important;font-size:11px !important;}}
+@media (min-width:1800px){#page_body{padding:0 clamp(16px,3vw,48px) !important;}}
+a[href='/feed'],a[href='/im'],a[href='/friends'],a[href='/groups'],a[href^='/groups/'],a[href^='/public'],a[href='/games'],a[href^='/games/'],a[href='/photos'],a[href='/video'],a[href='/clips'],a[href='/market'],a[href='/bookmarks'],a[href='/docs'],a[href='/radio'],a[href*='section=radio'],a[href*='section=updates']{display:none !important;}
+#friends_online,.friends_online,[class*='friends_online'],[class*='chat_list'],#chat_list,.im-page,[class*='ChatWidget'],[class*='chat_widget'],[id*='chat_widget']{display:none !important;}
