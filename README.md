@@ -2,7 +2,7 @@
 
 Плеер для **Windows 10/11 x64**: локальная медиатека, музыкальные подборки, открытые каталоги, прямые эфиры и караоке. Музыкальные подборки и «Сейчас играет» находятся на **Главной** и используют общий плеер и очередь. Официальный сайт VK Музыки открывается в отдельной сессии внутри окна; его очередь не смешивается с очередью Luma.
 
-**[Скачать последнюю версию](https://github.com/JohnBirlich/VKX-Modded/releases/latest)** · [Что нового в 1.5.4](docs/releases/1.5.4.md) · [Настройка сервисов с нуля](docs/services-setup.md)
+**[Скачать последнюю версию](https://github.com/JohnBirlich/VKX-Modded/releases/latest)** · [Что нового в 1.5.5](docs/releases/1.5.5.md) · [Настройка сервисов с нуля](docs/services-setup.md)
 
 В **1.5.0** приложение называется **Luma**. VK Музыка открывается сразу во вкладке, для нового входа используется официальный QR-код VK, а панель может переключать треки и менять позицию, когда плеер сайта поддерживает эти команды.
 
@@ -83,7 +83,7 @@
 Нужны Node.js **22.12+** и Git. Для собственного `.exe` — Windows, Visual Studio Build Tools с MSVC x64 и Windows SDK для вспомогательного WASAPI-процесса.
 
 ```powershell
-git clone --single-branch --branch v1.5.0 https://github.com/JohnBirlich/VKX-Modded.git
+git clone --single-branch --branch v1.5.5 https://github.com/JohnBirlich/VKX-Modded.git
 cd VKX-Modded
 npm.cmd ci
 npm.cmd run dev
