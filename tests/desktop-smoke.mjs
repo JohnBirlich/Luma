@@ -399,7 +399,8 @@ async function smoke() {
   await waitFor('fullscreen scene dialog', () => run(`!!document.querySelector('.scene-dialog[open]')`));
   await click('.scene-choice[aria-label="Переливы Luma"]');
   await waitFor('Luma Flow previews and saves while the full-screen player updates', async () => (await preferences()).appearance.effect === 'mix-flow'
-    && await run(`!!document.querySelector('.scene-dialog-preview .scene-mix-flow .mix-flow-light') && !!document.querySelector('.immersive-stage > .scene-mix-flow')`));
+    && await run(`document.querySelectorAll('.scene-dialog-preview .mix-flow-ribbons > path').length === 3
+      && document.querySelectorAll('.immersive-stage > .scene-mix-flow .mix-flow-ribbons > path').length === 3`));
   await click('.scene-dialog .primary-button');
   await click('.immersive-karaoke-toggle');
   await waitFor('karaoke uses the selected scene with only the foreground art', () => run(`!!document.querySelector('.karaoke-stage > .scene-mix-flow')
@@ -407,12 +408,14 @@ async function smoke() {
   await click('.immersive-collapse');
   await waitFor('fullscreen exits after switching modes', async () => !window.isFullScreen() && await run(`!document.querySelector('.immersive-player')`));
   assert.ok(await run(`(() => {
-    const visual = (selector) => getComputedStyle(document.querySelector(selector + ' .mix-flow-light'));
-    const player = visual('.hero'), banner = visual('.hub-hero');
-    return player.backgroundImage !== 'none' && player.backgroundImage !== banner.backgroundImage
-      && player.animationName === banner.animationName && !!document.querySelector('.hero .scene-mix-flow[data-cover-tone]')
-      && player.getPropertyValue('--scene-tone').trim() === getComputedStyle(document.querySelector('.hero')).getPropertyValue('--hero-tone').trim();
-  })()`), 'the mix effect shares animation with the banner, but uses the current cover tone');
+    const player = document.querySelector('.hero .scene-mix-flow[data-cover-tone]');
+    const banner = document.querySelector('.hub-hero .scene-mix-flow:not([data-cover-tone])');
+    const svgStyle = (scene) => getComputedStyle(scene.querySelector('.mix-flow-ribbons'));
+    const stop = (scene) => getComputedStyle(scene.querySelector('.mix-flow-ribbons stop:nth-of-type(2)')).stopColor;
+    return !!player && !!banner && stop(player) !== stop(banner)
+      && svgStyle(player).animationName === svgStyle(banner).animationName
+      && getComputedStyle(player).getPropertyValue('--scene-tone').trim() === getComputedStyle(document.querySelector('.hero')).getPropertyValue('--hero-tone').trim();
+  })()`), 'the mix effect shares vector animation with the banner, but uses the current cover tone');
 
   assert.equal(await run(`document.querySelector('.home-now [aria-label="Эквалайзер"]')`), null);
   await click('.sidebar [aria-label="Эквалайзер из боковой панели"]');
