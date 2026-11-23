@@ -1,9 +1,9 @@
-import type { VkTransport } from '../src/shared/vk-site.js';
+import type { VkPlaybackAction } from '../src/shared/vk-site.js';
 
 // Serialized into an isolated JS world. Only public MediaSession text and rendered
 // controls (still laid out when Luma hides VK's header); no private player internals,
 // account DOM, storage, or requests.
-function visibleMusicPlayer(action: VkTransport | null) {
+function visibleMusicPlayer(action: VkPlaybackAction | null) {
   if (window.top !== window || location.protocol !== 'https:' || location.port
     || !['vk.ru', 'vk.com', 'm.vk.ru', 'm.vk.com', 'music.vk.ru', 'music.vk.com'].includes(location.hostname)
     || !/^\/(?:audio(?:-?\d+_\d+)?\/?|audios-?\d+\/?|music(?:\/.*)?)$/.test(location.pathname)) return;
@@ -48,7 +48,18 @@ function visibleMusicPlayer(action: VkTransport | null) {
     next: pick('.top_audio_player_next, .audio_page_player_next, .audio_player_btn_next', (node) => nextLabel.test(label(node)),
       'svg:is([class*="vkuiIcon--skip_next_"],[class*="vkuiIcon--skip_forward_"])'),
   };
+  const media = navigator.mediaSession;
+  const playing = media?.playbackState === 'playing' || (media?.playbackState !== 'paused' && (
+    pauseLabel.test(label(controls.toggle)) || !!controls.toggle?.querySelector(pauseIcon)
+    || roots.some((root) => root.matches('.top_audio_player_playing, .audio_page_player_playing, ._audio_page_player_playing')
+      || !!root.querySelector('.audio_page_player_play.playing, .audio_player_btn_play.playing, .audio_player_btn_playing'))));
   if (action) {
+    if (signedOut) return false;
+    if (action === 'pause') {
+      // Never use a toggle as a pause unless the current player indicates that it is playing.
+      if (playing && controls.toggle) { controls.toggle.click(); return true; }
+      return media?.playbackState === 'paused' || playLabel.test(label(controls.toggle));
+    }
     const control = controls[action];
     if (control) control.click();
     return !!control;
@@ -60,7 +71,6 @@ function visibleMusicPlayer(action: VkTransport | null) {
     }
     return '';
   };
-  const media = navigator.mediaSession;
   let title = media?.metadata?.title?.slice(0, 256) || text([
     '.top_audio_player_title:not(.top_audio_player_title_out)', '.audio_page_player_title_song', '.audio_page_player_title',
     '.audio_player__title', '[class*="AudioInfo__title--"]', '[data-testid="audio-player-title"]', '[data-testid="MusicPlayer_Title"]',
@@ -73,11 +83,7 @@ function visibleMusicPlayer(action: VkTransport | null) {
     const combined = /^(.+?)\s+[–—]\s+(.+)$/.exec(title);
     if (combined) [, artist, title] = combined;
   }
-  const playing = media?.playbackState === 'playing' || (media?.playbackState !== 'paused' && (
-    pauseLabel.test(label(controls.toggle)) || !!controls.toggle?.querySelector(pauseIcon)
-    || roots.some((root) => root.matches('.top_audio_player_playing, .audio_page_player_playing, ._audio_page_player_playing')
-      || !!root.querySelector('.audio_page_player_play.playing, .audio_player_btn_play.playing, .audio_player_btn_playing'))));
   return { signedOut, title, artist, playing, previous: !!controls.previous, toggle: !!controls.toggle, next: !!controls.next };
 }
 
-export const inspectVkPlayer = (action: VkTransport | null = null) => `(${visibleMusicPlayer.toString()})(${JSON.stringify(action)})`;
+export const inspectVkPlayer = (action: VkPlaybackAction | null = null) => `(${visibleMusicPlayer.toString()})(${JSON.stringify(action)})`;

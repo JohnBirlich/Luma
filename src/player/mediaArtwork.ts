@@ -39,6 +39,6 @@ function thumbnail(src: string) {
   return result;
 }
 
-export async function mediaArtwork(src?: string): Promise<MediaImage | undefined> {
-  return (src && await thumbnail(src)) || thumbnail(DEFAULT_ARTWORK_URL);
+export async function mediaArtwork(src?: string, fallback?: string): Promise<MediaImage | undefined> {
+  return (src && await thumbnail(src)) || (fallback && fallback !== src && await thumbnail(fallback)) || thumbnail(DEFAULT_ARTWORK_URL);
 }

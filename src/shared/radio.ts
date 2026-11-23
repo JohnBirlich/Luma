@@ -2,6 +2,7 @@ import type { Track } from './media.js';
 import { appendToQueue } from './queue.js';
 import type { QueueState } from './queue.js';
 import { RADIO_LINEUP } from './radio-lineup.js';
+import { radioStationCover } from './radio-artwork.js';
 import { radioBrowserUuid, RADIO_BROWSER_MEDIA } from './radio-browser.js';
 
 export const RADIO_GENRES = {
@@ -17,6 +18,7 @@ export interface RadioListing {
   page: string;
   stream?: string;
   logo?: string;
+  cover: string;
   tint: string;
 }
 export interface Station extends RadioListing { stream: string }
@@ -33,16 +35,19 @@ const somaLogos = 'https://api.somafm.com/logos/120/';
 const record = (id: string, name: string, genre: RadioGenre, tint: string, stream = id): Station => ({
   id: `radio-record-${id}`, name, broadcaster: 'Radio Record', genre, tint,
   page: `${recordSite}station/${id}`, stream: `${recordCdn}${stream}96.aacp`, logo: `${recordLogos}${id}_image600_colored_fill.png`,
+  cover: radioStationCover(`radio-record-${id}`, name),
 });
 const soma = (id: string, name: string, genre: RadioGenre, tint: string, ext = 'jpg'): Station => ({
   id: `radio-soma-${id}`, name, broadcaster: 'SomaFM', genre, tint,
   page: `https://somafm.com/${id}/`, stream: `${somaCdn}${id}-128-mp3`, logo: `${somaLogos}${id}120.${ext}`,
+  cover: radioStationCover(`radio-soma-${id}`, name),
 });
 
 export const RADIO_DIRECTORY: readonly RadioListing[] = RADIO_LINEUP.map(([id, name, genre, page, stream]) => id === 'record'
   ? record('record', name, genre, '#f99a4d', 'rr_main')
   : { id: `radio-ru-${id}`, name, genre, tint: colors[genre],
-    page: page.startsWith('https://') ? page : `https://radioplayer.ru/station/${page}`, ...(stream && { stream }) });
+    page: page.startsWith('https://') ? page : `https://radioplayer.ru/station/${page}`, ...(stream && { stream }),
+    cover: radioStationCover(`radio-ru-${id}`, name) });
 
 /** Preserve station IDs and the original optional selections across updates. */
 export const EXTRA_STATIONS: readonly Station[] = [
@@ -92,7 +97,8 @@ export function readStationIds(value: unknown) {
 }
 export const isStationPage = (value: unknown): value is string => typeof value === 'string' && STATION_PAGES.has(value);
 
-export const stationTracks: Track[] = STATIONS.map(({ id, name, broadcaster, logo, stream, page, tint }) => ({
-  id, title: name, artist: broadcaster ?? name, album: broadcaster ?? '', artworkUrl: logo, audioUrl: stream, color: tint, duration: 0,
+export const stationTracks: Track[] = STATIONS.map(({ id, name, broadcaster, logo, cover, stream, page, tint }) => ({
+  id, title: name, artist: broadcaster ?? name, album: broadcaster ?? '', artworkUrl: logo ?? cover,
+  fallbackArtworkUrl: logo ? cover : undefined, audioUrl: stream, color: tint, duration: 0,
   online: { source: 'broadcast', page, license: '', licenseUrl: '' },
 }));

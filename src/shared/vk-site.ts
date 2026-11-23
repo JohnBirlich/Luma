@@ -8,7 +8,8 @@ const musicHosts = ['vk.ru', 'vk.com', 'm.vk.ru', 'm.vk.com', 'music.vk.ru', 'mu
 const siteHosts = new Set([...musicHosts, 'id.vk.ru', 'id.vk.com', 'login.vk.ru', 'login.vk.com', 'oauth.vk.ru', 'oauth.vk.com']);
 export const VK_TRANSPORT = ['previous', 'toggle', 'next'] as const;
 export type VkTransport = typeof VK_TRANSPORT[number];
-export type VkSiteAction = VkTransport | 'seek' | 'back' | 'reload' | 'music';
+export type VkPlaybackAction = VkTransport | 'pause';
+export type VkSiteAction = VkPlaybackAction | 'seek' | 'back' | 'reload' | 'music';
 export type VkSiteAppearance = 'standard' | 'profile' | 'minimal';
 
 export function readVkSiteAppearance(value: unknown): VkSiteAppearance | undefined {
@@ -22,6 +23,8 @@ export interface VkNowPlaying {
 }
 export interface VkSiteState {
   host: string; phase: 'loading' | 'ready' | 'failed' | 'closed'; back: boolean; signIn: boolean; track?: VkNowPlaying;
+  /** Playback has started in this signed-in music document. It stays selected when paused. */
+  engaged?: boolean;
 }
 
 function https(value: unknown) {

@@ -39,11 +39,21 @@ export const AUDIO_MIMES = {
 export const AUDIO_EXTENSIONS = Object.keys(AUDIO_MIMES);
 export const AUDIO_ACCEPT = AUDIO_EXTENSIONS.map((extension) => `.${extension}`).join(',');
 
-export interface Track {
+/** Presentation data can describe playback owned by another page, with no playable URL. */
+export interface TrackDisplay {
   id: string;
   title: string;
   artist: string;
   album: string;
+  artworkUrl?: string;
+  fallbackArtworkUrl?: string;
+  backdropUrl?: string;
+  color?: string;
+  demo?: boolean;
+  online?: OnlineCreditData;
+}
+
+export interface Track extends TrackDisplay {
   duration: number;
   genres?: string[];
   isrc?: string;
@@ -52,12 +62,9 @@ export interface Track {
   /** Local basename, used for matching an imported playlist. Never a readable path. */
   fileName?: string;
   audioUrl: string;
-  artworkUrl?: string;
-  backdropUrl?: string;
-  color?: string;
-  demo?: boolean;
-  online?: OnlineCreditData;
 }
+
+export type PlayingTrack = Track | (TrackDisplay & { source: 'vk' });
 
 export interface ImportResult {
   tracks: Track[];
@@ -103,7 +110,7 @@ export interface DesktopBridge {
   };
   vkSite: {
     open(id: number, url: string, bounds: VkBounds | null, appearance?: VkSiteAppearance): Promise<void>;
-    layout(id: number, bounds: VkBounds | null): Promise<void>;
+    layout(id: number, bounds: VkBounds | null, foreground: boolean): Promise<void>;
     close(id: number): Promise<void>;
     setAppearance(id: number, appearance: VkSiteAppearance): Promise<boolean>;
     command(id: number, action: VkSiteAction, fraction?: number): Promise<boolean>;

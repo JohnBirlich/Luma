@@ -179,10 +179,13 @@ test('Radio Browser bounds discovery and does not retry another mirror to evade 
 });
 
 test('Radio Browser exposes only vetted HTTPS broadcasts; fallback and preferences remain safe', () => {
-  const [direct, web] = readRadioBrowserStations([discoveryStation, browserStation, discoveryStation, { ...discoveryStation, stationuuid: '../wrong' }]);
+  const [direct, web] = readRadioBrowserStations([{ ...discoveryStation, favicon: 'https://outside.invalid/collect-user-data' },
+    browserStation, discoveryStation, { ...discoveryStation, stationuuid: '../wrong' }]);
   const track = radioBrowserTrack(direct)!;
   assert.equal(track.online?.source, 'broadcast');
   assert.equal(track.audioUrl, discoveryStation.url_resolved);
+  assert.match(track.artworkUrl!, /^data:image\/svg\+xml,/);
+  assert.ok(!JSON.stringify(direct).includes('outside.invalid'));
   assert.equal(track.duration, 0);
   assert.equal(radioBrowserTrack(web), undefined);
   for (const url of ['http://stream.laut.fm/jazz', 'https://internal.invalid/stream.mp3', 'https://stream.laut.fm:8443/jazz', 'https://stream.laut.fm/a/b', 'https://stream.laut.fm/jazz?q=stream', 'https://stream.laut.fm.evil.invalid/jazz', 'https://account@stream.laut.fm/jazz'])

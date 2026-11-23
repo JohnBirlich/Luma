@@ -3,19 +3,19 @@ import type { BrowserWindow } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { VK_SITE_PARTITION, VK_TRANSPORT, readVkNowPlaying, readVkSiteAppearance, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
-import type { VkSiteAppearance, VkSiteState, VkTransport } from '../src/shared/vk-site.js';
+import type { VkPlaybackAction, VkSiteAppearance, VkSiteState } from '../src/shared/vk-site.js';
 import { vkAppearanceScript } from './vk-appearance.js';
 import { inspectVkPlayer } from './vk-player.js';
 
 interface VkView {
-  id: number; owner: BrowserWindow; view: WebContentsView; entry: string; shown: boolean;
+  id: number; owner: BrowserWindow; view: WebContentsView; entry: string; shown: boolean; foreground: boolean;
   appearance: VkSiteAppearance; state: VkSiteState; revision: number; reading: boolean; confirming: boolean; qrStarted: boolean; returnToEntry: boolean; unbind(): void;
   poll?: ReturnType<typeof setInterval>; timer?: ReturnType<typeof setTimeout>;
 }
 const world = 1481;
 const preload = fileURLToPath(new URL('./vk-media-preload.cjs', import.meta.url));
 // The page-side adapter accepts only fixed action names and a bounded fraction, never script from the renderer.
-const playback = (action?: VkTransport | 'seek', ratio?: number, useElement = false) =>
+const playback = (action?: VkPlaybackAction | 'seek', ratio?: number, useElement = false) =>
   `globalThis.__lumaVkPlayback?.(...${JSON.stringify([action, ratio, useElement])})`;
 
 export class VkSite {
@@ -51,14 +51,23 @@ export class VkSite {
   }
 
   private visibility(active: VkView) {
-    const show = active.shown && !active.confirming && active.state.phase === 'ready';
+    const show = active.foreground && active.shown && !active.confirming && active.state.phase === 'ready'
+      && active.owner.isVisible() && !active.owner.isMinimized();
     active.view.setVisible(show);
-    if (!active.view.webContents.isDestroyed()) active.view.webContents.setAudioMuted(!show);
+    // Only the already-selected, verified music document can outlive its native slot.
+    if (!active.view.webContents.isDestroyed()) active.view.webContents.setAudioMuted(!this.musicReady(active) || !(show || active.state.engaged));
   }
 
-  layout(owner: BrowserWindow, id: unknown, value: unknown) {
+  layout(owner: BrowserWindow, id: unknown, value: unknown, foreground: unknown) {
     const active = this.active;
-    if (active && active.id === id && active.owner === owner) this.layoutView(active, value);
+    if (!active || active.id !== id || active.owner !== owner || typeof foreground !== 'boolean') return;
+    if (!foreground && active.foreground) {
+      if (!this.musicPageReady(active)) { this.dispose(active); return; }
+      // Catch the first play even if the listener immediately switches to Now Playing.
+      void this.readTrack(active);
+    }
+    active.foreground = foreground;
+    this.layoutView(active, foreground ? value : null);
   }
 
   setAppearance(owner: BrowserWindow, id: unknown, value: unknown) {
@@ -83,7 +92,7 @@ export class VkSite {
   }
 
   private dispose(active: VkView, announce = true) {
-    if (announce) this.publish(active, { phase: 'closed', track: undefined });
+    if (announce) this.publish(active, { phase: 'closed', track: undefined, engaged: undefined });
     this.active = undefined;
     active.unbind();
     clearTimeout(active.timer);
@@ -97,7 +106,8 @@ export class VkSite {
   private fail(active: VkView) {
     if (this.active !== active) return;
     clearTimeout(active.timer);
-    this.publish(active, { phase: 'failed', track: undefined });
+    if (!active.foreground) { this.dispose(active); return; }
+    this.publish(active, { phase: 'failed', track: undefined, engaged: undefined });
     this.visibility(active);
   }
 
@@ -118,10 +128,17 @@ export class VkSite {
     const contents = view.webContents;
     const close = () => this.close(owner, id);
     const navigation = (event: Electron.Event & { isMainFrame: boolean; isSameDocument: boolean }) => { if (event.isMainFrame && !event.isSameDocument) close(); };
-    const active: VkView = { id, owner, view, entry: url, appearance, shown: false, revision: 0, reading: false, confirming: false, qrStarted: false, returnToEntry: false,
+    const syncWindow = () => {
+      if (this.active !== active) return;
+      if ((!owner.isVisible() || owner.isMinimized()) && !active.state.engaged) close();
+      else this.visibility(active);
+    };
+    const active: VkView = { id, owner, view, entry: url, appearance, shown: false, foreground: true, revision: 0, reading: false, confirming: false, qrStarted: false, returnToEntry: false,
       state: { host: '', phase: 'loading', back: false, signIn: false }, unbind() {
-        owner.removeListener('minimize', close);
-        owner.removeListener('hide', close);
+        owner.removeListener('minimize', syncWindow);
+        owner.removeListener('hide', syncWindow);
+        owner.removeListener('restore', syncWindow);
+        owner.removeListener('show', syncWindow);
         owner.removeListener('closed', close);
         if (!owner.isDestroyed() && !owner.webContents.isDestroyed()) owner.webContents.removeListener('did-start-navigation', navigation);
       } };
@@ -139,10 +156,12 @@ export class VkSite {
     });
     contents.on('did-start-navigation', ({ isMainFrame, isSameDocument, url: dest }) => {
       if (!isMainFrame || isSameDocument || this.active !== active) return;
+      // Don't load a new page silently over the retained session (in particular, a login page).
+      if (!active.foreground || !owner.isVisible() || owner.isMinimized()) { this.dispose(active); return; }
       clearTimeout(active.timer);
       active.revision++;
       const safe = vkSiteUrl(dest);
-      this.publish(active, { phase: 'loading', host: safe?.hostname ?? '', signIn: !!safe && vkSignInPage(safe), track: undefined });
+      this.publish(active, { phase: 'loading', host: safe?.hostname ?? '', signIn: !!safe && vkSignInPage(safe), track: undefined, engaged: undefined });
       this.visibility(active);
       active.timer = setTimeout(() => {
         if (active.view.webContents.isDestroyed()) return;
@@ -152,6 +171,7 @@ export class VkSite {
     contents.on('did-navigate-in-page', (_event, _url, main) => {
       if (!main || this.active !== active) return;
       active.revision++;
+      this.visibility(active);
       if (active.state.phase === 'ready') void this.readyPage(active, true);
     });
     contents.on('did-finish-load', () => void this.readyPage(active));
@@ -159,8 +179,7 @@ export class VkSite {
     contents.on('render-process-gone', () => this.fail(active));
     contents.on('media-started-playing', () => void this.readTrack(active));
     contents.on('media-paused', () => void this.readTrack(active));
-    owner.on('minimize', close);
-    owner.on('hide', close);
+    owner.on('minimize', syncWindow).on('hide', syncWindow).on('restore', syncWindow).on('show', syncWindow);
     owner.once('closed', close);
     owner.webContents.on('did-start-navigation', navigation);
     owner.contentView.addChildView(view);
@@ -191,6 +210,9 @@ export class VkSite {
       if (!this.isLive(active, revision)) return;
       signIn = snapshot?.signedOut === true;
     }
+    if ((!music || signIn) && (!active.foreground || !active.owner.isVisible() || active.owner.isMinimized())) {
+      this.dispose(active); return;
+    }
     // Let VK handle security checks as-is. Only choose QR on a recognized signed-out
     // landing page, once per view. Returning accounts load their music link directly.
     if (signIn && !/^\/(?:authcheck|challenge|captcha)(?:[./]|$)/i.test(safe.pathname) && this.startQr(active)) return;
@@ -205,7 +227,7 @@ export class VkSite {
       }
     }
     this.publish(active, { phase: 'ready', host: safe.hostname, signIn, back: contents.navigationHistory.canGoBack(),
-      ...((!music || signIn) && { track: undefined }) });
+      ...((!music || signIn) && { track: undefined, engaged: undefined }) });
     this.applyAppearance(active);
     this.visibility(active);
     void this.readTrack(active);
@@ -215,13 +237,17 @@ export class VkSite {
     return this.active === active && !active.view.webContents.isDestroyed() && active.revision === revision && active.state.phase !== 'failed';
   }
 
-  private canRead(active: VkView) {
+  private musicPageReady(active: VkView) {
     const contents = active.view.webContents;
-    return this.active === active && active.shown && !active.confirming && active.state.phase === 'ready' && !active.state.signIn && !contents.isDestroyed() && vkMusicPage(contents.getURL());
+    return this.active === active && active.state.phase === 'ready' && !active.state.signIn && !contents.isDestroyed() && vkMusicPage(contents.getURL());
+  }
+
+  private musicReady(active: VkView) {
+    return !active.confirming && this.musicPageReady(active);
   }
 
   private async readTrack(active: VkView) {
-    if (!this.canRead(active) || active.reading) return;
+    if (!this.musicReady(active) || !(active.foreground || active.state.engaged) || active.reading) return;
     active.reading = true;
     const revision = active.revision;
     try {
@@ -230,45 +256,61 @@ export class VkSite {
         contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer() }]),
         contents.executeJavaScript(playback()).catch(() => undefined),
       ]);
-      if (!this.canRead(active) || active.revision !== revision) return;
-      if (snapshot?.signedOut === true && this.startQr(active)) return;
+      if (!this.musicReady(active) || active.revision !== revision) return;
+      if (snapshot?.signedOut === true) {
+        if (!active.foreground || !active.owner.isVisible() || active.owner.isMinimized()) { this.dispose(active); return; }
+        this.publish(active, { signIn: true, track: undefined, engaged: undefined });
+        this.visibility(active);
+        this.applyAppearance(active);
+        this.startQr(active);
+        return;
+      }
       const visible = readVkNowPlaying(snapshot);
-      const track = visible && readVkNowPlaying({ ...visible,
-        playing: typeof media?.playing === 'boolean' ? media.playing : visible.playing,
-        previous: media?.previous === true || visible.previous, toggle: media?.toggle === true || visible.toggle,
-        next: media?.next === true || visible.next, timeline: media?.timeline,
+      const track = snapshot && readVkNowPlaying({ ...visible,
+        playing: typeof media?.playing === 'boolean' ? media.playing : visible?.playing,
+        previous: media?.previous === true || visible?.previous, toggle: media?.toggle === true || visible?.toggle,
+        next: media?.next === true || visible?.next, timeline: media?.timeline,
       });
-      this.publish(active, { track });
-    } catch { /* Navigation can replace the frame before the read finishes. */ }
+      const engaged = track?.playing ? true : active.state.engaged;
+      if (!active.foreground && !engaged) { this.dispose(active); return; }
+      const started = engaged !== active.state.engaged;
+      this.publish(active, { track, engaged });
+      if (started) this.visibility(active);
+    } catch {
+      // Navigation can replace the frame before the read finishes.
+      if (this.isLive(active, revision) && !active.foreground && !active.state.engaged) this.dispose(active);
+    }
     finally { active.reading = false; }
   }
 
   async command(owner: BrowserWindow, id: unknown, action: unknown, fraction?: unknown) {
     const active = this.active, contents = active?.view.webContents;
     if (this.resetting || !active || active.owner !== owner || active.id !== id || !contents || contents.isDestroyed()) return false;
-    if (action === 'back' && contents.navigationHistory.canGoBack()) { contents.navigationHistory.goBack(); return true; }
-    if (action === 'music' && !active.state.signIn) { this.navigate(active, VK_MUSIC_URL); return true; }
-    if (action === 'reload') {
+    const foreground = active.foreground && active.shown && owner.isVisible() && !owner.isMinimized();
+    if (action === 'back' && foreground && contents.navigationHistory.canGoBack()) { contents.navigationHistory.goBack(); return true; }
+    if (action === 'music' && foreground && !active.state.signIn) { this.navigate(active, VK_MUSIC_URL); return true; }
+    if (action === 'reload' && foreground) {
       if (vkSiteUrl(contents.getURL())) contents.reload();
       else this.navigate(active, active.entry);
       return true;
     }
-    if (!this.canRead(active)) return false;
+    const canControl = () => this.musicReady(active) && ((active.foreground && active.shown && owner.isVisible() && !owner.isMinimized()) || active.state.engaged);
+    if (!canControl()) return false;
     const revision = active.revision;
-    const stillHere = () => this.canRead(active) && active.revision === revision;
+    const stillHere = () => canControl() && active.revision === revision;
     try {
       if (action === 'seek') {
         const ratio = vkSeekRatio(fraction);
         return ratio !== undefined && active.state.track?.timeline?.seek === true
           && await contents.executeJavaScript(playback('seek', ratio), true) === true;
       }
-      if (!VK_TRANSPORT.includes(action as VkTransport)) return false;
-      const transport = action as VkTransport;
-      if (!active.state.track?.[transport]) return false;
+      if (action !== 'pause' && !VK_TRANSPORT.some((value) => value === action)) return false;
+      const transport = action as VkPlaybackAction;
+      if (transport !== 'pause' && !active.state.track?.[transport]) return false;
       if (await contents.executeJavaScript(playback(transport), true).catch(() => false) === true) return true;
       if (!stillHere()) return false;
       if (await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer(transport) }], true) === true) return true;
-      return action === 'toggle' && stillHere() && await contents.executeJavaScript(playback('toggle', undefined, true), true) === true;
+      return (transport === 'toggle' || transport === 'pause') && stillHere() && await contents.executeJavaScript(playback(transport, undefined, true), true) === true;
     } catch { return false; }
     finally { void this.readTrack(active); }
   }
@@ -282,6 +324,7 @@ export class VkSite {
       if ((await dialog.showMessageBox(owner, message)).response !== 1 || this.active !== active) return false;
       // Destroy the guest before clearing storage so it cannot write old sign-in data back.
       // The React pane reopens the official sign-in page after the request completes.
+      this.publish(active, { phase: 'loading', host: '', back: false, signIn: false, track: undefined, engaged: undefined });
       this.dispose(active, false);
       for (const isolated of [this.partition(), session.fromPartition(LEGACY_VK_SESSION)]) {
         await isolated.closeAllConnections();

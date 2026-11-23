@@ -1,4 +1,4 @@
-/* Shared Home: browsing and the original now-playing tools use one queue. */
+/* Home follows the actual pane width, including when the queue or sidebar is open. */
 .home-page { container-type: inline-size; display: grid; gap: clamp(13px, 2vw, 23px); padding-top: clamp(18px, 3.5vw, 40px); }
 .hub-masthead, .hub-lead { min-width: 0; }
 .hub-masthead { display: grid; gap: 18px; }
@@ -22,6 +22,10 @@
 .home-now .enabled-dot { position: absolute; right: 4px; top: 4px; width: 4px; height: 4px; }
 .home-now .hero { flex: 1; align-items: end; min-height: clamp(184px, 27dvh, 268px); height: auto; border-radius: 11px; color: #fdf8ff; }
 .home-now .hero-content { width: min(78%, 700px); min-width: 0; padding: clamp(11px, 1.45vw, 20px); }
+.home-now .hero-featured-art { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; }
+.home-now .hero-featured-art .hero-content { width: 100%; padding-inline-end: 0; }
+.hero-featured-cover { width: clamp(62px, 10cqw, 172px); aspect-ratio: 1; margin-inline: clamp(9px, 2.3cqw, 26px); border: 1px solid #ffffff43;
+  border-radius: clamp(10px, 1.6cqw, 18px); box-shadow: 0 12px 28px #0d071a84; }
 .home-now .hero h2 { white-space: normal; overflow: visible; overflow-wrap: anywhere; line-height: 1.13; margin-block: 6px 3px; font-size: clamp(23px, 2.5vw, 37px); }
 .home-now .hero-label { background: #151025b3; color: #eae4fa; border-color: #fff3; }
 .home-now .hero-label .signal { color: #eae4fa; }
@@ -107,7 +111,6 @@
   .hub-masthead { gap: 12px; }
   .hub-heading { align-items: start; flex-direction: column; }
   .hub-search { width: 100%; }
-  .hub-lead { grid-template-columns: minmax(0, 1fr); }
   .hub-hero { min-height: 164px; }
   .hub-tabs button { padding: 6px 9px; font-size: 11px; }
   .hub-shelf { padding: 10px; }
@@ -116,7 +119,13 @@
   .hub-rail { grid-auto-columns: minmax(139px, 48%); }
 }
 
-@media (min-width: 1360px) { .hub-tracks-strip { grid-auto-columns: minmax(195px, 32.5%); } }
+@container (min-width: 1060px) {
+  .hub-lead { grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); }
+  .hub-tracks-strip { grid-auto-columns: minmax(185px, calc((100% - 24px) / 3)); }
+}
+@container (min-width: 1480px) {
+  .hub-tracks-strip { grid-auto-columns: minmax(185px, calc((100% - 36px) / 4)); }
+}
 @media (max-width: 420px) { .hub-heading h1 { font-size: 34px; } }
 
 /* Open shelves into real, playable lists. */
@@ -158,7 +167,7 @@
 .station-tile[data-active] { border-color: var(--accent); }
 .station-top, .station-bottom { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
 .station-top { align-items: start; padding-bottom: 2px; }
-.station-logo { display: grid; place-items: center; width: min(54px,52%); flex: none; aspect-ratio: 1; border-radius: 12px; overflow: hidden;
+.station-logo { display: grid; place-items: center; width: min(70px,57%); flex: none; aspect-ratio: 1; border-radius: 12px; overflow: hidden;
   background: linear-gradient(145deg,#ffffff1c,transparent), #171e2c; color: var(--station-tint); box-shadow: 0 5px 12px #10172d38; }
 .station-logo img { width: 100%; height: 100%; object-fit: contain; }
 .station-tile h3 { font: 760 14px/1.17 var(--display); }
