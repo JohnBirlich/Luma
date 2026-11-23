@@ -9,6 +9,7 @@ import { inspectVkPlayer } from './vk-player.js';
 
 interface VkView {
   id: number; owner: BrowserWindow; view: WebContentsView; entry: string; shown: boolean; foreground: boolean;
+  windowVisible: boolean; minimized: boolean;
   appearance: VkSiteAppearance; state: VkSiteState; revision: number; reading: boolean; confirming: boolean; qrStarted: boolean; returnToEntry: boolean; unbind(): void;
   poll?: ReturnType<typeof setInterval>; timer?: ReturnType<typeof setTimeout>;
 }
@@ -50,9 +51,12 @@ export class VkSite {
     this.visibility(active);
   }
 
+  private inForeground(active: VkView) {
+    return active.foreground && active.windowVisible && !active.minimized;
+  }
+
   private visibility(active: VkView) {
-    const show = active.foreground && active.shown && !active.confirming && active.state.phase === 'ready'
-      && active.owner.isVisible() && !active.owner.isMinimized();
+    const show = this.inForeground(active) && active.shown && !active.confirming && active.state.phase === 'ready';
     active.view.setVisible(show);
     // Only the already-selected, verified music document can outlive its native slot.
     if (!active.view.webContents.isDestroyed()) active.view.webContents.setAudioMuted(!this.musicReady(active) || !(show || active.state.engaged));
@@ -130,15 +134,21 @@ export class VkSite {
     const navigation = (event: Electron.Event & { isMainFrame: boolean; isSameDocument: boolean }) => { if (event.isMainFrame && !event.isSameDocument) close(); };
     const syncWindow = () => {
       if (this.active !== active) return;
-      if ((!owner.isVisible() || owner.isMinimized()) && !active.state.engaged) close();
+      if ((!active.windowVisible || active.minimized) && !active.state.engaged) close();
       else this.visibility(active);
     };
+    // The native event can arrive before synchronous window queries reflect the change.
+    const minimize = () => { active.minimized = true; syncWindow(); };
+    const restore = () => { active.minimized = false; syncWindow(); };
+    const hide = () => { active.windowVisible = false; syncWindow(); };
+    const show = () => { active.windowVisible = true; syncWindow(); };
     const active: VkView = { id, owner, view, entry: url, appearance, shown: false, foreground: true, revision: 0, reading: false, confirming: false, qrStarted: false, returnToEntry: false,
+      windowVisible: owner.isVisible(), minimized: false,
       state: { host: '', phase: 'loading', back: false, signIn: false }, unbind() {
-        owner.removeListener('minimize', syncWindow);
-        owner.removeListener('hide', syncWindow);
-        owner.removeListener('restore', syncWindow);
-        owner.removeListener('show', syncWindow);
+        owner.removeListener('minimize', minimize);
+        owner.removeListener('hide', hide);
+        owner.removeListener('restore', restore);
+        owner.removeListener('show', show);
         owner.removeListener('closed', close);
         if (!owner.isDestroyed() && !owner.webContents.isDestroyed()) owner.webContents.removeListener('did-start-navigation', navigation);
       } };
@@ -157,7 +167,7 @@ export class VkSite {
     contents.on('did-start-navigation', ({ isMainFrame, isSameDocument, url: dest }) => {
       if (!isMainFrame || isSameDocument || this.active !== active) return;
       // Don't load a new page silently over the retained session (in particular, a login page).
-      if (!active.foreground || !owner.isVisible() || owner.isMinimized()) { this.dispose(active); return; }
+      if (!this.inForeground(active)) { this.dispose(active); return; }
       clearTimeout(active.timer);
       active.revision++;
       const safe = vkSiteUrl(dest);
@@ -179,7 +189,7 @@ export class VkSite {
     contents.on('render-process-gone', () => this.fail(active));
     contents.on('media-started-playing', () => void this.readTrack(active));
     contents.on('media-paused', () => void this.readTrack(active));
-    owner.on('minimize', syncWindow).on('hide', syncWindow).on('restore', syncWindow).on('show', syncWindow);
+    owner.on('minimize', minimize).on('restore', restore).on('hide', hide).on('show', show);
     owner.once('closed', close);
     owner.webContents.on('did-start-navigation', navigation);
     owner.contentView.addChildView(view);
@@ -210,7 +220,7 @@ export class VkSite {
       if (!this.isLive(active, revision)) return;
       signIn = snapshot?.signedOut === true;
     }
-    if ((!music || signIn) && (!active.foreground || !active.owner.isVisible() || active.owner.isMinimized())) {
+    if ((!music || signIn) && !this.inForeground(active)) {
       this.dispose(active); return;
     }
     // Let VK handle security checks as-is. Only choose QR on a recognized signed-out
@@ -258,7 +268,7 @@ export class VkSite {
       ]);
       if (!this.musicReady(active) || active.revision !== revision) return;
       if (snapshot?.signedOut === true) {
-        if (!active.foreground || !active.owner.isVisible() || active.owner.isMinimized()) { this.dispose(active); return; }
+        if (!this.inForeground(active)) { this.dispose(active); return; }
         this.publish(active, { signIn: true, track: undefined, engaged: undefined });
         this.visibility(active);
         this.applyAppearance(active);
@@ -286,7 +296,7 @@ export class VkSite {
   async command(owner: BrowserWindow, id: unknown, action: unknown, fraction?: unknown) {
     const active = this.active, contents = active?.view.webContents;
     if (this.resetting || !active || active.owner !== owner || active.id !== id || !contents || contents.isDestroyed()) return false;
-    const foreground = active.foreground && active.shown && owner.isVisible() && !owner.isMinimized();
+    const foreground = this.inForeground(active) && active.shown;
     if (action === 'back' && foreground && contents.navigationHistory.canGoBack()) { contents.navigationHistory.goBack(); return true; }
     if (action === 'music' && foreground && !active.state.signIn) { this.navigate(active, VK_MUSIC_URL); return true; }
     if (action === 'reload' && foreground) {
@@ -294,7 +304,7 @@ export class VkSite {
       else this.navigate(active, active.entry);
       return true;
     }
-    const canControl = () => this.musicReady(active) && ((active.foreground && active.shown && owner.isVisible() && !owner.isMinimized()) || active.state.engaged);
+    const canControl = () => this.musicReady(active) && ((this.inForeground(active) && active.shown) || active.state.engaged);
     if (!canControl()) return false;
     const revision = active.revision;
     const stillHere = () => canControl() && active.revision === revision;
