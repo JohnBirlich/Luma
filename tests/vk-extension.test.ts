@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
+import { vkAppearanceScript } from '../electron/vk-appearance.js';
 
 const extension = new URL('../vk-extension/', import.meta.url);
 const read = (file: string) => readFileSync(new URL(file, extension), 'utf8');
@@ -60,4 +61,32 @@ test('the VK extension changes only its CSS gate on a music route, including SPA
   assert.equal(go('/audio'), false);
   onStorageChange({ hideMenu: { newValue: true } }, 'sync');
   assert.equal(attrs.has(marker), true, 're-enabled without a document reload');
+});
+
+test('Luma adopts the same cosmetic CSS without running the extension or styling other routes', () => {
+  class Sheet {
+    css = '';
+    replaceSync(css: string) { this.css = css; }
+  }
+  const window = { get top() { return this; } };
+  const location = new URL('https://vk.ru/audio');
+  const original = new Sheet();
+  const document = { adoptedStyleSheets: [original] };
+  const context = { window, location, document, CSSStyleSheet: Sheet };
+  const apply = (mode: 'minimal' | 'standard', href = location.href) => runInNewContext(vkAppearanceScript(mode, href)!, context);
+
+  apply('minimal');
+  assert.equal(document.adoptedStyleSheets.length, 2);
+  assert.equal(document.adoptedStyleSheets[1].css, read('styles.css').replace('html[data-vk-music-only]', 'html'));
+  apply('standard');
+  assert.deepEqual(document.adoptedStyleSheets, [original]);
+  apply('minimal');
+  location.pathname = '/id42';
+  apply('minimal');
+  assert.deepEqual(document.adoptedStyleSheets, [original]);
+  apply('minimal', 'https://vk.ru/audio');
+  assert.equal(document.adoptedStyleSheets.length, 1, 'a stale music injection cannot affect the profile');
+  location.href = 'https://id.vk.ru/audio';
+  apply('minimal');
+  assert.equal(document.adoptedStyleSheets.length, 1, 'VK ID is never styled');
 });

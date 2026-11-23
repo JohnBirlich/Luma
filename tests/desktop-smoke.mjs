@@ -730,7 +730,8 @@ async function smoke() {
     if (url.pathname === '/feed' && url.searchParams.get('fixture') === 'handlers') return new Response(vkHeadlessPlayerPage(testAudioPath, true), { headers: playerHeaders });
     if (url.pathname === '/audio' && url.searchParams.get('fixture') === 'detached') return new Response(vkHeadlessPlayerPage(testAudioPath, false), { headers: playerHeaders });
     if (['/audio', '/music/playlist/-31_4_aShare', '/audio123_456'].includes(url.pathname)) {
-      return new Response(vkPlayerPage(testAudioPath, { inline: url.pathname === '/audio123_456' }), { headers: playerHeaders });
+      const legacy = url.pathname === '/audio123_456';
+      return new Response(vkPlayerPage(testAudioPath, { legacy, inline: legacy }), { headers: playerHeaders });
     }
     return new Response(null, { status: 404 });
   });
@@ -1156,24 +1157,24 @@ async function smoke() {
       const shellIs = (mode) => guestRun(`(() => {
         const header = document.querySelector('#page_header_cont'), sidebar = document.querySelector('#layout_sidebar');
         const layout = document.querySelector('#page_layout'), body = document.querySelector('#page_body');
-        const link = sidebar?.querySelector('#l_pr a'), feed = sidebar?.querySelector('#l_feed');
-        if (!header || !link || !feed || !body) return false;
+        const link = sidebar?.querySelector('#l_pr a'), feed = sidebar?.querySelector('#l_feed'), chat = document.querySelector('#fixture-chat');
+        if (!header || !link || !feed || !body || !chat) return false;
         const mode = ${JSON.stringify(mode)};
         const headerStyle = getComputedStyle(header), bodyRect = body.getBoundingClientRect();
         const displayed = (el) => el.getBoundingClientRect().width > 0;
-        if (mode === 'standard') return headerStyle.opacity === '1' && displayed(link) && displayed(feed) && bodyRect.left >= 164;
+        if (mode === 'standard') return headerStyle.opacity === '1' && displayed(link) && displayed(feed) && displayed(chat) && bodyRect.left >= 164;
         const hidden = headerStyle.opacity === '0' && getComputedStyle(header.querySelector('ul')).getPropertyValue('interactivity') === 'inert';
         if (mode === 'minimal') {
           const player = header.querySelector('#top_audio_layer_place'), bar = header.getBoundingClientRect();
           const viewport = document.documentElement.clientWidth;
-          return !displayed(sidebar) && viewport - bodyRect.width <= 33 && bodyRect.left >= 0 && bodyRect.right <= viewport + 1
+          return !displayed(sidebar) && !displayed(chat) && viewport - bodyRect.width <= 33 && bodyRect.left >= 0 && bodyRect.right <= viewport + 1
             && document.documentElement.scrollWidth <= viewport + 1 && (player
               ? headerStyle.opacity === '1' && displayed(player) && Math.abs(bar.left - bodyRect.left) < 1 && bar.bottom <= bodyRect.top
                 && !displayed(header.querySelector('#fixture-vk-home')) && !displayed(header.querySelector('#fixture-vk-search'))
                 && !displayed(header.querySelector('#fixture-vk-account'))
               : hidden && bodyRect.top < 32);
         }
-        return hidden && displayed(link) && !displayed(feed) && !displayed(document.querySelector('#ads_wrapper'))
+        return hidden && displayed(link) && displayed(chat) && !displayed(feed) && !displayed(document.querySelector('#ads_wrapper'))
           && !displayed(sidebar.querySelector('#fixture-profile-more')) && Math.abs(bodyRect.left - layout.getBoundingClientRect().left - 16) < 1
           && bodyRect.top < 48 && bodyRect.right <= innerWidth + 1 && displayed(document.querySelector('#spa_layout_content'));
       })()`);
@@ -1202,7 +1203,7 @@ async function smoke() {
       await click('[data-vk-action="next"]');
       await waitFor('The hidden header player updates from rendered text without MediaSession', () => titleIs(1));
       await select(vkAppearance, 'minimal');
-      await waitFor('minimal fills the slot, leaving only the music player at the top', async () => await shellIs('minimal')
+      await waitFor('minimal hides left menu, global header controls and the right chat dock', async () => await shellIs('minimal')
         && (await preferences()).vkSiteAppearance === 'minimal');
       const catalogueFits = () => guestRun(`(() => {
         const viewWidth = document.documentElement.clientWidth;
@@ -1214,8 +1215,9 @@ async function smoke() {
       assert.equal(await catalogueFits(), true);
       assert.equal(await guestRun(`(() => {
         const search = document.querySelector('#fixture-music-search'); search.focus({ preventScroll: true });
+        document.querySelector('#fixture-chat').focus({ preventScroll: true });
         return document.activeElement === search && getComputedStyle(document.body).colorScheme === 'dark';
-      })()`), true, 'native music search stays focusable in the VK theme');
+      })()`), true, 'chat shortcuts cannot take focus, but native music search still can');
       await guestRun(`document.getElementById('fixture-mix').click()`);
       await waitFor('native Mix starts the fixture audio in minimal mode', () => guestRun(`!document.querySelector('audio').paused`));
       assert.equal(await guestRun(`(() => {
@@ -1326,11 +1328,13 @@ async function smoke() {
       const reopenAt = vkRequests.length;
       await click('.music-link-dialog .music-link-target .primary-button');
       await waitVk(trackUrl);
-      await waitFor('returning VK opens the explicit track with the native in-page player and no duplicate bar', async () => await titleIs(0)
+      await waitFor('saved minimal mode recognizes the legacy shell and keeps the native in-page player', async () => await titleIs(0)
         && await run(`!document.querySelector('.vk-site-login') && document.querySelector('${vkAppearance}').value === 'minimal'
           && !!document.querySelector('${toggleVk}:enabled')`)
-        && await vkView().webContents.executeJavaScript(`getComputedStyle(document.querySelector('#layout_sidebar')).display === 'none'
-          && getComputedStyle(document.querySelector('#page_header_cont')).opacity === '0'
+        && await vkView().webContents.executeJavaScript(`getComputedStyle(document.querySelector('#side_bar')).display === 'none'
+          && getComputedStyle(document.querySelector('#top_nav')).opacity === '0'
+          && getComputedStyle(document.querySelector('#fastchat-reforged')).display === 'none'
+          && document.documentElement.clientWidth - document.querySelector('#content').getBoundingClientRect().width <= 33
           && document.querySelector('.audio_page_player2').getBoundingClientRect().bottom <= document.querySelector('[role=tablist]').getBoundingClientRect().top
           && document.querySelector('#fixture-toggle').getBoundingClientRect().width > 0`));
       assert.equal(vkRequests[reopenAt], trackUrl);
