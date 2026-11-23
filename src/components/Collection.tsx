@@ -144,10 +144,12 @@ export function NowPlayingCard(props: NowPlayingProps) {
         {centered && <Artwork track={track} className="hero-center-art" reveal={reveal} />}
         <div className="hero-content">
           <div className="hero-label"><Signal playing={playing} /> {vk ? t('VK Музыка') : radio ? t("Прямой эфир") : track?.demo ? t("Демо-трек") : track?.online ? t("Онлайн-трек") : track ? t("Воспроизведение") : t("Ваша коллекция")}</div>
-          <h2 key={trackKey} title={track?.title}>{track?.title ?? t("Время для музыки")}</h2>
-          <div className="hero-meta" key={trackKey && `${trackKey}-meta`}>
-            {track ? <>{track.artist && <span>{track.artist}</span>}{(track.online || track.album) && <>
-              {track.artist && <span className="hero-dot" />}{track.online ? <OnlineCredit track={{ online: track.online }} /> : <span>{track.album}</span>}</>}</> : <span>{t("Добавьте аудиофайлы, чтобы начать.")}</span>}
+          <div className="hero-track track-swap" key={trackKey}>
+            <h2 title={track?.title}>{track?.title ?? t("Время для музыки")}</h2>
+            <div className="hero-meta">
+              {track ? <>{track.artist && <span>{track.artist}</span>}{(track.online || track.album) && <>
+                {track.artist && <span className="hero-dot" />}{track.online ? <OnlineCredit track={{ online: track.online }} /> : <span>{track.album}</span>}</>}</> : <span>{t("Добавьте аудиофайлы, чтобы начать.")}</span>}
+            </div>
           </div>
           {vk && props.vkControls && <div className="hero-vk-timeline"><SeekTimeline {...props.vkControls} /></div>}
           <div className="hero-actions-row">
