@@ -24,7 +24,7 @@ import { DislikeButton, FavoriteButton } from './FavoriteButton';
 import { Signal } from './QueuePanel';
 import { SceneBackground } from './SceneBackground';
 import { VinylRecord } from './VinylRecord';
-import { SeekTimeline, TransportControls, VkFavoriteControl, VolumeControl } from './PlaybackControls';
+import { SeekTimeline, TransportControls, VkDislikeControl, VkFavoriteControl, VkLikeControl, VolumeControl } from './PlaybackControls';
 import type { PlaybackProps } from './PlaybackControls';
 import type { ReadSpectrum } from '../player/useAudio';
 import { useVisualMotion } from '../player/useVisualMotion';
@@ -158,7 +158,7 @@ export function NowPlayingCard(props: NowPlayingProps) {
               <span>{toggleLabel}</span>
             </button>}
             {track && <>
-              {vk ? <>{props.vkControls?.vkFavorite && <VkFavoriteControl {...props.vkControls.vkFavorite} />}<button type="button" className="icon-button hero-vk-return" onClick={props.openVk} aria-label={t('Вернуться к сайту VK')} title={t('Вернуться к сайту VK')}><Globe2 size={17} /></button></> : <>
+              {vk ? <>{props.vkControls?.vkLike && <VkLikeControl {...props.vkControls.vkLike} />}{props.vkControls?.vkDislike && <VkDislikeControl {...props.vkControls.vkDislike} />}{props.vkControls?.vkFavorite && <VkFavoriteControl {...props.vkControls.vkFavorite} />}<button type="button" className="icon-button hero-vk-return" onClick={props.openVk} aria-label={t('Вернуться к сайту VK')} title={t('Вернуться к сайту VK')}><Globe2 size={17} /></button></> : <>
                 <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />
                 {!radio && <DislikeButton track={track} selected={props.disliked.has(track.id)} toggle={props.toggleDislike} />}
                 <button type="button" className="icon-button hero-karaoke" disabled={radio || sessionCatalogId(track.id)} onClick={props.openKaraoke} aria-label={t("Караоке")} title={t("Караоке (L)")} aria-haspopup="dialog"><MicVocal size={17} /></button>

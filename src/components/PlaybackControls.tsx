@@ -1,5 +1,5 @@
 import { useText } from '../i18n/context';
-import { Check, Plus, Pause, Play, Radio, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX, Volume1 } from 'lucide-react';
+import { Check, Heart, Plus, Pause, Play, Radio, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, ThumbsDown, Volume2, VolumeX, Volume1 } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { formatTime } from '../shared/media';
 import type { Repeat as RepeatMode } from '../shared/queue';
@@ -26,7 +26,12 @@ export interface TransportProps {
 export interface TimelineProps { live?: boolean; elapsed: number; duration: number; seekable?: boolean; seek(seconds: number): void }
 export interface VolumeProps { source?: 'vk'; volume: number; canVolume?: boolean; canMute?: boolean; toggleMute(): void; setVolume(volume: number): void }
 export interface VkFavoriteProps { selected: boolean; toggle(): void }
-export type PlaybackProps = TransportProps & TimelineProps & VolumeProps & { vkFavorite?: VkFavoriteProps };
+/** VK's own feedback pair, mirrored so Luma offers the same controls as its library player. */
+export interface VkLikeProps { liked?: boolean; toggle(): void }
+export interface VkDislikeProps { disliked?: boolean; toggle(): void }
+export type PlaybackProps = TransportProps & TimelineProps & VolumeProps & {
+  vkFavorite?: VkFavoriteProps; vkLike?: VkLikeProps; vkDislike?: VkDislikeProps;
+};
 
 export function TransportControls({ hasTrack, canToggle, canShuffle, canRepeat, source, live, playing, shuffle, repeat, hasPrevious, hasNext, togglePlay, toggleShuffle, toggleRepeat, previous, next }: TransportProps) {
   const t = useText();
@@ -73,6 +78,22 @@ export function VolumeControl({ source, volume, canVolume, canMute, setVolume, t
     <input type="range" className="range" min={0} max={100} value={percent} aria-label={t("Громкость")} aria-valuetext={`${percent}%`}
       onChange={(event) => setVolume(event.currentTarget.valueAsNumber / 100)} style={{ '--filled': `${percent}%` } as CSSProperties} />
   </div>;
+}
+
+export function VkLikeControl({ liked, toggle }: VkLikeProps) {
+  const t = useText();
+  const label = t(liked ? 'Убрать лайк в VK' : 'Нравится в VK');
+  return <button type="button" className="icon-button like-button vk-like" aria-pressed={liked === true} aria-label={label} title={label} onClick={toggle}>
+    <Heart size={16} fill={liked ? 'currentColor' : 'none'} aria-hidden="true" />
+  </button>;
+}
+
+export function VkDislikeControl({ disliked, toggle }: VkDislikeProps) {
+  const t = useText();
+  const label = t(disliked ? 'Убрать дизлайк в VK' : 'Не нравится в VK');
+  return <button type="button" className="icon-button dislike-toggle vk-dislike" aria-pressed={disliked === true} aria-label={label} title={label} onClick={toggle}>
+    <ThumbsDown size={16} fill={disliked ? 'currentColor' : 'none'} aria-hidden="true" />
+  </button>;
 }
 
 export function VkFavoriteControl({ selected, toggle }: VkFavoriteProps) {

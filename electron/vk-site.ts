@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
-import { VK_SITE_PARTITION, VK_TRANSPORT, readVkNowPlaying, vkArtworkUrl, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
+import { VK_SITE_PARTITION, VK_TRANSPORT, readVkNowPlaying, vkArtworkPixels, vkArtworkUrl, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
 import type { VkNowPlaying, VkPlaybackAction, VkSiteState } from '../src/shared/vk-site.js';
 import { vkAppearanceScript } from './vk-appearance.js';
 import { inspectVkPlayer } from './vk-player.js';
@@ -48,8 +48,13 @@ export class VkSite {
   }
 
   private publishTrack(active: VkView, track: VkNowPlaying | undefined, engaged: boolean | undefined, candidates: unknown) {
+    // Sharpest first: the page reports every rendition it can see, including the
+    // small thumbnail it happens to draw, and the largest one is the one to keep.
     const urls = engaged && track?.title && Array.isArray(candidates)
-      ? [...new Set(candidates.slice(0, 8).flatMap(value => vkArtworkUrl(value) ?? []))].slice(0, 4) : [];
+      ? [...new Set(candidates.slice(0, 12).flatMap(value => vkArtworkUrl(value) ?? []))]
+        .map((url, index) => ({ url, index, pixels: vkArtworkPixels(url) }))
+        .sort((a, b) => b.pixels - a.pixels || a.index - b.index)
+        .slice(0, 4).map(({ url }) => url) : [];
     const key = urls.length ? JSON.stringify([track?.title, track?.artist, urls]) : '';
     if (key !== (active.cover?.key ?? '')) {
       this.dropCover(active);
@@ -346,6 +351,18 @@ export class VkSite {
         volume: media?.muted === true ? 0 : visible?.volume ?? media?.volume,
         canMute: snapshot.canMute === true || media?.canMute === true,
       });
+      // A guest that is hidden behind Luma can still be read for its transport but
+      // not always for every switch, so a known mode or feedback state stays
+      // published for the same track instead of flickering away between polls.
+      const previous = active.state.track;
+      if (track && previous && previous.title === track.title && previous.artist === track.artist) {
+        track.shuffle ??= previous.shuffle;
+        track.repeat ??= previous.repeat;
+        track.favorite ??= previous.favorite;
+        track.liked ??= previous.liked;
+        track.disliked ??= previous.disliked;
+        track.canMute ||= previous.canMute;
+      }
       const engaged = track?.playing ? true : active.state.engaged;
       if (!active.foreground && !engaged) { this.dispose(active); return; }
       const started = engaged !== active.state.engaged;
@@ -375,13 +392,20 @@ export class VkSite {
     const stillHere = () => canControl() && active.revision === revision;
     try {
       const track = active.state.track;
-      const fromDom = async (command: VkPlaybackAction | 'seek', ratio?: number, gesture: 'click' | 'pointer' = 'click') => stillHere()
-        && await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer(command, ratio, gesture) }], true) === true;
-      // Mode switches are verified, not assumed: VK sometimes ignores a synthetic
-      // click, and the player must not report success while nothing changed.
-      const mode = async (field: 'shuffle' | 'repeat' | 'favorite') => {
-        const snapshot = await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer() }]).catch(() => undefined);
-        return readVkNowPlaying(snapshot)?.[field];
+      const fromDom = async (command: VkPlaybackAction | 'seek', ratio?: number, gesture: 'click' | 'pointer' | 'trusted' = 'click') => {
+        if (!stillHere()) return false;
+        const result: unknown = await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer(command, ratio, gesture) }], true);
+        if (result === true) return true;
+        // A trusted gesture comes back as a point: the host replays it as genuine
+        // input so a handler that ignores scripted clicks still receives a press.
+        const point = gesture === 'trusted' && result && typeof result === 'object' ? (result as { point?: { x?: unknown; y?: unknown } }).point : undefined;
+        const x = Math.round(Number(point?.x)), y = Math.round(Number(point?.y));
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x <= 0 || y <= 0) return false;
+        if (contents.isDestroyed()) return false;
+        contents.sendInputEvent({ type: 'mouseMove', x, y });
+        contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+        contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+        return true;
       };
       const fromMedia = (command: VkPlaybackAction | 'seek', ratio?: number) => contents.executeJavaScript(playback(command, ratio), true).catch(() => false);
       if (action === 'seek') {
@@ -393,19 +417,46 @@ export class VkSite {
         if (track?.volume === undefined || (action === 'volume' ? ratio === undefined : !track.canMute)) return false;
         return await fromDom(action, ratio) || (stillHere() && (await fromMedia(action, ratio)) === true);
       }
-      if (action === 'shuffle' || action === 'repeat' || action === 'favorite') {
-        // The published snapshot is a poll behind the rendered player, so a
-        // stale "not offered" flag must not refuse a control that is on screen.
-        const field = action;
-        const before = await mode(field);
-        if (!await fromDom(field)) return false;
-        if (await mode(field) !== before) return true;
+      const modes = ['shuffle', 'repeat', 'favorite', 'like', 'dislike'] as const;
+      const toggle = (modes as readonly unknown[]).includes(action) ? action as typeof modes[number] : undefined;
+      if (toggle) {
+        // The published snapshot is a poll behind the rendered player, so a stale
+        // "not offered" flag must not refuse a control that is on screen.
+        const field = toggle === 'like' ? 'liked' : toggle === 'dislike' ? 'disliked' : toggle;
+        const read = async () => readVkNowPlaying(await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer() }])
+          .catch(() => undefined))?.[field];
+        const before = await read();
+        // A verified change is published at once, so the card answers the press
+        // instead of waiting for the next poll of a player that may be hidden.
+        const publishMode = (value: unknown) => {
+          const current = active.state.track;
+          if (!current) return;
+          if (field === 'repeat') {
+            if (value === 'off' || value === 'one' || value === 'all') this.publish(active, { track: { ...current, repeat: value } });
+          } else if (typeof value === 'boolean') {
+            this.publish(active, { track: { ...current, [field]: value } as VkNowPlaying });
+          }
+        };
+        const settled = async () => {
+          const after = await read();
+          if (after === before) return false;
+          publishMode(after);
+          return true;
+        };
+        // Without a readable state the switch cannot be verified, so it gets a
+        // single faithful gesture instead of two presses that could cancel out.
+        if (!await fromDom(toggle, undefined, before === undefined ? 'trusted' : 'pointer')) return false;
         if (before === undefined) return true;
-        // A pointer gesture reaches handlers that skip synthetic clicks.
-        await delay(140);
-        if (!await fromDom(field, undefined, 'pointer')) return false;
-        await delay(360);
-        return await mode(field) !== before;
+        // VK applies a mode locally but a feedback mark after a server round trip,
+        // so the first press is given time before it is ever repeated.
+        for (const pause of [340, 260]) {
+          await delay(pause);
+          if (await settled()) return true;
+        }
+        // Scripted clicks are ignored by some builds; replay it as genuine input.
+        if (!await fromDom(toggle, undefined, 'trusted')) return false;
+        await delay(460);
+        return await settled();
       }
       if (action !== 'pause' && !VK_TRANSPORT.some((value) => value === action)) return false;
       const transport = action as typeof VK_TRANSPORT[number] | 'pause';

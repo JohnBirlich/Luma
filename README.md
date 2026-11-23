@@ -86,7 +86,7 @@
 Нужны Node.js **22.12+** и Git. Для собственного `.exe` — Windows, Visual Studio Build Tools с MSVC x64 и Windows SDK для вспомогательного WASAPI-процесса.
 
 ```powershell
-git clone --single-branch --branch v1.5.9 https://github.com/JohnBirlich/Luma.git
+git clone --single-branch --branch v1.5.10 https://github.com/JohnBirlich/Luma.git
 cd Luma
 npm.cmd ci
 npm.cmd run dev

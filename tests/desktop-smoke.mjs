@@ -1284,6 +1284,16 @@ async function smoke() {
       await waitFor('shuffle from the dock changes only the player on VK', () => guestRun(`document.querySelector('#fixture-shuffle').getAttribute('aria-pressed') === 'true'`));
       await click(`${vkDock} [aria-label="Повтор выключен"]`);
       await waitFor('repeat delegates to the native player', () => guestRun(`document.querySelector('#fixture-repeat').dataset.repeat === 'all'`));
+      assert.equal(await vkCommand('like'), true);
+      await waitFor('a VK like is delegated and read back from the rendered player',
+        () => guestRun(`document.querySelector('#fixture-like').getAttribute('aria-pressed') === 'true'`));
+      assert.equal(await vkCommand('dislike'), true);
+      await waitFor('a switch that ignores scripted clicks still receives real input',
+        () => guestRun(`document.querySelector('#fixture-dislike').getAttribute('aria-pressed') === 'true'`));
+      await waitFor('the mirrored VK snapshot carries both feedback marks as state', () => run(`(() => {
+        const track = window.vkFixtureStates.at(-1)?.state?.track;
+        return track?.liked === true && track?.disliked === true;
+      })()`));
       await fill(`${vkDock} .volume input`, '34');
       await waitFor('VK volume delegates to the native slider', () => guestRun(`Math.abs(document.querySelector('audio').volume - .34) < .01`));
       const catalogueFits = () => guestRun(`(() => {

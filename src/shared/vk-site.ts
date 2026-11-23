@@ -9,7 +9,7 @@ const musicHosts = ['vk.ru', 'vk.com', 'm.vk.ru', 'm.vk.com', 'music.vk.ru', 'mu
 const siteHosts = new Set([...musicHosts, 'id.vk.ru', 'id.vk.com', 'login.vk.ru', 'login.vk.com', 'oauth.vk.ru', 'oauth.vk.com']);
 export const VK_TRANSPORT = ['previous', 'toggle', 'next'] as const;
 export type VkTransport = typeof VK_TRANSPORT[number];
-export type VkPlaybackAction = VkTransport | 'pause' | 'shuffle' | 'repeat' | 'favorite' | 'volume' | 'mute';
+export type VkPlaybackAction = VkTransport | 'pause' | 'shuffle' | 'repeat' | 'favorite' | 'like' | 'dislike' | 'volume' | 'mute';
 export type VkSiteAction = VkPlaybackAction | 'seek' | 'back' | 'reload' | 'music';
 export interface VkBounds { x: number; y: number; width: number; height: number }
 export interface VkPosition { position: number; duration: number; seek: boolean }
@@ -18,6 +18,8 @@ export interface VkNowPlaying {
   /** Opaque cover key from the app's own cache, so a saved listen keeps its artwork without a VK URL. */
   artwork?: string;
   link?: string; volume?: number; canMute?: boolean; shuffle?: boolean; repeat?: Repeat; favorite?: boolean;
+  /** The rendered player's heart, which is a different control from “add to my music”. */
+  liked?: boolean; disliked?: boolean;
 }
 export interface VkSiteState {
   host: string; phase: 'loading' | 'ready' | 'failed' | 'closed'; back: boolean; signIn: boolean; track?: VkNowPlaying;
@@ -49,6 +51,25 @@ export function vkArtworkUrl(value: unknown) {
   // The newer vkuserphoto.ru host is used for rendered VK thumbnails. Limit it
   // to observed raster delivery routes instead of trusting every path on it.
   if (url.hostname.endsWith('.vkuserphoto.ru') ? cdnPath && raster : cdnPath || raster) return url.href;
+}
+
+/**
+ * The size a VK image address advertises. The rendered player draws small
+ * thumbnails, so candidates are ranked by this instead of by DOM order to keep
+ * the sharpest rendition for the hero and the saved listen.
+ */
+export function vkArtworkPixels(value: unknown) {
+  const url = typeof value === 'string' ? URL.parse(value) : undefined;
+  if (!url) return 0;
+  let pixels = 0;
+  for (const [name, raw] of url.searchParams) {
+    if (name !== 'size' && name !== 'cs' && name !== 'as' && name !== 'crop') continue;
+    for (const pair of raw.slice(0, 200).split(',')) {
+      const match = /^(\d{1,5})x(\d{1,5})$/.exec(pair.trim());
+      if (match) pixels = Math.max(pixels, Math.min(Number(match[1]), Number(match[2])));
+    }
+  }
+  return pixels;
 }
 
 export function vkSiteUrl(value: unknown) {
@@ -127,5 +148,6 @@ export function readVkNowPlaying(value: unknown): VkNowPlaying | undefined {
   const artwork = title && typeof row.artwork === 'string' && VK_COVER_KEY.test(row.artwork) ? row.artwork : undefined;
   return { title, artist, ...(link && { link }), ...(artwork && { artwork }), playing: row.playing === true, previous, toggle, next, ...(timeline && { timeline }),
     ...(volume !== undefined && { volume, canMute: row.canMute === true }), ...(typeof row.shuffle === 'boolean' && { shuffle: row.shuffle }),
-    ...(repeat && { repeat }), ...(typeof row.favorite === 'boolean' && { favorite: row.favorite }) };
+    ...(repeat && { repeat }), ...(typeof row.favorite === 'boolean' && { favorite: row.favorite }),
+    ...(typeof row.liked === 'boolean' && { liked: row.liked }), ...(typeof row.disliked === 'boolean' && { disliked: row.disliked }) };
 }

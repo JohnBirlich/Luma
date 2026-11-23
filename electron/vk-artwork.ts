@@ -2,7 +2,9 @@ import { coverMime } from '../src/shared/artwork.js';
 import type { CoverMime } from '../src/shared/artwork.js';
 import { vkArtworkUrl } from '../src/shared/vk-site.js';
 
-export const MAX_VK_ARTWORK_BYTES = 512 * 1024;
+// A 1280px VK cover is often 400–900 KiB; the old half-megabyte ceiling silently
+// fell back to the small rendition the player happened to draw.
+export const MAX_VK_ARTWORK_BYTES = 1024 * 1024;
 export interface VkArtwork { bytes: Uint8Array<ArrayBuffer>; mime: CoverMime }
 
 /** One size-limited image from the current player's public artwork, with no cookies or referrer. */
