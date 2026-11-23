@@ -166,12 +166,15 @@ export class VkSite {
     });
     contents.on('did-start-navigation', ({ isMainFrame, isSameDocument, url: dest }) => {
       if (!isMainFrame || isSameDocument || this.active !== active) return;
+      // The start event can precede the navigation guard. A blocked external link
+      // leaves the existing document and its playback in place, not in "loading".
+      const safe = vkSiteUrl(dest);
+      if (!safe) return;
       // Don't load a new page silently over the retained session (in particular, a login page).
       if (!this.inForeground(active)) { this.dispose(active); return; }
       clearTimeout(active.timer);
       active.revision++;
-      const safe = vkSiteUrl(dest);
-      this.publish(active, { phase: 'loading', host: safe?.hostname ?? '', signIn: !!safe && vkSignInPage(safe), track: undefined, engaged: undefined });
+      this.publish(active, { phase: 'loading', host: safe.hostname, signIn: vkSignInPage(safe), track: undefined, engaged: undefined });
       this.visibility(active);
       active.timer = setTimeout(() => {
         if (active.view.webContents.isDestroyed()) return;

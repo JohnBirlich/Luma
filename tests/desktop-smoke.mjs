@@ -1376,6 +1376,8 @@ async function smoke() {
       await guestRun(`setTimeout(() => { location.href = 'https://outside.invalid/'; }, 0);`);
       await delay(250);
       assert.equal(guest.getURL(), detachedUrl);
+      await waitFor('a blocked external link leaves the authorized player visible and selected', async () => nativeView.getVisible()
+        && await readyView() && await mirrored(`${vkDock} .playing-mini strong`, 0));
       assert.ok(vkRequests.every((value) => ['vk.ru', 'id.vk.ru'].includes(new URL(value).hostname)));
       assert.equal(BrowserWindow.getAllWindows().length, 1);
       const vkBounds = window.getBounds();
@@ -1416,6 +1418,8 @@ async function smoke() {
       await waitPauseVk();
       await click(`${vkDock} .playing-mini`);
       await waitFor('playing guest is hidden again', () => !backgroundView.getVisible());
+      await click(`${vkDock} [aria-label="Следующий трек"]`);
+      await waitFor('the hidden guest can also use the website button fallback', () => mirrored('.home-now[data-playback-source="vk"] .hero h2', 1));
       await backgroundView.webContents.executeJavaScript(`void setTimeout(() => history.pushState(null, '', ${JSON.stringify(profileUrl)}), 0)`);
       await waitFor('a hidden departure from VK Music ends the background session', async () => !vkView() && await run(`!document.querySelector('${vkDock}')`));
       assert.equal((await isolatedVk.cookies.get({ name: authCookie.name })).length, 1);
