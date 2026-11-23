@@ -115,7 +115,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
         </div>
         <div className="immersive-content">
           <div className="immersive-meta">
-            <div><h1 id="immersive-title" title={track.title}>{track.title}</h1>{track.artist && <p title={track.artist}>{track.artist}</p>}
+            <div key={`${track.title}\n${track.artist}`} className="track-swap"><h1 id="immersive-title" title={track.title}>{track.title}</h1>{track.artist && <p title={track.artist}>{track.artist}</p>}
               {(track.online || track.album) && <small title={track.album}>{track.online ? <OnlineCredit track={{ online: track.online }} /> : track.album}</small>}</div>
             {vk ? props.vkFavorite && <div className="immersive-feedback"><VkFavoriteControl {...props.vkFavorite} /></div> : <div className="immersive-feedback">
               <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />

@@ -1,6 +1,7 @@
 import { dialog, net, session, WebContentsView } from 'electron';
 import type { BrowserWindow } from 'electron';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { VK_SITE_PARTITION, VK_TRANSPORT, readVkNowPlaying, vkArtworkUrl, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
@@ -31,6 +32,8 @@ export class VkSite {
   private active?: VkView;
   private isolated?: Electron.Session;
   private resetting = false;
+  /** Cover keys already written to disk and therefore safe to publish. */
+  private readonly cached = new Set<string>();
 
   constructor(private readonly covers?: VkCoverCache) {}
 
@@ -65,9 +68,15 @@ export class VkSite {
       const image = await fetchVkArtwork(net.fetch, src, signal);
       if (signal.aborted || active.cover !== cover || !this.musicPageReady(active)) return;
       if (!image) continue;
+      // Store first: a saved listen may ask for this key the moment it is
+      // published, and a 404 would only recover after the section re-mounted.
+      const key = vkCoverKey(src);
+      await this.covers?.put(key, image);
+      if (signal.aborted || active.cover !== cover || !this.musicPageReady(active)) return;
       cover.image = image;
-      // History rows keep only this key; the renderer never sees the VK address.
-      void this.covers?.put(vkCoverKey(src), image);
+      if (this.covers) this.cached.add(key);
+      const track = active.state.track;
+      if (this.cached.has(key) && track) this.publish(active, { track: { ...track, artwork: key } });
       this.publish(active, { cover: `luma://app/media/vk-cover/${cover.id}` });
       return;
     }
@@ -324,9 +333,10 @@ export class VkSite {
         return;
       }
       // A saved listen keeps an opaque key into the bounded cover cache, so no
-      // VK address ever leaves this process.
+      // VK address ever leaves this process. Only cached keys are published.
       const source = Array.isArray(snapshot?.artwork) ? snapshot.artwork.map(vkArtworkUrl).find(Boolean) : undefined;
-      const cover = source && vkCoverKey(source);
+      const key = source && vkCoverKey(source);
+      const cover = key && this.cached.has(key) ? key : undefined;
       const visible = readVkNowPlaying({ ...snapshot, artwork: cover });
       const track = snapshot && readVkNowPlaying({ ...visible,
         playing: typeof media?.playing === 'boolean' ? media.playing : visible?.playing,
@@ -365,8 +375,14 @@ export class VkSite {
     const stillHere = () => canControl() && active.revision === revision;
     try {
       const track = active.state.track;
-      const fromDom = async (command: VkPlaybackAction | 'seek', ratio?: number) => stillHere()
-        && await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer(command, ratio) }], true) === true;
+      const fromDom = async (command: VkPlaybackAction | 'seek', ratio?: number, gesture: 'click' | 'pointer' = 'click') => stillHere()
+        && await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer(command, ratio, gesture) }], true) === true;
+      // Mode switches are verified, not assumed: VK sometimes ignores a synthetic
+      // click, and the player must not report success while nothing changed.
+      const mode = async (field: 'shuffle' | 'repeat' | 'favorite') => {
+        const snapshot = await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer() }]).catch(() => undefined);
+        return readVkNowPlaying(snapshot)?.[field];
+      };
       const fromMedia = (command: VkPlaybackAction | 'seek', ratio?: number) => contents.executeJavaScript(playback(command, ratio), true).catch(() => false);
       if (action === 'seek') {
         const ratio = vkSeekRatio(fraction);
@@ -380,7 +396,16 @@ export class VkSite {
       if (action === 'shuffle' || action === 'repeat' || action === 'favorite') {
         // The published snapshot is a poll behind the rendered player, so a
         // stale "not offered" flag must not refuse a control that is on screen.
-        return await fromDom(action);
+        const field = action;
+        const before = await mode(field);
+        if (!await fromDom(field)) return false;
+        if (await mode(field) !== before) return true;
+        if (before === undefined) return true;
+        // A pointer gesture reaches handlers that skip synthetic clicks.
+        await delay(140);
+        if (!await fromDom(field, undefined, 'pointer')) return false;
+        await delay(360);
+        return await mode(field) !== before;
       }
       if (action !== 'pause' && !VK_TRANSPORT.some((value) => value === action)) return false;
       const transport = action as typeof VK_TRANSPORT[number] | 'pause';

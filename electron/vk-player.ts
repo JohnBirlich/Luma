@@ -4,7 +4,7 @@ import type { VkPlaybackAction } from '../src/shared/vk-site.js';
 
 // Serialized into the guest's isolated world. Observe only rendered music controls
 // and the standard Media Session. Never inspect VK internals, media URLs or login data.
-function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: number | null, artworkHost: string) {
+function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: number | null, artworkHost: string, gesture: 'click' | 'pointer' = 'click') {
   if (window.top !== window || location.protocol !== 'https:' || location.port
     || !['vk.ru', 'vk.com', 'm.vk.ru', 'm.vk.com', 'music.vk.ru', 'music.vk.com'].includes(location.hostname)
     || !/^\/(?:audio(?:-?\d+_\d+)?\/?|audios-?\d+\/?|music(?:\/.*)?)$/.test(location.pathname)) return;
@@ -119,8 +119,17 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
     document.documentElement.toggleAttribute(inlineMarker, !!(rect && x !== undefined && y !== undefined
       && x > 0 && x < innerWidth && y > 0 && y < innerHeight));
   }
+  const transport = { previous: pick(roots, ...previous), toggle: pick(roots, ...toggle), next: pick(roots, ...next) };
+  // VK can render the mode switches in a toolbar beside the transport row. Grow
+  // the scanned region around the play button, never past the page or a tall
+  // catalogue block, so those siblings are reachable without guessing at markup.
+  for (let node = transport.toggle?.parentElement, depth = 0; node && depth < 5; node = node.parentElement, depth++) {
+    if (node.matches('html, body, main, #page_layout, #page_body, #spa_layout_content')) break;
+    if (node.getBoundingClientRect().height > 260) break;
+    if (!roots.includes(node)) roots.push(node);
+  }
   const controls = {
-    previous: pick(roots, ...previous), toggle: pick(roots, ...toggle), next: pick(roots, ...next),
+    ...transport,
     shuffle: mode('.top_audio_player_shuffle, .audio_page_player_shuffle, .audio_page_player2_shuffle',
       /^(?:(?:включить |выключить )?(?:перемешивание|случайный порядок|случайное воспроизведение)|перемешать(?: треки| очередь)?|в случайном порядке|(?:enable |disable )?shuffle)$/i,
       'svg:is([class*="vkuiIcon--shuffle_"],[class*="vkuiIcon--shuffle_outline_"])'),
@@ -158,13 +167,25 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
       slider.input.dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     }
+    // Some VK builds attach React handlers to pointer events only, so a plain
+    // click() can be swallowed. The caller retries with a full gesture.
+    const press = (control: HTMLElement) => {
+      if (gesture === 'pointer') {
+        for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) {
+          const Event = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+          control.dispatchEvent(new Event(type, { bubbles: true, cancelable: true, composed: true, view: window, button: 0, buttons: 1 }));
+        }
+      }
+      control.click();
+    };
     if (action === 'pause') {
-      if (playing && controls.toggle) { controls.toggle.click(); return true; }
+      if (playing && controls.toggle) { press(controls.toggle); return true; }
       return media?.playbackState === 'paused' || playLabel.test(label(controls.toggle));
     }
     const control = controls[action];
-    if (control) control.click();
-    return !!control;
+    if (!control) return false;
+    press(control);
+    return true;
   }
 
   const active = (node: HTMLElement) => ['aria-pressed', 'aria-checked'].some(name => node.getAttribute(name) === 'true')
@@ -274,5 +295,5 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
     volume: volume && (volume.input.valueAsNumber - volume.min) / (volume.max - volume.min), canMute: !!controls.mute, artwork };
 }
 
-export const inspectVkPlayer = (action: VkPlaybackAction | 'seek' | null = null, ratio?: number) =>
-  `(${visibleMusicPlayer.toString()})(...${JSON.stringify([action, ratio ?? null, VK_ARTWORK_HOST.source])})`;
+export const inspectVkPlayer = (action: VkPlaybackAction | 'seek' | null = null, ratio?: number, gesture: 'click' | 'pointer' = 'click') =>
+  `(${visibleMusicPlayer.toString()})(...${JSON.stringify([action, ratio ?? null, VK_ARTWORK_HOST.source, gesture])})`;

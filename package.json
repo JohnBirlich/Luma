@@ -1,6 +1,6 @@
 {
   "name": "luma-player",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "private": true,
   "type": "module",
   "description": "A Windows music player for local files, native mixes, karaoke and open audio catalogs",

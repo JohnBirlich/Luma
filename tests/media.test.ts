@@ -112,6 +112,28 @@ test('desktop protocol streams only indexed media and returns range metadata to 
   assert.equal(await page.text(), '<h1>Luma</h1>');
 });
 
+test('a saved VK listen cover is served only by its opaque key', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'luma-vk-listen-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const bundled = join(dir, 'app');
+  await mkdir(bundled);
+  await writeFile(join(bundled, 'index.html'), '<h1>Luma</h1>');
+  const library = await DesktopLibrary.open(join(dir, 'data'));
+  const key = 'c0ffee00c0ffee00c0ffee00c0ffee00';
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7]);
+  const handle = createProtocolHandler(bundled, library, undefined, undefined, undefined, undefined,
+    async (id) => id === key ? { bytes, mime: 'image/png' } : undefined);
+  const response = await handle(new Request(`luma://app/media/vk-listen/${key}`));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Type'), 'image/png');
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
+  assert.equal((await handle(new Request(`luma://app/media/vk-listen/${'a'.repeat(32)}`))).status, 404);
+  assert.equal((await handle(new Request(`luma://app/media/vk-listen/${key}?size=640`))).status, 404);
+  assert.equal((await handle(new Request(`luma://app/media/vk-listen/${key.toUpperCase()}`))).status, 404);
+  const foreign = await handle(new Request(`luma://app/media/vk-listen/${key}`, { headers: { Origin: 'https://example.com' } }));
+  assert.equal(foreign.status, 403);
+});
+
 test('embedded front cover is cached, served, and cleaned up with its entry', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'luma-cover-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

@@ -200,6 +200,19 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .signal-playing > i:nth-child(3) { animation-delay: -.6s; }
 .signal-playing > i:nth-child(4) { animation-delay: -.24s; }
 @keyframes measure { from { transform: scaleY(.6); } to { transform: scaleY(1.51); } }
+/* A track change settles instead of snapping: the labels rise into place and the
+   new cover is revealed from a slightly larger scale. Both only animate
+   transform and opacity, and both obey the motion setting. */
+@keyframes track-swap-in { from { opacity: 0; transform: translate3d(0, 9px, 0); } to { opacity: 1; transform: none; } }
+@keyframes cover-swap-in { from { opacity: 0; transform: scale(1.035); } to { opacity: 1; transform: none; } }
+.track-swap { animation: track-swap-in .42s cubic-bezier(.22, .68, .28, 1) both; }
+:is(.hero-image, .hero-featured-cover, .hero-center-art, .immersive-art, .immersive-backdrop) > img {
+  animation: cover-swap-in .55s cubic-bezier(.22, .68, .28, 1) both;
+}
+.motion-off :is(.track-swap, .hero-image > img, .hero-featured-cover > img, .hero-center-art > img, .immersive-art > img, .immersive-backdrop > img) { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.track-swap, .hero-image > img, .hero-featured-cover > img, .hero-center-art > img, .immersive-art > img, .immersive-backdrop > img) { animation: none; }
+}
 .hero h2 {
   font: 800 clamp(38px, 4.65vw, 72px)/1.07 var(--display); letter-spacing: -.069em; color: #fff8f1;
   margin: 14px 0 11px; overflow-wrap: anywhere;
@@ -706,6 +719,13 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .hero-style-center .hero-actions-row { margin-top: 14px; }
 .hero:is([data-effect='prism'], [data-effect='spectrum'], [data-effect='notes'], [data-effect='mix-flow'], [data-effect='tunnel'], [data-effect='columns']):not(.hero-style-center) > .hero-scrim {
   background: linear-gradient(90deg, #100d17c7, #100d1766 37%, #100d170a 75%), linear-gradient(0deg, #0e0b154d, transparent 43%);
+}
+/* The flowing scene is the point of this effect, so it keeps the surface: only a
+   whisper of scrim remains on the text side instead of the near-opaque panel used
+   behind photographs. */
+.hero[data-effect='mix-flow'] > .hero-scrim {
+  background: linear-gradient(90deg, #0a0816b4 0%, #0a081648 38%, #0a081600 64%),
+    linear-gradient(0deg, #08061291, transparent 38%);
 }
 
 .scene-dialog { width: min(678px, calc(100% - 26px)); }
