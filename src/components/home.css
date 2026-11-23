@@ -33,6 +33,12 @@
 .home-now .hero-actions-row { gap: 4px; margin-top: 11px; }
 .home-now .hero-actions-row button { width: 34px; height: 34px; padding: 0; }
 .home-now .hero-action > span { display: none; }
+.home-now[data-playback-source='vk'] .transport-controls { gap: 3px; flex-wrap: wrap; justify-content: start; }
+.home-now[data-playback-source='vk'] .transport-controls .play-button { order: 0; }
+.home-now .hero-vk-timeline { max-width: 390px; margin-block: 9px 0; }
+.home-now .hero-vk-timeline .timeline { width: 100%; }
+.home-now .hero-actions-row .volume .range { width: clamp(42px, 9cqw, 76px); }
+.home-now .hero-style-center .hero-vk-timeline { width: min(100%, 390px); margin-inline: auto; }
 .home-now .hero-index { right: 9px; top: 8px; bottom: auto; line-height: 1; font-size: 10px; }
 .home-now .hero-disc { width: min(36%, 222px); }
 .home-now .hero-style-center { align-items: center; padding: 10px; gap: 3px; min-height: 178px; }

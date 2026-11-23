@@ -274,7 +274,8 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
       paint(0);
     });
     surface.width = surface.height = 0;
-    resize.observe(surface);
+    // Observe physical pixels as well, so moving the window between displays updates the raster.
+    resize.observe(surface, { box: 'device-pixel-content-box' });
     wake.current = schedule;
     schedule();
     return () => { resize.disconnect(); cancelAnimationFrame(raf); wake.current = undefined; };

@@ -38,18 +38,24 @@
        transport fallback; don't keep any of the general header interactive. */
     :is(#page_header_cont, #page_header, #top_nav):not(:is(#page_header_cont, #page_header, #top_nav) *, #page_body *) {
       &:not(:has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"]))),
-      body:has(#page_body :is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"]):not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *)) & {
+      body:is(
+        html[data-luma-vk-inline-player] body,
+        html[data-vk-music-only] body:has(#page_body :is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"]):not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *))
+      ) & {
         position: fixed !important; opacity: 0 !important; interactivity: inert !important;
         & * { interactivity: inert !important; }
       }
-      &:has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"])):not(body:has(
-        #page_body :is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"]):not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *)
+      &:has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"])):not(body:is(
+        html[data-luma-vk-inline-player] body,
+        html[data-vk-music-only] body:has(#page_body :is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"]):not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *))
       ) *) {
         position: relative !important; inset: auto !important; width: auto !important; height: auto !important;
         margin: 0 var(--vk-music-only-gutter) var(--vk-music-only-gutter) !important;
         padding: 0 var(--vk-music-only-gutter) !important; box-sizing: border-box !important;
         border-radius: var(--vkui--size_border_radius_paper--regular, 10px);
         display: flex !important; align-items: center !important; min-height: var(--header-height, 48px);
+        /* The complete native viewport scrolls inside Luma, not in the host page. */
+        html:not([data-vk-music-only]) & { position: sticky !important; top: 0 !important; }
         & :is(#page_header_wrap, #page_header, #top_nav) {
           width: 100% !important; min-width: 0 !important; max-width: 100% !important;
           height: auto !important; margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;

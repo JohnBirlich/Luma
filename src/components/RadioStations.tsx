@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ArrowUpRight, Check, Pause, Play, Plus, Search, X } from 'lucide-react';
 import { useText } from '../i18n/context';
-import { EXTRA_STATIONS, RADIO_DIRECTORY, RADIO_GENRES, RADIO_LISTINGS } from '../shared/radio';
+import { isRadioplayerLogo, EXTRA_STATIONS, RADIO_DIRECTORY, RADIO_GENRES, RADIO_LISTINGS } from '../shared/radio';
 import type { RadioListing } from '../shared/radio';
 import { musicSearchKey } from '../shared/russian';
 import { SourceLink } from './OnlineMusic';
@@ -43,7 +43,7 @@ export function RadioStations({ saved, activeId, playing, loading, connected, bu
       return <li key={station.id} data-station={station.id} className="station-tile" data-active={active || undefined} data-mode={station.stream ? 'native' : 'browser'}
         style={{ '--station-tint': station.tint } as CSSProperties}>
         <div className="station-top">
-          <Artwork className="station-logo" track={{ artworkUrl: station.logo ?? station.cover, fallbackArtworkUrl: station.cover }} lazy />
+          <Artwork className="station-logo" track={{ artworkUrl: station.logo ?? station.cover, fallbackArtworkUrl: station.cover, artworkFit: isRadioplayerLogo(station.logo) ? 'contain' : undefined }} lazy />
           <button type="button" className="icon-button station-add" aria-pressed={isSaved} onClick={() => toggleSave(station.id)}
             aria-label={t(isSaved ? 'Убрать станцию {0}' : 'Добавить станцию {0}', station.name)} title={t(isSaved ? 'Убрать из добавленных' : 'В добавленные')}>
             {isSaved ? <Check size={16} /> : <Plus size={16} />}

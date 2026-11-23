@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { trackCoverKey } from '../shared/artwork';
 import { artworkTone } from '../shared/customization';
-import type { Track } from '../shared/media';
+import type { TrackDisplay } from '../shared/media';
 
-export function usePalette(track: Track | null): string {
+export function usePalette(track: TrackDisplay | null): string {
   const [sample, setSample] = useState<{ url: string; color: string }>();
   const url = track?.artworkUrl;
   const tint = track?.color;

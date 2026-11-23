@@ -1,28 +1,28 @@
-.vk-site { border: 1px solid var(--accent-border); border-radius: 15px; background: var(--panel-bg); overflow: hidden; }
-.vk-site-bar, .vk-site-transport { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 5px 8px; border-bottom: 1px solid var(--accent-border); }
-.vk-site-bar .icon-button, .vk-site-transport .icon-button { width: 32px; height: 31px; flex: none; }
+/* A WebContentsView is a native sibling, not a DOM scroller. Reserve its whole
+   viewport so two scroll offsets cannot move or resize VK's fixed header. */
+.main-pane.vk-pane { overflow: clip; }
+.vk-pane > .page-body:not([hidden]) { height: 100%; animation: none; }
+.vk-pane .home-page-vk { height: 100%; display: flex; flex-direction: column; gap: 9px; padding-block: 10px; }
+.home-page-vk .hub-masthead { flex: none; }
+.vk-site { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; border: 1px solid var(--accent-border); border-radius: 13px 13px 0 0; background: var(--panel-bg); }
+.vk-site-bar { display: flex; align-items: center; gap: 4px; min-width: 0; flex: none; padding: 4px 6px; border-bottom: 1px solid var(--accent-border); }
+.vk-site-bar .icon-button { width: clamp(24px, 4vw, 32px); height: 31px; flex: none; }
 .vk-site-appearance { flex: none; max-width: 41%; height: 31px; padding: 0 5px; border: 1px solid var(--accent-border);
   border-radius: 7px; background: var(--raised-bg); color: var(--text); font-size: 12px; text-overflow: ellipsis; }
 .vk-site-appearance:disabled { opacity: .55; }
 .vk-site-origin { display: flex; gap: 6px; align-items: center; flex: 1; min-width: 0; font-size: 12px; }
 .vk-site-origin svg { color: var(--accent-light); flex: none; }
-.vk-site-origin strong, .vk-site-origin small, .vk-site-track > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vk-site-origin small, .vk-site-track small { color: var(--muted); }
+.vk-site-origin strong, .vk-site-origin small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vk-site-origin small { color: var(--muted); }
 .vk-site-mark { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 9px; color: var(--accent-light); background: var(--accent-fill); }
-.vk-site-track { display: grid; flex: 1; min-width: 0; margin-inline: 4px 8px; font-size: 13px; line-height: 1.25; }
-.vk-site-transport [data-vk-action='toggle']:not(:disabled) { color: var(--accent-light); background: var(--accent-fill); }
-.vk-site-login { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-bottom: 1px solid var(--accent-border); font-size: 13px; }
+.vk-site-login { flex: none; display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-bottom: 1px solid var(--accent-border); font-size: 13px; }
 .vk-site-login strong { color: var(--text); }
 .vk-site-login p { margin: 2px 0 0; max-width: 73ch; color: var(--muted); font-size: 12px; line-height: 1.45; }
-.vk-site-timeline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 4px 12px; border-bottom: 1px solid var(--accent-border); color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.vk-site-timeline .range { width: 100%; min-width: 0; }
 .vk-site-notice, .vk-site-placeholder { margin: 0; padding: 8px 12px; color: var(--muted); font-size: 12px; }
-.vk-site-slot { height: clamp(236px, calc(100dvh - 239px), 776px); background: var(--stage-bg); }
+.vk-site-slot { flex: 1; min-height: 0; background: var(--stage-bg); }
 .vk-site-loading { display: flex; align-items: center; justify-content: center; gap: 8px; height: 100%; margin: 0; color: var(--muted); font-size: 13px; }
 .vk-site-error { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 8px; height: 100%; padding: 14px; text-align: center; }
 .vk-site-error :is(h3, p) { flex-basis: 100%; }
 .vk-site-error p { color: var(--muted); font-size: 13px; }
-@media (max-width: 740px) {
-  .vk-site-origin small { display: none; }
-  .vk-site-slot { height: clamp(218px, calc(100dvh - 265px), 600px); }
-}
+@container (max-width: 550px) { .vk-site-origin small { display: none; } }
+@container (max-width: 345px) { .vk-site-origin svg { display: none; } }

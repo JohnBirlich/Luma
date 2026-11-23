@@ -8,7 +8,9 @@ The Russian directory follows the requested 96 stations and their order. The exi
 
 ## Playback verification
 
-The station tiles, Now Playing and fullscreen use the same artwork. Record and SomaFM keep their curated publisher logos. Where no vetted logo is available or a logo fails to load, Luma draws a station-specific cover locally, including for Русское радио and Radio Browser results. These are Luma designs, not official logos; no third-party favicons are used.
+The station tiles, Now Playing and fullscreen use the same artwork. The colored logos for 85 directory stations are the logo images paired with their exact entries on [Единый радиоплеер](https://radioplayer.ru/) (see `src/shared/radioplayer-logos.ts`). Record and SomaFM keep their publisher logos. Transparent logos are fitted rather than cropped. If the image is unavailable or there is no vetted logo, the app uses a station-specific Luma design. Unverified Radio Browser favicons are never requested.
+
+[Remix FM](https://radioplayer.ru/station/remix-fm) publishes both a station logo and the current song’s artwork. The logo is stable; the song art changes and may be unavailable. The station page and the direct stream can be at different points in the broadcast. Luma shows the logo, not a captured song image or a guess at the current track. The station link opens the broadcaster or directory page for live song details.
 
 Dispatch the Windows build with `live_radio=true` on the commit under review. This checks the actual Electron renderer decoder and shipped Content Security Policy, including an audio clock advance from each direct URL. It does not record or save media; the only report is the status/URL and optional logo dimensions. A fixture-only test is not evidence that a station is live. If an outlet changes its source, first confirm the station/region and public HTTPS URL; keep its existing ID and listening page. If the replacement is not usable in the renderer, omit its `stream` field.
 

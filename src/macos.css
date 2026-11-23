@@ -128,10 +128,9 @@
 [data-layout='glass'] .home-now .page-actions .button { color: var(--accent-light); background: #fff6; border-color: #fff9; }
 [data-layout='glass'] .home-now .hero { border-radius: 17px; }
 [data-layout='glass'] .hub-hero { border-radius: 26px; border-color: #ffffffbd; box-shadow: 0 10px 35px #25396d38; }
-[data-layout='glass'] .scene-mix-flow:not([data-cover-tone]) .mix-flow-light { background:
-  radial-gradient(ellipse at 82% 26%,#f7c7ffb3 0%,#a47dea73 23%,transparent 57%),
-  radial-gradient(ellipse at 72% 73%,#2f96f1 0%,#2748aa99 37%,transparent 71%),
-  linear-gradient(151deg,#091f4b 14%,#2a2b7e 59%,#6b5bb6); }
+[data-layout='glass'] .scene-mix-flow:not([data-cover-tone]) {
+  --mix-ink: #101e47; --mix-base: #342c72; --mix-rose: #c779c8; --mix-lilac: #b6a2ff; --mix-blue: #639efd; --mix-aqua: #a7e8f5;
+}
 [data-layout='glass'] .hub-hero::before { background: linear-gradient(91deg,#081c43d1,#0a224054 55%,transparent 100%); }
 [data-layout='glass'] .hub-tile { border-radius: 18px; border-color: #fff9; }
 [data-layout='glass'] .hub-tile-play { background: #fffce8cf; backdrop-filter: blur(5px); }

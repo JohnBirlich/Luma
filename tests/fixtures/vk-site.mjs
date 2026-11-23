@@ -2,6 +2,8 @@ export const vkFixturePrivate = 'vk-fixture-sign-in-only';
 export const vkFixtureAuth = `https://id.vk.ru/auth?state=${vkFixturePrivate}`;
 export const vkFixtureTracks = ['Туманная гавань', 'Северный свет'];
 export const vkFixtureArtist = 'VK · Тестовый исполнитель';
+export const vkFixtureCovers = ['https://sun9-42.userapi.com/impg/luma-fixture-cover.webp?size=640x640&sign=fixture',
+  'https://sun9-42.userapi.com/s/v1/luma-fixture-inline.webp'];
 
 // Synthetic desktop shell with the same stable IDs and sizing as VK, without account data.
 export function vkDesktopPage(content, { player = '', signedOut = false, legacy = false } = {}) {
@@ -47,6 +49,8 @@ export function vkDesktopPage(content, { player = '', signedOut = false, legacy 
       #page_body { width: var(--spa-layout-contnet-width, 750px) !important; }
       .FCPanel { position: fixed; right: 0; top: 58px; width: 64px; background: var(--fixture-panel); z-index: 101; }
       .fixture-vk-player { display: flex; align-items: center; min-width: 0; gap: 4px; }
+      .fixture-vk-player .audio_page_player2_thumb { width: 34px; height: 34px; flex: none; background-size: cover; }
+      .fixture-vk-player input[type=range] { width: min(70px, 10vw); }
       .fixture-vk-player span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .fixture-music-block { padding: 12px; margin-bottom: 12px; border-radius: 8px; background: var(--fixture-panel); }
       .fixture-music-block h2 { margin: 0 0 6px; font-size: 16px; }
@@ -78,7 +82,12 @@ export function vkPlayerPage(audioPath, { inline = false, legacy = false } = {})
       <button type="button" id="fixture-previous" aria-label="Предыдущая аудиозапись">⏮</button>
       <button type="button" id="fixture-toggle" aria-label="Воспроизвести">▶</button>
       <button type="button" id="fixture-next" aria-label="Следующая аудиозапись"><svg class="vkuiIcon--skip_next_24"></svg>⏭</button>
-      <span class="AudioInfo__title--test"></span><span class="AudioInfo__artist--test"></span>
+      <span class="audio_page_player2_thumb"></span><span class="AudioInfo__title--test"></span><span class="AudioInfo__artist--test"></span>
+      <button type="button" id="fixture-shuffle" aria-label="Перемешивание" aria-pressed="false">⇄</button>
+      <button type="button" id="fixture-repeat" aria-label="Повтор" data-repeat="off">↻</button>
+      <button type="button" id="fixture-save" aria-label="Добавить в мою музыку">＋</button>
+      <input type="range" id="fixture-volume" aria-label="Громкость" min="0" max="100" value="100">
+      <button type="button" id="fixture-mute" aria-label="Выключить звук">◉</button>
     </div>`;
   return vkDesktopPage(`${inline ? player : ''}
     <section class="fixture-music-block" aria-label="VK Музыка">
@@ -93,29 +102,41 @@ export function vkPlayerPage(audioPath, { inline = false, legacy = false } = {})
       <div class="fixture-music-cards"><button id="fixture-recommendation">Для вас</button><button>Открытия</button><button>Новинки</button></div>
     </section>
     <section class="fixture-music-block"><h2>Жанры</h2><div class="fixture-music-cards"><button id="fixture-genre">Джаз</button></div></section>
+    <div style="height:1400px" aria-hidden="true"></div>
     <audio preload="none" src="${audioPath}"></audio>
     <script>
       const media = document.querySelector('audio');
       const toggle = document.querySelector('#fixture-toggle');
       let index = 0;
-      const tracks = ${JSON.stringify(vkFixtureTracks)};
+      const tracks = ${JSON.stringify(vkFixtureTracks)}, covers = ${JSON.stringify(vkFixtureCovers)};
       function update() {
         const title = tracks[index];
         const artist = ${JSON.stringify(vkFixtureArtist)};
         document.querySelector('.AudioInfo__title--test').textContent = title;
         document.querySelector('.AudioInfo__artist--test').textContent = artist;
         // VK can expose browser media metadata, or only its own visible UI.
-        navigator.mediaSession.metadata = index === 0 ? new MediaMetadata({ title, artist }) : null;
+        document.querySelector('.audio_page_player2_thumb').style.backgroundImage = index === 1 ? 'url("' + covers[1] + '")' : 'none';
+        navigator.mediaSession.metadata = index === 0 ? new MediaMetadata({ title, artist, artwork: [
+          { src: 'https://sun9-42.userapi.com/impg/luma-small.webp', sizes: '96x96' },
+          { src: covers[0], sizes: '640x640', type: 'image/webp' },
+        ] }) : null;
         navigator.mediaSession.playbackState = index === 0 ? (media.paused ? 'paused' : 'playing') : 'none';
         toggle.setAttribute('aria-label', media.paused ? 'Воспроизвести' : 'Пауза');
       }
       toggle.onclick = () => { if (media.paused) void media.play().catch(() => {}); else media.pause(); };
+      const shuffle = document.querySelector('#fixture-shuffle'), repeat = document.querySelector('#fixture-repeat');
+      const save = document.querySelector('#fixture-save'), volume = document.querySelector('#fixture-volume'), mute = document.querySelector('#fixture-mute');
+      shuffle.onclick = () => shuffle.setAttribute('aria-pressed', String(shuffle.getAttribute('aria-pressed') !== 'true'));
+      repeat.onclick = () => repeat.dataset.repeat = ({ off: 'all', all: 'one', one: 'off' })[repeat.dataset.repeat];
+      save.onclick = () => save.setAttribute('aria-label', save.getAttribute('aria-label').startsWith('Добавить') ? 'Удалить из моей музыки' : 'Добавить в мою музыку');
+      volume.oninput = () => { media.muted = false; media.volume = volume.valueAsNumber / 100; mute.setAttribute('aria-label', 'Выключить звук'); };
+      mute.onclick = () => { media.muted = !media.muted; volume.value = media.muted ? 0 : media.volume * 100; mute.setAttribute('aria-label', media.muted ? 'Включить звук' : 'Выключить звук'); };
       document.querySelector('#fixture-next').onclick = () => { index = 1; update(); };
       document.querySelector('#fixture-previous').onclick = () => { index = 0; update(); };
       document.querySelector('#fixture-music-row').onclick = document.querySelector('#fixture-mix').onclick = toggle.onclick;
       media.onplay = media.onpause = update;
       update();
-    </script>`, { legacy, player: inline ? '<div id="top_audio_layer_place"></div><button id="fixture-launcher">Музыка</button>' : player });
+    </script>`, { legacy, player: inline ? '<div id="top_audio_player"><button id="fixture-dup-toggle" aria-label="Воспроизвести">▶</button></div>' : player });
 }
 
 // Native media-session controls only, or just a detached Audio (no global player DOM).
@@ -129,7 +150,8 @@ export function vkHeadlessPlayerPage(audioPath, handlers) {
       const media = navigator.mediaSession;
       const tracks = ${JSON.stringify(vkFixtureTracks)};
       let index = 0;
-      function select() { media.metadata = new MediaMetadata({ title: tracks[index], artist: ${JSON.stringify(vkFixtureArtist)} }); }
+      function select() { media.metadata = new MediaMetadata({ title: tracks[index], artist: ${JSON.stringify(vkFixtureArtist)},
+        artwork: index === 0 ? [{ src: ${JSON.stringify(vkFixtureCovers[0])}, sizes: '640x640' }] : [] }); }
       function time() {
         media.playbackState = audio.paused ? 'paused' : 'playing';
         if (Number.isFinite(audio.duration)) media.setPositionState({ duration: audio.duration, position: audio.currentTime });

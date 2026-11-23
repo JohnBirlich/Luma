@@ -10,6 +10,7 @@ import { APP_ORIGIN, type DesktopLibrary } from './library.js';
 import type { StreamCache } from './stream-cache.js';
 import { streamAudius } from './audius-stream.js';
 import type { AudiusFetch } from './audius-stream.js';
+import type { VkArtwork } from './vk-artwork.js';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -65,7 +66,7 @@ async function streamFile(path: string, request: Request, headers: Headers) {
   return new Response(body, { status: range ? 206 : 200, headers });
 }
 
-export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache, audiusFetch?: AudiusFetch) {
+export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache, audiusFetch?: AudiusFetch, vkArtwork?: (id: string) => VkArtwork | undefined) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.protocol !== 'luma:' || url.hostname !== 'app' || url.port || url.username || url.password) return new Response(null, { status: 404 });
@@ -90,6 +91,14 @@ export function createProtocolHandler(root: string, library: DesktopLibrary, dev
     }
     if (request.method === 'OPTIONS' && origin && origin === devOrigin) return new Response(null, { status: 204, headers });
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405, headers });
+    const vk = /^\/media\/vk-cover\/([a-f0-9-]{36})$/.exec(url.pathname);
+    if (vk) {
+      const image = !url.search && !url.hash ? vkArtwork?.(vk[1]) : undefined;
+      if (!image) return new Response(null, { status: 404, headers });
+      headers.set('Content-Type', image.mime);
+      headers.set('Content-Length', String(image.bytes.byteLength));
+      return new Response(request.method === 'HEAD' ? null : image.bytes, { headers });
+    }
     const audius = /^\/media\/audius\/([A-Za-z0-9]{3,16})$/.exec(url.pathname);
     if (audius && audiusFetch && !url.search) return streamAudius(audiusFetch, audius[1], request, headers);
     const cacheMatch = /^\/media\/cache\/([a-f0-9]{64})$/.exec(url.pathname);

@@ -47,6 +47,7 @@ export interface TrackDisplay {
   album: string;
   artworkUrl?: string;
   fallbackArtworkUrl?: string;
+  artworkFit?: 'contain';
   backdropUrl?: string;
   color?: string;
   demo?: boolean;

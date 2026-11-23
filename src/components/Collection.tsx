@@ -22,6 +22,8 @@ import { DislikeButton, FavoriteButton } from './FavoriteButton';
 import { Signal } from './QueuePanel';
 import { SceneBackground } from './SceneBackground';
 import { VinylRecord } from './VinylRecord';
+import { SeekTimeline, TransportControls, VkFavoriteControl, VolumeControl } from './PlaybackControls';
+import type { PlaybackProps } from './PlaybackControls';
 import type { ReadSpectrum } from '../player/useAudio';
 
 interface TrackCardProps {
@@ -71,6 +73,7 @@ function TrackCard({ track, active, playing, row, play, add, editCover, editDeta
 
 interface NowPlayingProps {
   track: PlayingTrack | null;
+  vkControls?: PlaybackProps;
   disliked: ReadonlySet<string>;
   toggleDislike(id: string): void;
   tint: string;
@@ -141,19 +144,21 @@ export function NowPlayingCard(props: NowPlayingProps) {
             {track ? <>{track.artist && <span>{track.artist}</span>}{(track.online || track.album) && <>
               {track.artist && <span className="hero-dot" />}{track.online ? <OnlineCredit track={{ online: track.online }} /> : <span>{track.album}</span>}</>}</> : <span>{t("Добавьте аудиофайлы, чтобы начать.")}</span>}
           </div>
+          {vk && props.vkControls && <div className="hero-vk-timeline"><SeekTimeline {...props.vkControls} /></div>}
           <div className="hero-actions-row">
-            <button type="button" className="button primary-button hero-action" aria-label={toggleLabel} disabled={props.canToggle === false} onClick={track ? props.toggle : props.addMusic}>
+            {props.vkControls ? <TransportControls {...props.vkControls} /> : <button type="button" className="button primary-button hero-action" aria-label={toggleLabel} disabled={props.canToggle === false} onClick={track ? props.toggle : props.addMusic}>
               {track ? playing || props.loading ? <Pause size={16} fill="currentColor" /> : <Play className="play-icon" size={16} fill="currentColor" /> : <Plus size={18} />}
               <span>{toggleLabel}</span>
-            </button>
+            </button>}
             {track && <>
-              {vk ? <button type="button" className="icon-button hero-vk-return" onClick={props.openVk} aria-label={t('Вернуться к сайту VK')} title={t('Вернуться к сайту VK')}><Globe2 size={17} /></button> : <>
+              {vk ? <>{props.vkControls?.vkFavorite && <VkFavoriteControl {...props.vkControls.vkFavorite} />}<button type="button" className="icon-button hero-vk-return" onClick={props.openVk} aria-label={t('Вернуться к сайту VK')} title={t('Вернуться к сайту VK')}><Globe2 size={17} /></button></> : <>
                 <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />
                 {!radio && <DislikeButton track={track} selected={props.disliked.has(track.id)} toggle={props.toggleDislike} />}
                 <button type="button" className="icon-button hero-karaoke" disabled={radio || sessionCatalogId(track.id)} onClick={props.openKaraoke} aria-label={t("Караоке")} title={t("Караоке (L)")} aria-haspopup="dialog"><MicVocal size={17} /></button>
               </>}
               <button type="button" className="icon-button hero-fullscreen" onClick={props.openPresentation} aria-label={t("Развернуть текущий трек")} title={t("Во весь экран (F)")} aria-haspopup="dialog"><Maximize2 size={17} /></button>
             </>}
+            {props.vkControls && <VolumeControl {...props.vkControls} />}
           </div>
         </div>
         {featured && <Artwork track={track} className="hero-featured-cover" />}

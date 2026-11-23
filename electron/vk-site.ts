@@ -1,16 +1,22 @@
-import { dialog, session, WebContentsView } from 'electron';
+import { dialog, net, session, WebContentsView } from 'electron';
 import type { BrowserWindow } from 'electron';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
-import { VK_SITE_PARTITION, VK_TRANSPORT, readVkNowPlaying, readVkSiteAppearance, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
-import type { VkPlaybackAction, VkSiteAppearance, VkSiteState } from '../src/shared/vk-site.js';
+import { VK_SITE_PARTITION, VK_TRANSPORT, readVkNowPlaying, readVkSiteAppearance, vkArtworkUrl, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
+import type { VkNowPlaying, VkPlaybackAction, VkSiteAppearance, VkSiteState } from '../src/shared/vk-site.js';
 import { vkAppearanceScript } from './vk-appearance.js';
 import { inspectVkPlayer } from './vk-player.js';
+import { fetchVkArtwork } from './vk-artwork.js';
+import type { VkArtwork } from './vk-artwork.js';
+
+interface CurrentCover { key: string; id: string; cancel: AbortController; image?: VkArtwork }
 
 interface VkView {
   id: number; owner: BrowserWindow; view: WebContentsView; entry: string; shown: boolean; foreground: boolean;
   windowVisible: boolean; minimized: boolean;
   appearance: VkSiteAppearance; state: VkSiteState; revision: number; reading: boolean; confirming: boolean; qrStarted: boolean; returnToEntry: boolean; unbind(): void;
+  cover?: CurrentCover;
   poll?: ReturnType<typeof setInterval>; timer?: ReturnType<typeof setTimeout>;
 }
 const world = 1481;
@@ -23,6 +29,43 @@ export class VkSite {
   private active?: VkView;
   private isolated?: Electron.Session;
   private resetting = false;
+
+  artwork(id: string) {
+    const active = this.active;
+    if (active?.cover?.id === id && this.musicPageReady(active)) return active.cover.image;
+  }
+
+  private dropCover(active: VkView) {
+    active.cover?.cancel.abort();
+    active.cover = undefined;
+  }
+
+  private publishTrack(active: VkView, track: VkNowPlaying | undefined, engaged: boolean | undefined, candidates: unknown) {
+    const urls = engaged && track?.title && Array.isArray(candidates)
+      ? [...new Set(candidates.slice(0, 6).flatMap(value => vkArtworkUrl(value) ?? []))].slice(0, 4) : [];
+    const key = urls.length ? JSON.stringify([track?.title, track?.artist, urls]) : '';
+    if (key !== (active.cover?.key ?? '')) {
+      this.dropCover(active);
+      if (key) {
+        const cover: CurrentCover = { key, id: randomUUID(), cancel: new AbortController() };
+        active.cover = cover;
+        void this.loadCover(active, cover, urls);
+      }
+    }
+    this.publish(active, { track, engaged, cover: active.cover?.image ? `luma://app/media/vk-cover/${active.cover.id}` : undefined });
+  }
+
+  private async loadCover(active: VkView, cover: CurrentCover, urls: string[]) {
+    const signal = AbortSignal.any([cover.cancel.signal, AbortSignal.timeout(6_000)]);
+    for (const src of urls) {
+      const image = await fetchVkArtwork(net.fetch, src, signal);
+      if (signal.aborted || active.cover !== cover || !this.musicPageReady(active)) return;
+      if (!image) continue;
+      cover.image = image;
+      this.publish(active, { cover: `luma://app/media/vk-cover/${cover.id}` });
+      return;
+    }
+  }
 
   private partition() {
     if (!this.isolated) {
@@ -96,7 +139,8 @@ export class VkSite {
   }
 
   private dispose(active: VkView, announce = true) {
-    if (announce) this.publish(active, { phase: 'closed', track: undefined, engaged: undefined });
+    this.dropCover(active);
+    if (announce) this.publish(active, { phase: 'closed', track: undefined, engaged: undefined, cover: undefined });
     this.active = undefined;
     active.unbind();
     clearTimeout(active.timer);
@@ -111,7 +155,8 @@ export class VkSite {
     if (this.active !== active) return;
     clearTimeout(active.timer);
     if (!active.foreground) { this.dispose(active); return; }
-    this.publish(active, { phase: 'failed', track: undefined, engaged: undefined });
+    this.dropCover(active);
+    this.publish(active, { phase: 'failed', track: undefined, engaged: undefined, cover: undefined });
     this.visibility(active);
   }
 
@@ -174,7 +219,8 @@ export class VkSite {
       if (!this.inForeground(active)) { this.dispose(active); return; }
       clearTimeout(active.timer);
       active.revision++;
-      this.publish(active, { phase: 'loading', host: safe.hostname, signIn: vkSignInPage(safe), track: undefined, engaged: undefined });
+      this.dropCover(active);
+      this.publish(active, { phase: 'loading', host: safe.hostname, signIn: vkSignInPage(safe), track: undefined, engaged: undefined, cover: undefined });
       this.visibility(active);
       active.timer = setTimeout(() => {
         if (active.view.webContents.isDestroyed()) return;
@@ -239,8 +285,9 @@ export class VkSite {
         return;
       }
     }
+    if (!music || signIn) this.dropCover(active);
     this.publish(active, { phase: 'ready', host: safe.hostname, signIn, back: contents.navigationHistory.canGoBack(),
-      ...((!music || signIn) && { track: undefined, engaged: undefined }) });
+      ...((!music || signIn) && { track: undefined, engaged: undefined, cover: undefined }) });
     this.applyAppearance(active);
     this.visibility(active);
     void this.readTrack(active);
@@ -272,7 +319,8 @@ export class VkSite {
       if (!this.musicReady(active) || active.revision !== revision) return;
       if (snapshot?.signedOut === true) {
         if (!this.inForeground(active)) { this.dispose(active); return; }
-        this.publish(active, { signIn: true, track: undefined, engaged: undefined });
+        this.dropCover(active);
+        this.publish(active, { signIn: true, track: undefined, engaged: undefined, cover: undefined });
         this.visibility(active);
         this.applyAppearance(active);
         this.startQr(active);
@@ -282,12 +330,14 @@ export class VkSite {
       const track = snapshot && readVkNowPlaying({ ...visible,
         playing: typeof media?.playing === 'boolean' ? media.playing : visible?.playing,
         previous: media?.previous === true || visible?.previous, toggle: media?.toggle === true || visible?.toggle,
-        next: media?.next === true || visible?.next, timeline: media?.timeline,
+        next: media?.next === true || visible?.next,
+        timeline: media?.timeline?.seek || !visible?.timeline ? media?.timeline : visible.timeline,
+        volume: visible?.volume ?? media?.volume,
       });
       const engaged = track?.playing ? true : active.state.engaged;
       if (!active.foreground && !engaged) { this.dispose(active); return; }
       const started = engaged !== active.state.engaged;
-      this.publish(active, { track, engaged });
+      this.publishTrack(active, track, engaged, snapshot?.artwork);
       if (started) this.visibility(active);
     } catch {
       // Navigation can replace the frame before the read finishes.
@@ -312,17 +362,26 @@ export class VkSite {
     const revision = active.revision;
     const stillHere = () => canControl() && active.revision === revision;
     try {
+      const track = active.state.track;
+      const fromDom = async (command: VkPlaybackAction | 'seek', ratio?: number) => stillHere()
+        && await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer(command, ratio) }], true) === true;
+      const fromMedia = (command: VkPlaybackAction | 'seek', ratio?: number) => contents.executeJavaScript(playback(command, ratio), true).catch(() => false);
       if (action === 'seek') {
         const ratio = vkSeekRatio(fraction);
-        return ratio !== undefined && active.state.track?.timeline?.seek === true
-          && await contents.executeJavaScript(playback('seek', ratio), true) === true;
+        return ratio !== undefined && track?.timeline?.seek === true && ((await fromMedia('seek', ratio)) === true || await fromDom('seek', ratio));
+      }
+      if (action === 'volume' || action === 'mute') {
+        const ratio = vkSeekRatio(fraction);
+        if (track?.volume === undefined || (action === 'volume' && ratio === undefined)) return false;
+        return await fromDom(action, ratio) || (stillHere() && (await fromMedia(action, ratio)) === true);
+      }
+      if (action === 'shuffle' || action === 'repeat' || action === 'favorite') {
+        return track?.[action] !== undefined && await fromDom(action);
       }
       if (action !== 'pause' && !VK_TRANSPORT.some((value) => value === action)) return false;
-      const transport = action as VkPlaybackAction;
-      if (transport !== 'pause' && !active.state.track?.[transport]) return false;
-      if (await contents.executeJavaScript(playback(transport), true).catch(() => false) === true) return true;
-      if (!stillHere()) return false;
-      if (await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer(transport) }], true) === true) return true;
+      const transport = action as typeof VK_TRANSPORT[number] | 'pause';
+      if (transport !== 'pause' && !track?.[transport]) return false;
+      if (await fromMedia(transport) === true || await fromDom(transport)) return true;
       return (transport === 'toggle' || transport === 'pause') && stillHere() && await contents.executeJavaScript(playback(transport, undefined, true), true) === true;
     } catch { return false; }
     finally { void this.readTrack(active); }
@@ -337,7 +396,7 @@ export class VkSite {
       if ((await dialog.showMessageBox(owner, message)).response !== 1 || this.active !== active) return false;
       // Destroy the guest before clearing storage so it cannot write old sign-in data back.
       // The React pane reopens the official sign-in page after the request completes.
-      this.publish(active, { phase: 'loading', host: '', back: false, signIn: false, track: undefined, engaged: undefined });
+      this.publish(active, { phase: 'loading', host: '', back: false, signIn: false, track: undefined, engaged: undefined, cover: undefined });
       this.dispose(active, false);
       for (const isolated of [this.partition(), session.fromPartition(LEGACY_VK_SESSION)]) {
         await isolated.closeAllConnections();
