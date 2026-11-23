@@ -1388,7 +1388,16 @@ async function smoke() {
         dislike: document.querySelector('.home-now .vk-dislike')?.getAttribute('aria-pressed') ?? null,
         track: window.vkFixtureStates.at(-1)?.state?.track ?? null })`);
       const shown = (value) => { const state = JSON.parse(value); return state.like === 'true' && state.dislike === 'true'; };
-      await waitFor(`Now Playing offers the same like and dislike pair as a local track (${await feedback()})`, async () => shown(await feedback()));
+      const probe = () => guestRun(`JSON.stringify((() => {
+        const like = document.querySelector('#fixture-like'), toggle = document.querySelector('#fixture-toggle');
+        const rect = toggle?.getBoundingClientRect();
+        return { state: document.visibilityState, size: [innerWidth, innerHeight],
+          toggle: rect ? [Math.round(rect.width), Math.round(rect.height)] : null,
+          like: like ? [like.getAttribute('aria-label'), like.getAttribute('aria-pressed'), like.className,
+            like.querySelector('svg')?.getAttribute('class') ?? null] : null };
+      })())`);
+      await waitFor(`Now Playing offers the same like and dislike pair as a local track (${await feedback()} ${await probe()})`,
+        async () => shown(await feedback()));
       assert.equal(await run(`!navigator.mediaSession.metadata && [...document.querySelectorAll('audio')].every(audio => audio.paused)
         && !document.querySelector('.home-now :is(.favorite-toggle,.hero-index,.track-cover-button,.hero-karaoke)')`), true);
       const beforeBackground = await guestRun('fixtureAudio.currentTime');

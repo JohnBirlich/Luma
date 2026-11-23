@@ -426,6 +426,23 @@ export class VkSite {
         const read = async () => readVkNowPlaying(await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkPlayer() }])
           .catch(() => undefined))?.[field];
         const before = await read();
+        // A verified change is published at once, so the card answers the press
+        // instead of waiting for the next poll of a player that may be hidden.
+        const publishMode = (value: unknown) => {
+          const current = active.state.track;
+          if (!current) return;
+          if (field === 'repeat') {
+            if (value === 'off' || value === 'one' || value === 'all') this.publish(active, { track: { ...current, repeat: value } });
+          } else if (typeof value === 'boolean') {
+            this.publish(active, { track: { ...current, [field]: value } as VkNowPlaying });
+          }
+        };
+        const settled = async () => {
+          const after = await read();
+          if (after === before) return false;
+          publishMode(after);
+          return true;
+        };
         // Without a readable state the switch cannot be verified, so it gets a
         // single faithful gesture instead of two presses that could cancel out.
         if (!await fromDom(toggle, undefined, before === undefined ? 'trusted' : 'pointer')) return false;
@@ -434,12 +451,12 @@ export class VkSite {
         // so the first press is given time before it is ever repeated.
         for (const pause of [340, 260]) {
           await delay(pause);
-          if (await read() !== before) return true;
+          if (await settled()) return true;
         }
         // Scripted clicks are ignored by some builds; replay it as genuine input.
         if (!await fromDom(toggle, undefined, 'trusted')) return false;
         await delay(460);
-        return await read() !== before;
+        return await settled();
       }
       if (action !== 'pause' && !VK_TRANSPORT.some((value) => value === action)) return false;
       const transport = action as typeof VK_TRANSPORT[number] | 'pause';
