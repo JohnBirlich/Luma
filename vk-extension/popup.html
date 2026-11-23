@@ -1,1 +1,19 @@
-<!doctype html><html lang='ru'><head><meta charset='utf-8'><title>VK Music Only</title></head><body style='width:260px;font-family:sans-serif;padding:12px'><h1 style='font-size:16px'>VK Music Only 1.1.0</h1><label><input type='checkbox' id='hideMenu' checked> Только музыка</label><br><label><input type='checkbox' id='hideAds' checked> Скрывать рекламу</label><br><label><input type='checkbox' id='downloads' checked> Кнопки скачивания</label><p>Откройте vk.com/audio, рядом с треками будет кнопка Скачать.</p><script src='popup.js'></script></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>VK Music Only</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { width: 240px; margin: 14px; font: 14px system-ui, sans-serif; }
+    h1 { font-size: 16px; margin: 0 0 10px; }
+    p { margin: 10px 0 0; }
+  </style>
+</head>
+<body>
+  <h1>VK Music Only</h1>
+  <label><input type="checkbox" id="hideMenu" disabled> Без панелей</label>
+  <p>Откройте VK Музыку на vk.ru или vk.com. Выключите настройку, чтобы вернуть обычный вид.</p>
+  <script src="popup.js"></script>
+</body>
+</html>

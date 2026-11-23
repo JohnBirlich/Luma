@@ -18,6 +18,7 @@ try {
   const manifest = JSON.parse(await readFile(join(archive, 'package.json'), 'utf8'));
   assert.equal(manifest.version, version, 'packaged manifest version');
   assert.ok((await stat(join(archive, 'dist-electron', 'electron', 'vk-media-preload.cjs'))).isFile(), 'sandboxed VK preload is packaged');
+  assert.ok(!(await readdir(archive)).includes('vk-extension'), 'the unpacked Chrome extension is not bundled in Luma');
   const assetDir = join(archive, 'dist', 'assets');
   const assets = await readdir(assetDir);
   for (const expected of [/^fingerprint\.worker-.*\.js$/, /^rusty_chromaprint_wasm_bg-.*\.wasm$/, /^ocean-.*\.webm$/, /^liquid-wallpaper-.*\.webp$/, /^HomePage-.*\.js$/, /^float\.worklet-.*\.js$/]) {
