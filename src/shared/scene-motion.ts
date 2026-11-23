@@ -13,3 +13,10 @@ export function coastSpeed(speed: number, playing: boolean, dt: number) {
   const result = target + (speed - target) * Math.exp(-(playing ? 9 : 5.6) * dt);
   return playing ? result : result < .009 ? 0 : result;
 }
+
+// Atmosphere follows its own clock; only transport-driven visualizers stop on pause.
+export const AMBIENT_EFFECTS = ['aurora', 'waves', 'stars', 'orbits', 'prism', 'nebula', 'kaleidoscope',
+  'fireworks', 'rain', 'solar', 'meteors', 'notes', 'mix-flow', 'tunnel', 'liquid'] as const satisfies readonly BackgroundEffect[];
+const ambient = new Set<BackgroundEffect>(AMBIENT_EFFECTS);
+export const isAmbientEffect = (effect: BackgroundEffect) => ambient.has(effect);
+export const sceneRuns = (effect: BackgroundEffect, playing: boolean) => effect !== 'off' && (playing || isAmbientEffect(effect));

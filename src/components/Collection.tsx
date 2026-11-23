@@ -17,7 +17,7 @@ import { catalogQuery } from '../data/catalog-search';
 import type { OnlineAction } from './OnlineMusic';
 import type { Track } from '../shared/media';
 import type { Appearance, LibraryLayout } from '../shared/customization';
-import { musicSearchKey } from '../shared/russian';
+import { musicSearchKey, searchWords } from '../shared/russian';
 import { Artwork } from './Artwork';
 import { DislikeButton, FavoriteButton } from './FavoriteButton';
 import { Signal } from './QueuePanel';
@@ -124,7 +124,7 @@ export function NowPlayingCard(props: NowPlayingProps) {
         </div>
       </header>
       <section aria-label={t("Текущий трек")} data-effect={effect} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
-        <SceneBackground effect={effect} tone={track ? tint : undefined} strength={effectStrength} tempo={appearance.effectTempo} animate={playing} visible={motion && props.sceneVisible} sample={appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
+        <SceneBackground effect={effect} tone={track ? tint : undefined} strength={effectStrength} tempo={appearance.effectTempo} animate={playing} visible={motion && props.sceneVisible} sample={playing && appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
         {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
           onError={() => { if (!fallback) setFailedPicture(source); }} />}
         {hero === 'vinyl' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
@@ -178,6 +178,7 @@ interface LibraryPageProps extends CatalogSearchPreferences, SearchHistoryProps 
   openFavorites(): void;
   openSearch(): void;
   chooseOnline(track: OnlineTrack, action: OnlineAction): void;
+  searchVk?(query: string): void;
   addMusic(): void;
   toggleDemos(): void;
   play(id: string): void;
@@ -210,7 +211,11 @@ export function LibraryPage(props: LibraryPageProps) {
   const indexed = useMemo(() => scope.map((track) => ({ track, text: musicSearchKey(`${track.title} ${track.artist} ${track.album} ${track.genres?.join(' ') ?? ''}`) })), [scope]);
   const term = musicSearchKey(search);
   const catalogTerm = isSearch ? catalogQuery(search) : '';
-  const results = useMemo(() => term ? indexed.filter(({ text }) => text.includes(term)).map(({ track }) => track) : isSearch ? [] : scope, [scope, indexed, term, isSearch]);
+  const results = useMemo(() => {
+    if (!term) return isSearch ? [] : scope;
+    const words = searchWords(term);
+    return words.length ? indexed.filter(({ text }) => words.every((word) => text.includes(word))).map(({ track }) => track) : [];
+  }, [scope, indexed, term, isSearch]);
   const isList = props.layout === 'list';
   const libraryResults = (items: Track[]) => <>
       {(!isSearch || items.length > 0) && <div className="library-caption">
@@ -281,7 +286,7 @@ export function LibraryPage(props: LibraryPageProps) {
       {isSearch && <div className="search-scope"><span>{t(props.autoCatalogSearch ? 'Медиатека и онлайн-каталоги' : 'Поиск в медиатеке')}</span><button className="text-button" type="button" onClick={props.openHome}><Radio size={14} />{" "}{t("Вернуться на главную")}</button></div>}
       {isSearch ? <>
         <SearchHistory history={props.searchHistory} select={(value) => { setSearch(value); props.rememberSearch(value); }} clear={props.clearSearchHistory} />
-        <OnlineSearch key={catalogTerm} query={search} visible={props.visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
+        <OnlineSearch key={catalogTerm} query={search} visible={props.visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline} searchVk={props.searchVk}
           library={results} playLibrary={props.play} remember={props.rememberSearch} renderLibrary={libraryResults}
           autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />
       </> : libraryResults(results)}

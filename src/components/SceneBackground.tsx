@@ -7,7 +7,7 @@ import { useVisualMotion } from '../player/useVisualMotion';
 import oceanUrl from '../assets/scenes/ocean.webm?url';
 import oceanPoster from '../assets/scenes/ocean.webp?url';
 import { SceneCanvas } from './SceneCanvas';
-import { isCanvasEffect } from '../shared/scene-motion';
+import { isCanvasEffect, sceneRuns } from '../shared/scene-motion';
 
 interface SceneProps {
   effect: BackgroundEffect;
@@ -28,7 +28,7 @@ export const SceneBackground = memo(function SceneBackground({ effect, tone, str
   const [inView, setInView] = useState(typeof IntersectionObserver === 'undefined');
   const allowed = useVisualMotion(visible && strength > 0 && effect !== 'off');
   const enabled = allowed && inView;
-  const moving = enabled && animate;
+  const moving = enabled && sceneRuns(effect, animate);
   const factor = EFFECT_TEMPOS[tempo].factor;
 
   useEffect(() => {

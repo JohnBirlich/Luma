@@ -3,6 +3,7 @@ import { ipcMain, net } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import type { DesktopMusicServices } from './music-services.js';
 import type { DesktopLibrary } from './library.js';
+import { catalogReply } from '../src/shared/catalog-reply.js';
 import { isCredentialService } from '../src/shared/music-services.js';
 import { createOpenwhydImport } from '../src/shared/openwhyd.js';
 import { createRadioBrowser } from '../src/shared/radio-browser.js';
@@ -46,7 +47,7 @@ export function bindProviderIpc(verify: (event: IpcMainInvokeEvent) => unknown, 
     // A known local audio track ID is necessary, never a URL, file path, online-only item or built-in demo.
     if (typeof id === 'string' && id.length <= 64 && library.mediaPath(id, 'audio')) void music.recordLocal(id, data);
   });
-  ipcMain.handle('jamendo:search', (event, id: unknown, query: unknown) => { verify(event); return music.searchJamendo(id, query); });
+  ipcMain.handle('jamendo:search', (event, id: unknown, query: unknown) => { verify(event); return catalogReply(() => music.searchJamendo(id, query)); });
   ipcMain.handle('genius:search', (event, query: unknown) => { verify(event); return music.searchGenius(query); });
   ipcMain.handle('genius:annotations', (event, id: unknown) => { verify(event); return music.geniusAnnotations(id); });
 }

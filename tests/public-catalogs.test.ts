@@ -62,12 +62,12 @@ test('Audius is bounded and throttled separately from Internet Archive', async (
     return Response.json({ data: [audiusRecording, audiusRecording] });
   });
   const results = await Promise.allSettled([catalog.search(1, query, 'netlabels'), catalog.search(2, query, 'audius')]);
-  assert.deepEqual(results[1], { status: 'fulfilled', value: [audius] });
-  assert.equal(results[0].status, 'rejected');
-  await assert.rejects(catalog.search(3, query, 'southern_city'), /недоступен/);
+  assert.deepEqual(results[1], { status: 'fulfilled', value: { tracks: [audius] } });
+  assert.deepEqual(results[0], { status: 'fulfilled', value: { tracks: [], issue: 'quota' } });
+  assert.deepEqual(await catalog.search(3, query, 'southern_city'), { tracks: [], issue: 'quota' });
   assert.equal(urls.length, 2);
-  assert.deepEqual(await catalog.search(4, query, 'ccmixter'), [], 'an unverified catalog is not queried');
-  assert.deepEqual(await catalog.search(5, query, 'https://example.org'), []);
+  assert.deepEqual(await catalog.search(4, query, 'ccmixter'), { tracks: [] }, 'an unverified catalog is not queried');
+  assert.deepEqual(await catalog.search(5, query, 'https://example.org'), { tracks: [] });
 });
 
 test('Audius playback uses bounded official resolution, forwards ranges and never stores stream URLs', async () => {

@@ -7,7 +7,7 @@ import { makeMix } from '../shared/mix';
 import type { MixType } from '../shared/mix';
 import { HUB_QUEUE_LIMIT, hubMusic } from '../shared/music-hub';
 import type { OnlineTrack } from '../shared/online';
-import { musicSearchKey } from '../shared/russian';
+import { musicSearchKey, searchWords } from '../shared/russian';
 import { SearchHistory } from './SearchHistory';
 import type { SearchHistoryProps } from './SearchHistory';
 import { OnlineSearch } from './OnlineMusic';
@@ -23,11 +23,10 @@ import { Discovery } from './Discovery';
 import { MyPlaylists } from './MyPlaylists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
 import { SceneBackground } from './SceneBackground';
-import { YouTubePanel } from './YouTubePanel';
-import { VkMusicPanel } from './VkMusicPanel';
-import type { MusicEmbed } from '../shared/music-embeds';
 
-const TABS = { home: 'Для вас', mine: 'Моя музыка', radio: 'Радио', vk: 'VK Музыка', youtube: 'YouTube', updates: 'Обновления' } as const;
+import { VkSitePanel } from './VkSitePanel';
+
+const TABS = { home: 'Для вас', mine: 'Моя музыка', radio: 'Радио', vk: 'VK Музыка', updates: 'Обновления' } as const;
 export type HomeTab = keyof typeof TABS;
 interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   tab: HomeTab;
@@ -60,10 +59,11 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   removePlaylist(id: string): void;
   openPlaylistImport(): void;
   openMusicLink(): void;
-  embed?: MusicEmbed;
-  embedsAvailable: boolean;
-  openEmbed(selection: MusicEmbed): void;
-  closeEmbed(): void;
+  vkUrl?: string;
+  vkAvailable: boolean;
+  openVk(url: string): void;
+  searchVk?(query: string): void;
+  closeVk(): void;
   sharePlaylist(title: string, tracks: readonly Track[]): void;
   seedFavorites(tracks: readonly Track[]): void;
   openFavorites(): void;
@@ -89,8 +89,8 @@ function Updates({ tracks, play, currentId, playing }: Pick<HomeProps, 'tracks' 
 export const HomePage = memo(function HomePage(props: HomeProps) {
   const t = useText();
   const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary } = props;
-  const { tab, query, setQuery, selectTab, embed, embedsAvailable, openEmbed, closeEmbed } = props;
-  const embedTab = tab === 'vk' || tab === 'youtube';
+  const { tab, query, setQuery, selectTab, vkUrl, vkAvailable, openVk, closeVk } = props;
+  const vkTab = tab === 'vk';
   const [composing, setComposing] = useState(false);
   const [tune, setTune] = useState(false);
   const [mixType, setMixType] = useState<MixType>('library');
@@ -107,9 +107,10 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
   const catalogTerm = catalogQuery(query);
   const found = useMemo(() => {
     if (!term) return [];
+    const words = searchWords(term);
     const result: Track[] = [];
     for (const { track, text } of searchIndex) {
-      if (text.includes(term)) result.push(track);
+      if (words.length && words.every((word) => text.includes(word))) result.push(track);
       if (result.length >= 30) break;
     }
     return result;
@@ -127,7 +128,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       <div className="hub-heading"><div>
         <p className="overline page-kicker"><span />{t('Ваша коллекция')}</p>
         <h1>{t('Главная')}</h1>
-      </div>{!embedTab && <div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
+      </div>{!vkTab && <div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
         onKeyDown={(event) => { if (event.key === 'Enter' && !composing && !event.nativeEvent.isComposing) props.rememberSearch(query); }}
         onChange={(event) => setQuery(event.currentTarget.value)} onCompositionStart={() => setComposing(true)}
         onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div>}</div>
@@ -143,9 +144,9 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         <button type="button" className="icon-button" onClick={props.openMixes} title={t('Миксы Luma')} aria-label={t('Миксы Luma')}><ListMusic size={18} /></button>
       </div></div>
     </header>
-    {!embedTab && <SearchHistory history={props.searchHistory} select={(value) => { setQuery(value); props.rememberSearch(value); formInput.current?.focus(); }} clear={props.clearSearchHistory} />}
+    {!vkTab && <SearchHistory history={props.searchHistory} select={(value) => { setQuery(value); props.rememberSearch(value); formInput.current?.focus(); }} clear={props.clearSearchHistory} />}
     {term ? <OnlineSearch key={catalogTerm} query={query} visible={visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
-      library={found} playLibrary={(id) => play(id, true)} remember={props.rememberSearch}
+      library={found} playLibrary={(id) => play(id, true)} remember={props.rememberSearch} searchVk={props.searchVk}
       renderLibrary={(items) => items.length > 0 || !found.length ? <Shelf title={t('В вашей медиатеке')}>
         {items.length ? <TrackRows {...rows} play={(id) => { props.rememberSearch(query); play(id, true); }} tracks={items} /> : <p className="hub-note">{t('В медиатеке нет совпадений.')}</p>}
       </Shelf> : null}
@@ -196,12 +197,9 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       </>}
       {tab === 'radio' && <RadioStations saved={props.stationIds} activeId={currentId} loading={props.loading} playing={playing} busy={props.busy}
         connected={connected} toggleSave={props.saveStation} play={play} tuneDiscovered={props.tuneDiscoveredStation} />}
-      {tab === 'vk' && <VkMusicPanel playlist={embed?.kind === 'vk' ? embed.playlist : undefined} connected={connected} available={embedsAvailable}
-        open={(playlist) => openEmbed({ kind: 'vk', playlist })} close={closeEmbed} />}
-      {tab === 'youtube' && <YouTubePanel videoId={embed?.kind === 'youtube' ? embed.videoId : undefined} connected={connected} available={embedsAvailable}
-        open={(videoId) => openEmbed({ kind: 'youtube', videoId })} close={closeEmbed} />}
+      {tab === 'vk' && <VkSitePanel url={vkUrl} connected={connected} available={vkAvailable} open={openVk} close={closeVk} />}
       {tab === 'updates' && <Updates tracks={tracks} {...rows} />}
     </>}
-    {!embedTab && <footer className="hub-footer"><Headphones size={14} />{t('Для миксов Luma не нужен аккаунт.')}</footer>}
+    {!vkTab && <footer className="hub-footer"><Headphones size={14} />{t('Для миксов Luma не нужен аккаунт.')}</footer>}
   </div>;
 });

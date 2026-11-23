@@ -5,7 +5,6 @@ import { Readable } from 'node:stream';
 import { ONLINE_ORIGINS } from '../src/shared/online.js';
 import { RADIO_ORIGINS } from '../src/shared/radio.js';
 import { THEAUDIODB_ART_ORIGIN } from '../src/shared/theaudiodb.js';
-import { MUSIC_EMBED_FRAME_SOURCES } from '../src/shared/music-embeds.js';
 import { audioMime } from '../src/shared/media.js';
 import { APP_ORIGIN, type DesktopLibrary } from './library.js';
 import type { StreamCache } from './stream-cache.js';
@@ -19,7 +18,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg', '.gif': 'image/gif', '.avif': 'image/avif', '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8', '.wasm': 'application/wasm',
 };
-const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: ${ONLINE_ORIGINS.images} ${RADIO_ORIGINS.images} ${THEAUDIODB_ART_ORIGIN}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media} ${RADIO_ORIGINS.media}; worker-src 'self'; object-src 'none'; frame-src ${MUSIC_EMBED_FRAME_SOURCES}; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
+const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: ${ONLINE_ORIGINS.images} ${RADIO_ORIGINS.images} ${THEAUDIODB_ART_ORIGIN}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media} ${RADIO_ORIGINS.media}; worker-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
 
 export function parseByteRange(header: string, size: number): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());

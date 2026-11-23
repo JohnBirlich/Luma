@@ -85,7 +85,7 @@
 
 .scene-nebula { background: #100c23; }
 .nebula-plate { position: absolute; inset: -6%; background: url('./assets/scenes/nebula.webp') 70% 52% / cover no-repeat; }
-.nebula-stars { position: absolute; inset: -7%; opacity: .48; background: url('./assets/scenes/stars.svg') 72% 32% / cover no-repeat; }
+.nebula-stars { position: absolute; inset: -7%; opacity: .68; background: url('./assets/scenes/stars.svg') 72% 32% / cover no-repeat; }
 .scene-nebula::after { position: absolute; inset: 0; content: ''; background: radial-gradient(ellipse at 69% 39%,#5674ea08,#21143980 80%); }
 .scene-moving .nebula-plate { animation: scene-swell calc(30s * var(--scene-tempo)) ease-in-out infinite alternate; }
 .scene-moving .nebula-stars { animation: scene-swell calc(23s * var(--scene-tempo)) ease-in-out infinite alternate-reverse; }
@@ -99,7 +99,7 @@
 
 .scene-kaleidoscope { background: radial-gradient(ellipse at 71% 43%,#273977,#0b122b 73%); }
 .scene-chromatic i { position: absolute; inset: -9%; background: url('./assets/scenes/chromatic.svg') 75% center / cover no-repeat; }
-.scene-chromatic i + i { opacity: .48; rotate: -15deg; scale: 1.05; }
+.scene-chromatic i + i { opacity: .61; rotate: -15deg; scale: 1.05; }
 .scene-moving .scene-chromatic i { animation: chroma-fold calc(18s * var(--scene-tempo)) ease-in-out infinite alternate; }
 .scene-moving .scene-chromatic i + i { animation-direction: alternate-reverse; animation-duration: calc(24s * var(--scene-tempo)); }
 @keyframes chroma-fold { from { transform: translate3d(-3%, 0, 0) rotate(-4deg) scaleY(.94); } to { transform: translate3d(4%, 3%, 0) rotate(5deg) scaleY(1.08); } }

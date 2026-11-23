@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { catalogTargets, compareJamendo, mergeCatalogResults } from '../src/data/catalog-search.js';
 import { decodePreferences, encodePreferences } from '../src/player/preferences.js';
 import { createGeniusLookup, geniusAnnotations, geniusSongs, isGeniusPage } from '../src/shared/genius.js';
+import { CatalogError, catalogReply } from '../src/shared/catalog-reply.js';
 import { createJamendoSearch, jamendoSearchUrl, jamendoTracks } from '../src/shared/jamendo.js';
 import { createOpenwhydImport, isOpenwhydSourceLink, openwhydPlaylistUrl, readOpenwhydDraft } from '../src/shared/openwhyd.js';
 import { previewPlaylist } from '../src/shared/playlist-import.js';
@@ -48,9 +49,9 @@ test('Jamendo refuses download/preview-only rows and invalid media, recording ID
   for (const override of [{ id: '1848357' }, { audio: '' }, { audio: jamendoDirect.audiodownload }, { audio: 'https://example.invalid/file.mp3' },
     { audio: 'https://prod-1.storage.jamendo.com/?trackid=1348466&format=unknown' }, { license_ccurl: 'https://example.invalid/license' },
     { name: '' }, { artist_name: '' }, { duration: -1 }]) assert.deepEqual(jamendoTracks(withTracks([{ ...jamendoDirect, ...override }])), []);
-  assert.throws(() => jamendoTracks({ headers: { status: 'failed' }, results: [] }), /Client ID/);
+  assert.throws(() => jamendoTracks({ headers: { status: 'failed', code: 5 }, results: [] }), { issue: 'credentials' });
   const search = createJamendoSearch(async (url) => { throw new Error(`internal failure ${url}`); });
-  await assert.rejects(search('jazz', jamendoClient, signal()), (error: Error) => error.message.includes('Jamendo сейчас недоступен') && !error.message.includes(jamendoClient));
+  await assert.rejects(search('jazz', jamendoClient, signal()), (error: unknown) => error instanceof CatalogError && error.issue === 'network' && !error.message.includes(jamendoClient));
   assert.equal(readOnlineTrack({ ...jamendoTracks(jamendoResponse)[0], id: 'jamendo-17' }), undefined);
 });
 
@@ -197,4 +198,20 @@ test('Radio Browser exposes only vetted HTTPS broadcasts; fallback and preferenc
   assert.deepEqual(readStationIds([direct.id, STATIONS[0].id]), [STATIONS[0].id]);
   assert.deepEqual(tuneStation(tuneStation(startQueue(['local']), STATIONS[0].id), direct.id).order, ['local', direct.id]);
   assert.doesNotMatch(encodePreferences(decodePreferences(''), startQueue([track.id], track.id)), new RegExp(track.id));
+});
+
+test('Jamendo HTTP 200 failures keep the API key, quota and upstream issues separate', async () => {
+  for (const [code, issue] of [[5, 'credentials'], [11, 'credentials'], [6, 'quota'], [3, 'unavailable'], [1, 'unavailable']] as const) {
+    let calls = 0;
+    const search = createJamendoSearch(async () => { calls++; return Response.json({ headers: { status: 'failed', code, error_message: jamendoClient }, results: [] }); });
+    const invoke = () => catalogReply(() => search('jazz', jamendoClient, signal()));
+    assert.deepEqual(await invoke(), { tracks: [], issue });
+    if (code === 6) { assert.deepEqual(await invoke(), { tracks: [], issue }); assert.equal(calls, 1); }
+  }
+  for (const [status, issue] of [[429, 'quota'], [401, 'credentials'], [403, 'unavailable'], [502, 'unavailable']] as const) {
+    const search = createJamendoSearch(async () => new Response(jamendoClient, { status }));
+    assert.deepEqual(await catalogReply(() => search('jazz', jamendoClient, signal())), { tracks: [], issue });
+  }
+  const malformed = createJamendoSearch(async () => new Response('not json'));
+  assert.deepEqual(await catalogReply(() => malformed('jazz', jamendoClient, signal())), { tracks: [], issue: 'response' });
 });

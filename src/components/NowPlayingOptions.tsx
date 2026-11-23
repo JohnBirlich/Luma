@@ -90,7 +90,7 @@ export function NowPlayingDialog({ appearance, change, close, tint, track, playi
         </header>
         <div data-effect={appearance.effect} className={`scene-dialog-preview scene-preview-${appearance.hero}`} style={{ '--preview-tone': tint } as CSSProperties} aria-hidden="true">
           <SceneBackground effect={appearance.effect} tone={track ? tint : undefined} strength={appearance.effectStrength} tempo={appearance.effectTempo} visible={appearance.motion}
-            animate={appearance.motion && (!['spectrum', 'columns'].includes(appearance.effect) || playing)} sample={appearance.audioReactive && playing ? sample : undefined} />
+            animate={playing} sample={appearance.audioReactive && playing ? sample : undefined} />
           {appearance.hero === 'vinyl' ? <VinylRecord className="scene-preview-record" track={track} animate={appearance.motion && playing} />
             : <Artwork track={track} imageUrl={appearance.effect === 'off' && (appearance.hero === 'blur' || appearance.hero === 'cover') ? track?.backdropUrl : undefined} className="scene-preview-art" />}
           <div className="scene-preview-copy"><p className="overline">{t("Предпросмотр")}</p><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>

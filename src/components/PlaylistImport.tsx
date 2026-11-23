@@ -15,7 +15,6 @@ import { SourceLink } from './OnlineMusic';
 import spotify from '../assets/playlist-sources/spotify.svg';
 import appleMusic from '../assets/playlist-sources/apple-music.svg';
 import deezer from '../assets/playlist-sources/deezer.svg';
-import youtubeMusic from '../assets/playlist-sources/youtube-music.svg';
 import soundcloud from '../assets/playlist-sources/soundcloud.svg';
 import tidal from '../assets/playlist-sources/tidal.svg';
 import yandexMusic from '../assets/playlist-sources/yandex-music.png';
@@ -28,7 +27,6 @@ const sources = [
   { id: 'spotify', name: 'Spotify', logo: spotify, hint: 'Playlist*.json / CSV / TXT' },
   { id: 'apple', name: 'Apple Music', logo: appleMusic, hint: 'TXT / CSV' },
   { id: 'deezer', name: 'Deezer', logo: deezer, hint: 'CSV / TXT' },
-  { id: 'youtube', name: 'YouTube Music', logo: youtubeMusic, hint: 'CSV / TXT' },
   { id: 'soundcloud', name: 'SoundCloud', logo: soundcloud, hint: 'CSV / TXT' },
   { id: 'tidal', name: 'Tidal', logo: tidal, hint: 'CSV / TXT' },
   { id: 'yandex', name: 'Яндекс Музыка', logo: yandexMusic, hint: 'CSV / TXT' },

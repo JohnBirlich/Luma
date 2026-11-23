@@ -106,7 +106,7 @@ test('desktop protocol streams only indexed media and returns range metadata to 
   const page = await handle(new Request('luma://app/'));
   assert.match(page.headers.get('Content-Security-Policy') ?? '', /script-src 'self'/);
   assert.equal(page.headers.get('Content-Security-Policy')?.split('; ').find((part) => part.startsWith('frame-src ')),
-    'frame-src https://www.youtube-nocookie.com/embed/ https://vk.ru/widget_playlist.php');
+    "frame-src 'none'");
   assert.match(page.headers.get('Content-Security-Policy') ?? '', /frame-ancestors 'none';/);
   assert.equal(page.headers.get('Referrer-Policy'), 'no-referrer');
   assert.equal(await page.text(), '<h1>Luma Player</h1>');

@@ -338,12 +338,12 @@ export function SettingsPage(props: SettingsProps) {
           {section?.id === 'integrations' && <>
             <SettingCard title="Discord Rich Presence"><DiscordSettings options={props.discord} change={props.changeDiscord} /></SettingCard>
             <SettingCard title={t("Виджеты рабочего стола")} detail={t("Компактный плеер поверх окон Windows. Продолжает то же воспроизведение; полноразмерное окно можно вернуть кнопкой или Esc.")}>
-              <label className="setting-row select-row"><span><strong>{t("Фон")}</strong><small>{t("Применяется к компактному плееру.")}</small></span>
+              <label className="setting-row select-row"><span><strong>{t("Фон")}</strong><small>{t("Материал под выбранным фоновым эффектом.")}</small></span>
                 <select value={appearance.widgetBackground} onChange={(event) => changeAppearance({ ...appearance, widgetBackground: event.currentTarget.value as WidgetBackground })}>
                   {Object.entries(WIDGET_BACKGROUNDS).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select></label>
               <WidgetPreview macos={props.effectiveAppearance.theme === 'macos'} track={props.previewTrack}
-                tint={props.widgetTint} background={appearance.widgetBackground} />
+                tint={props.widgetTint} appearance={appearance} />
               <div className="settings-actions">
                 {window.luma ? <button className="button outline-button" type="button" onClick={props.openWidget} title={WIDGET_SHORTCUT.label} aria-keyshortcuts={WIDGET_SHORTCUT.aria}><Monitor size={16} />{" "}{t("Открыть виджет Luma")}</button> : <span className="setting-status">{t("В приложении Windows")}</span>}
               </div>

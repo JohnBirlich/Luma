@@ -1,99 +1,61 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  isVkExternalUrl, isVkPlaylist, isVkWidgetFrameUrl, parseVkPlaylist, parseVkShareLink, vkPlaylistUrl, vkShelfUrl,
-  vkWidgetUrl, VK_MUSIC_URL, VK_WIDGET_FRAME_NAME, VK_WIDGET_URL,
-} from '../src/shared/vk.js';
-import { youTubeEmbedUrl } from '../src/shared/youtube.js';
-import { allowMusicEmbedFrame } from '../electron/embed-navigation.js';
+import { parseVkShareLink, vkPlaylistUrl, VK_MUSIC_URL } from '../src/shared/vk.js';
+import { readMusicLink, musicLinkArgument } from '../src/shared/music-links.js';
+import { readVkNowPlaying, vkMusicPage, vkMusicSearchUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
 
-const playlist = { ownerId: -147845620, playlistId: 5, hash: 'c09c1c34cdf7190efb' };
-
-test('VK playlist input accepts the official generator snippet and embed URL', () => {
-  assert.deepEqual(parseVkPlaylist(`
-    <script src="https://vk.ru/js/api/openapi.js?169"></script>
-    <div id="vk_playlist_-147845620_5"></div>
-    <script>VK.Widgets.Playlist('vk_playlist_-147845620_5', -147845620, 5, 'c09c1c34cdf7190efb');</script>
-  `), playlist);
-  assert.deepEqual(parseVkPlaylist('VK.Widgets.Playlist("p", -147845620, 5, "c09c1c34cdf7190efb", {width: 620});'), playlist);
-  assert.deepEqual(parseVkPlaylist('https://vk.com/widget_playlist.php?oid=-147845620&pid=5&hash=c09c1c34cdf7190efb'), playlist);
+test('VK entry accepts canonical music pages and bounded literal searches, not auth URLs, snippets or arbitrary redirects', () => {
+  const search = vkMusicSearchUrl('  Руки Вверх — Я не отдам  &   #1  ');
+  assert.equal(new URL(search!).searchParams.get('q'), 'Руки Вверх — Я не отдам & #1');
+  assert.equal(new URL(search!).searchParams.size, 1);
+  assert.equal(vkMusicSearchUrl('x'.repeat(141)), undefined);
+  for (const url of [VK_MUSIC_URL, search, 'https://vk.ru/audio-42_4', 'https://vk.ru/music/playlist/-31_4_aShare']) assert.ok(vkSiteEntry(url), url);
+  for (const url of [
+    'https://vk.ru/', 'https://id.vk.ru/auth', 'https://vk.ru/audio-42_4?private=1', 'https://vk.ru/audio?q=jazz&q=other',
+    'https://vk.com/audio', 'https://vk.ru/away.php?url=https://example.test', 'https://vk.ru/widget_playlist.php?oid=3&pid=4&hash=example',
+    '<script>VK.Widgets.Playlist("p", 3, 4, "fixture")</script>',
+  ]) assert.equal(vkSiteEntry(url), false, url);
 });
 
-test('Luma reads only widget fields and rebuilds a canonical VK frame URL', () => {
-  const base = `${VK_WIDGET_URL}?oid=-147845620&pid=5&hash=c09c1c34cdf7190efb`;
-  const value = parseVkPlaylist(`<iframe width="340" src="https://vk.com/widget_playlist.php?pid=5&amp;oid=-147845620&amp;hash=c09c1c34cdf7190efb&amp;width=300&amp;ref=test#ignored"></iframe>`);
-  assert.deepEqual(value, playlist);
-  assert.equal(vkWidgetUrl(value!), base);
-  assert.ok(isVkWidgetFrameUrl(base));
-  for (const url of [base.replace('vk.ru', 'vk.com'), `${base}&autoplay=1`, `${base}&hash=abc`, `${base}#fragment`,
-    base.replace('vk.ru', 'vk.ru.example.test'), base.replace('https:', 'http:'), base.replace('vk.ru', 'user@vk.ru'),
-    `${VK_WIDGET_URL}?pid=5&oid=-147845620&hash=c09c1c34cdf7190efb`, vkPlaylistUrl(playlist), VK_MUSIC_URL]) {
-    assert.equal(isVkWidgetFrameUrl(url), false, url);
-  }
+test('native navigation stays first-party; the playback adapter never runs on a login page', () => {
+  for (const url of ['https://vk.ru/feed', 'https://oauth.vk.com/authorize', 'https://id.vk.ru/auth?state=fixture', 'https://login.vk.com/', 'https://m.vk.com/audio']) assert.ok(vkSiteUrl(url), url);
+  for (const url of ['https://vk.ru.evil.test/audio', 'https://vk.ru@evil.test/audio', 'https://user:pass@vk.ru/audio', 'https://vk.ru:80/audio',
+    'https://vk.ru\\@evil.test/audio', 'http://vk.ru/audio', 'https://vk.ru/away.php?to=https://example.test',
+    'file:///C:/Windows', 'luma://app/', 'luma-player://open/', 'data:text/html,hi', 'javascript:void(0)']) assert.equal(vkSiteUrl(url), undefined, url);
+  for (const url of ['https://vk.ru/audio?q=джаз', 'https://vk.com/music/playlist/-31_4', 'https://m.vk.ru/audios-42']) assert.ok(vkMusicPage(url), url);
+  for (const url of ['https://id.vk.ru/audio', 'https://vk.ru/login', 'https://vk.ru/audio.php', 'https://vk.ru/widget_playlist.php', 'https://vk.ru/im', 'https://vk.ru/audio../settings']) assert.equal(vkMusicPage(url), false, url);
 });
 
-test('the VK frame exception cannot load the full site, nested documents or another provider', () => {
-  const main = { url: 'luma://app/', parent: null, name: '' };
-  const blank = { url: 'about:blank', parent: main, name: VK_WIDGET_FRAME_NAME };
-  const widget = vkWidgetUrl(playlist);
-  const active = { ...blank, url: widget };
-  const nested = { url: '', parent: active, name: VK_WIDGET_FRAME_NAME };
-  const youTube = youTubeEmbedUrl('plnfIj7dkJE', 'ru')!;
-  assert.ok(allowMusicEmbedFrame(main, { url: widget, frame: null, initiator: main }));
-  assert.ok(allowMusicEmbedFrame(main, { url: widget, frame: blank, initiator: null }));
-  assert.ok(allowMusicEmbedFrame(main, { url: widget, frame: active, initiator: active }));
-  for (const [url, frame, initiator] of [
-    [widget, main, active], [widget, null, active], [VK_MUSIC_URL, active, active], [vkPlaylistUrl(playlist), active, main],
-    ['https://id.vk.ru/', active, active], [widget, nested, active], ['about:blank', nested, active],
-    ['luma://app/', active, active], [youTube, active, active], ['https://example.invalid/', active, active],
-  ] as const) assert.ok(!allowMusicEmbedFrame(main, { url, frame, initiator }), url);
+test('native view bounds are contained in the owner, including zoom and undersized slots', () => {
+  assert.deepEqual(vkViewBounds({ x: 110, y: 148, width: 530, height: 401 }, 1.25, 600, 520), { x: 138, y: 185, width: 462, height: 335 });
+  for (const bounds of [null, {}, { x: -1, y: 0, width: 210, height: 200 }, { x: 0, y: 0, width: NaN, height: 200 }, { x: 470, y: 0, width: 210, height: 200 }]) assert.equal(vkViewBounds(bounds, 1, 620, 520), undefined);
 });
 
-test('VK playlist input rejects share links without the widget hash and invalid origins or fields', () => {
-  assert.equal(parseVkPlaylist(vkPlaylistUrl(playlist)), null);
-  assert.equal(parseVkPlaylist('https://vk.ru.evil.test/widget_playlist.php?oid=-147845620&pid=5&hash=abc'), null);
-  assert.equal(parseVkPlaylist('https://vk.ru/widget_playlist.php?oid=3&pid=4&pid=5&hash=abc'), null);
-  assert.equal(parseVkPlaylist('https://vk.ru/widget_playlist.php?oid=3&pid=4&hash=%3Cscript%3E'), null);
-  assert.equal(parseVkPlaylist('VK.Widgets.Playlist("p", (40+2), 5, "abc");'), null);
-  assert.equal(isVkPlaylist({ ownerId: 1e16, playlistId: 3, hash: 'abc' }), false);
-  assert.equal(isVkPlaylist({ ownerId: 3, playlistId: 0, hash: 'abc' }), false);
+test('only current title/artist and boolean playback capabilities are received from VK', () => {
+  assert.deepEqual(readVkNowPlaying({ title: ' Трек\n\u202e 1 ', artist: ' Автор  ', playing: true, toggle: true, next: true, previous: 'yes',
+    url: 'https://example.test/secret', password: 'fixture', audio: 'https://example.test/audio.mp3', artwork: [] }),
+  { title: 'Трек 1', artist: 'Автор', playing: true, toggle: true, next: true, previous: false });
+  assert.equal(readVkNowPlaying({ playing: true }), undefined);
+  assert.equal(readVkNowPlaying({ title: 'a'.repeat(1000) })?.title.length, 160);
 });
 
-test('VK bookmarks open only canonical music links in the system browser', () => {
-  assert.equal(isVkExternalUrl(VK_MUSIC_URL), true);
-  assert.equal(isVkExternalUrl(vkPlaylistUrl(playlist)), true);
-  for (const url of [`${VK_MUSIC_URL}?q=джаз`, `${vkPlaylistUrl(playlist)}?next=https://example.com`,
-    `${vkPlaylistUrl(playlist)}\n`, 'https://vk.ru/away.php?to=https://example.com', 'file:///C:/Windows',
-    'https://vk.ru/widget_playlist.php?oid=3&pid=4&hash=abc', 'https://id.vk.ru/auth']) {
-    assert.equal(isVkExternalUrl(url), false, url);
-  }
-});
-
-test('VK share links are canonicalized and remain bookmarks until a widget hash is supplied', () => {
-  const url = 'https://vk.com/music/playlist/-14_5_Shared-Key?ref=copy#details';
-  const data = parseVkShareLink(url);
-  assert.deepEqual(data, { ownerId: -14, playlistId: 5, shareKey: 'Shared-Key' });
-  assert.equal(isVkPlaylist(data), false);
-  assert.equal(parseVkPlaylist(url), null);
-  assert.equal(vkShelfUrl({ ...data!, name: 'Вечер' }), 'https://vk.ru/music/playlist/-14_5_Shared-Key');
-  assert.equal(isVkExternalUrl(vkShelfUrl({ ...data!, name: 'Вечер' })), true);
-  for (const url of ['http://vk.ru/music/playlist/-14_5', 'https://vk.ru.example.test/music/playlist/-14_5',
-    'https://someone@vk.ru/music/playlist/-14_5', 'https://vk.ru:8080/music/playlist/-14_5', 'file:///music/playlist/-14_5',
-    'https://vk.ru/music/playlist/-14_5_abc%2f', 'https://vk.ru/music/playlist/-14_0']) {
-    assert.equal(parseVkShareLink(url), undefined, url);
-  }
-});
-
-test('VK import reads copied overlay links without turning a share key into a widget credential', () => {
+test('copied track and playlist links canonicalize, retaining only the public playlist share key', () => {
   const expected = { ownerId: -42, playlistId: 7, shareKey: 'Shared-42_abc' };
   for (const url of ['https://vk.ru/music?z=audio_playlist-42_7/Shared-42_abc',
-    'https://vk.com/audios-42?z=audio_playlist-42_7%2FShared-42_abc', 'https://vk.ru/audio?z=audio_playlist-42_7_Shared-42_abc']) {
+    'https://vk.com/audios-42?z=audio_playlist-42_7%2FShared-42_abc', 'https://vk.ru/audio?z=audio_playlist-42_7_Shared-42_abc',
+    'https://vk.com/music/playlist/-42_7_Shared-42_abc?ignored=1']) {
     assert.deepEqual(parseVkShareLink(url), expected);
-    assert.equal(parseVkPlaylist(url), null);
+    assert.equal(readMusicLink(url)?.url, vkPlaylistUrl(expected));
   }
-  assert.equal(parseVkShareLink('https://vk.ru/audio?z=audio_playlist-42_7&z=audio_playlist-42_8'), undefined);
-  assert.equal(parseVkShareLink('https://vk.ru/away.php?z=audio_playlist-42_7'), undefined);
-  const embedded = `<iframe src="https://vk.com/widget_playlist.php?oid=-147845620&amp;pid=5&amp;hash=c09c1c34cdf7190efb" onload="alert(1)"></iframe>`;
-  assert.deepEqual(parseVkPlaylist(embedded), playlist);
-  assert.equal(parseVkPlaylist(embedded.replace('vk.com', 'vk.com.attacker.test')), null);
+  for (const url of ['https://vk.ru/audio?z=audio_playlist-42_7&z=audio_playlist-42_8', 'https://vk.ru/away.php?z=audio_playlist-42_7',
+    'https://vk.ru/music/playlist/-42_7_abc%2f', 'https://vk.ru/music/playlist/-42_0']) assert.equal(parseVkShareLink(url), undefined, url);
+});
+
+test('the music dialog and Windows handoff no longer accept YouTube destinations', () => {
+  for (const url of ['https://youtu.be/plnfIj7dkJE', 'https://www.youtube.com/watch?v=plnfIj7dkJE', 'https://music.youtube.com/watch?v=plnfIj7dkJE',
+    'https://www.youtube-nocookie.com/embed/plnfIj7dkJE']) {
+    assert.equal(readMusicLink(url), undefined);
+    assert.equal(musicLinkArgument([`luma-player://open?${new URLSearchParams({ url })}`]), undefined);
+    assert.equal(vkSiteEntry(url), false);
+  }
 });

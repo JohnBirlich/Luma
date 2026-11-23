@@ -28,7 +28,7 @@ test('archive lookup uses literal terms, deduplicates release ids and rejects ar
   const target = communitySearchUrl('Газ) OR collection:movies', 'netlabels');
   assert.equal(target.searchParams.get('q'), 'collection:netlabels AND mediatype:audio AND licenseurl:* AND ("Газ" AND "OR" AND "collection" AND "movies")');
   const results = await searchCommunity(fetcher, 'Газ', 'netlabels', new AbortController().signal);
-  assert.equal(results.length, 1);
+  assert.equal(results.tracks.length, 1);
   assert.equal(urls[1], 'https://archive.org/metadata/SCL108');
   assert.equal(urls.length, 2);
 });
@@ -54,21 +54,21 @@ test('IPC search scopes run concurrently and only their own latest requests repl
   const wide = catalog.search(1, 'джаз', 'netlabels');
   const label = catalog.search(2, 'Газ', 'southern_city');
   assert.deepEqual(signals.map((signal) => signal.aborted), [false, false]);
-  assert.deepEqual(await catalog.search(3, '../', 'netlabels'), []);
+  assert.deepEqual(await catalog.search(3, '../', 'netlabels'), { tracks: [] });
   const latest = catalog.search(3, 'Газ', 'netlabels');
-  assert.deepEqual(signals.map((signal) => signal.aborted), [true, false, false]);
+  assert.deepEqual(signals.map((signal) => signal.aborted), [true, false]);
   catalog.cancel(1);
-  assert.deepEqual(signals.map((signal) => signal.aborted), [true, false, false]);
+  assert.deepEqual(signals.map((signal) => signal.aborted), [true, false]);
   release();
   await assert.rejects(wide, { name: 'AbortError' });
-  assert.equal((await label)[0].title, 'Газ');
-  assert.equal((await latest)[0].title, 'Газ');
+  assert.equal((await label).tracks[0].title, 'Газ');
+  assert.equal((await latest).tracks[0].title, 'Газ');
 
   const canceled = catalog.search(4, 'Газ', 'netlabels');
   const unaffected = catalog.search(5, 'Газ', 'southern_city');
   catalog.cancel(4);
   await assert.rejects(canceled, { name: 'AbortError' });
-  assert.equal((await unaffected)[0].title, 'Газ');
+  assert.equal((await unaffected).tracks[0].title, 'Газ');
 });
 
 test('Archive Retry-After is respected across both scopes', async () => {
@@ -76,10 +76,47 @@ test('Archive Retry-After is respected across both scopes', async () => {
   const catalog = createCommunitySearch(async () => ++calls === 1
     ? new Response(null, { status: 429, headers: { 'Retry-After': '8' } })
     : Response.json({ response: { docs: [] } }), () => now);
-  await assert.rejects(catalog.search(1, 'jazz', 'netlabels'), /недоступен/);
-  await assert.rejects(catalog.search(2, 'Газ', 'southern_city'), /недоступен/);
+  assert.deepEqual(await catalog.search(1, 'jazz', 'netlabels'), { tracks: [], issue: 'quota' });
+  assert.deepEqual(await catalog.search(2, 'Газ', 'southern_city'), { tracks: [], issue: 'quota' });
   assert.equal(calls, 1);
   now += 8000;
-  assert.deepEqual(await catalog.search(3, 'Газ', 'southern_city'), []);
+  assert.deepEqual(await catalog.search(3, 'Газ', 'southern_city'), { tracks: [] });
   assert.equal(calls, 2);
+});
+
+test('Archive retries a failed search once, preserves usable metadata and reuses it across scopes', async () => {
+  const calls: string[] = [];
+  const lookup = createCommunitySearch(async (raw) => {
+    const url = new URL(raw);
+    const path = url.pathname;
+    calls.push(path);
+    if (calls.length === 1) return new Response(null, { status: 502 });
+    if (path === '/advancedsearch.php') return Response.json({ response: { docs: [{ identifier: 'TIMEOUT' }, { identifier: 'SCL108' }] } });
+    if (path === '/metadata/TIMEOUT') throw new DOMException('provider details', 'TimeoutError');
+    return Response.json({ ...netlabel, files: [...netlabel.files, { ...netlabel.files[0], name: '02_Night_jazz.mp3', title: undefined }] });
+  });
+  const first = await lookup.search(1, 'Никулин Газ', 'netlabels');
+  assert.deepEqual(calls.slice(0, 2), ['/advancedsearch.php', '/advancedsearch.php']);
+  assert.equal(first.issue, 'timeout');
+  assert.deepEqual(first.tracks.map(({ title }) => title), ['Газ', 'Night jazz']);
+  const second = await lookup.search(2, 'Газ', 'southern_city');
+  assert.equal(second.issue, 'timeout');
+  assert.deepEqual(second.tracks, first.tracks);
+  assert.equal(calls.filter((path) => path === '/metadata/SCL108').length, 1);
+});
+
+test('a stalled Archive response body is cancellable even when its stream does not manage the fetch signal', async () => {
+  let body!: () => void;
+  const started = new Promise<void>((resolve) => { body = resolve; });
+  let canceled = false;
+  const lookup = createCommunitySearch(async () => new Response(new ReadableStream({
+    start() { body(); }, cancel() { canceled = true; },
+  })));
+  const result = lookup.search(1, 'jazz', 'netlabels');
+  await started;
+  // Let get() acquire its own reader before aborting.
+  await Promise.resolve();
+  lookup.cancel(1);
+  await assert.rejects(result, { name: 'AbortError' });
+  assert.equal(canceled, true);
 });

@@ -382,3 +382,9 @@
   .glass-navigation button:is(:hover,:focus-visible) .glass-dock-icon { transform: none; }
 }
 .motion-off .glass-navigation button:is(:hover,:focus-visible) .glass-dock-icon { transform: none; }
+
+.desktop-widget[data-widget-layout='macos'][data-effect] {
+  color-scheme: dark; --text: #fbf8ff; --muted: #e4dbf1; --accent-light: #ecd0ff;
+  --widget-rim: #f1d9fe66; --widget-button: #1a112799; --widget-button-hover: #1a1127c9;
+  --widget-track-line: #e4d0ff61;
+}

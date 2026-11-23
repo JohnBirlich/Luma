@@ -6,6 +6,8 @@ import type { DesktopBridge } from '../src/shared/media.js';
 import type { LastFmStatus } from '../src/shared/lastfm.js';
 import type { CredentialService, MusicServiceStatus } from '../src/shared/music-services.js';
 
+import type { VkSiteState } from '../src/shared/vk-site.js';
+
 const bridge: DesktopBridge = {
   setUiLanguage: (language) => ipcRenderer.invoke('ui:language', language),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
@@ -39,7 +41,18 @@ const bridge: DesktopBridge = {
     openBrowser: (url) => ipcRenderer.invoke('music-link:browser', url),
     copy: (url) => ipcRenderer.invoke('music-link:copy', url),
   },
-  clearLegacyVkSession: () => ipcRenderer.invoke('vk:reset'),
+  vkSite: {
+    open: (id, url, bounds) => ipcRenderer.invoke('vk-site:open', id, url, bounds),
+    layout: (id, bounds) => ipcRenderer.invoke('vk-site:layout', id, bounds),
+    close: (id) => ipcRenderer.invoke('vk-site:close', id),
+    command: (id, action) => ipcRenderer.invoke('vk-site:command', id, action),
+    reset: () => ipcRenderer.invoke('vk-site:reset'),
+    onState: (callback) => {
+      const listener = (_event: IpcRendererEvent, id: number, state: VkSiteState) => callback(id, state);
+      ipcRenderer.on('vk-site:state', listener);
+      return () => ipcRenderer.removeListener('vk-site:state', listener);
+    },
+  },
   lyrics: {
     lookup: (query, refresh) => ipcRenderer.invoke('lyrics:lookup', query, refresh),
     lookupPlain: (query) => ipcRenderer.invoke('lyrics:lookup-plain', query),

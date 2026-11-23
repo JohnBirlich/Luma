@@ -35,7 +35,7 @@ import { isStationPage } from '../src/shared/radio.js';
 import { musicLaunchUrl, musicLinkArgument, readMusicLink } from '../src/shared/music-links.js';
 import { LATEST_RELEASE_API, readSignerSha256 } from '../src/shared/release-updates.js';
 import { readSharedPlaylist } from '../src/shared/playlist-share.js';
-import { LEGACY_VK_SESSION, VK_WIDGET_DOCS_URL } from '../src/shared/vk.js';
+import { vkSiteEntry } from '../src/shared/vk-site.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { DesktopDiscord } from './discord-presence.js';
 import { DesktopFloatOutput } from './float-output.js';
@@ -43,9 +43,7 @@ import { StreamCache } from './stream-cache.js';
 import { createProtocolHandler } from './protocol.js';
 import { verifyWindowsSigner, WINDOWS_VERIFIER_EXE, WindowsUpdates } from './windows-update.js';
 import { AUDIUS_MEDIA_PARTITION, createAudiusFetch } from './audius-network.js';
-import { GOOGLE_PRIVACY, isYouTubeEmbedUrl, YOUTUBE_EMBED_SOURCE, YOUTUBE_TERMS } from '../src/shared/youtube.js';
-import { allowMusicEmbedFrame } from './embed-navigation.js';
-import { youTubeAppHeaders, youTubePopupUrl } from './youtube.js';
+import { VkSite } from './vk-site.js';
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'luma',
@@ -66,6 +64,7 @@ let changeFullscreen: ((fullscreen: boolean) => void) | undefined;
 const floatOutput = new DesktopFloatOutput(process.platform === 'win32' ? (app.isPackaged
   ? join(process.resourcesPath, 'audio', 'LumaFloat.exe') : join(app.getAppPath(), 'dist-native', 'LumaFloat.exe')) : undefined);
 const discord = new DesktopDiscord(process.platform === 'win32');
+const vkSite = new VkSite();
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -148,6 +147,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('music-link:browser', (event, value: unknown) => {
     appWindow(event);
     const link = readMusicLink(value);
+    if (vkSiteEntry(value)) return shell.openExternal(value);
     if (!link || link.url !== value) throw new Error('Unsupported music link');
     return shell.openExternal(link.url);
   });
@@ -168,13 +168,15 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     await writeFile(filePath, JSON.stringify(playlist, null, 2), 'utf8');
     return true;
   });
-  ipcMain.handle('vk:reset', async (event) => {
-    appWindow(event);
-    // A 0.12 profile can still hold a VK login. Do not create a view or read any account data.
-    const legacy = session.fromPartition(LEGACY_VK_SESSION);
-    await legacy.clearStorageData();
-    await legacy.clearCache();
-  });
+  ipcMain.handle('vk-site:open', (event, id, url, bounds) => vkSite.open(appWindow(event), id, url, bounds));
+  ipcMain.handle('vk-site:layout', (event, id, bounds) => vkSite.layout(appWindow(event), id, bounds));
+  ipcMain.handle('vk-site:close', (event, id) => vkSite.close(appWindow(event), id));
+  ipcMain.handle('vk-site:command', (event, id, action) => vkSite.command(appWindow(event), id, action));
+  ipcMain.handle('vk-site:reset', (event) => vkSite.clear(appWindow(event), {
+    type: 'warning', title: t('Сессия VK'), message: t('Сбросить данные входа VK в Luma?'),
+    detail: t('Вход в обычном браузере и сохранённые плейлисты Luma останутся.'),
+    buttons: [t('Отмена'), t('Сбросить')], defaultId: 0, cancelId: 0,
+  }));
   const lookupLyrics = createLyricsService(net.fetch, true, info.version);
   const exportMp3 = createOnlineExporter(lookupLyrics, (...args) => t(...args));
   ipcMain.handle('lyrics:local', (event, id: unknown) => { appWindow(event); return library.lyrics(id); });
@@ -237,7 +239,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('online:open-link', (event, url: unknown) => {
     appWindow(event);
     const allowed = (value: string) => isOnlineExternalUrl(value) || isStationPage(value) || isRadioBrowserPage(value) || isGeniusPage(value)
-      || isOpenwhydSourceLink(value) || value === LISTENBRAINZ_ABOUT || value === GOOGLE_PRIVACY || value === YOUTUBE_TERMS || value === VK_WIDGET_DOCS_URL
+      || isOpenwhydSourceLink(value) || value === LISTENBRAINZ_ABOUT
       || Object.values(MUSIC_SERVICE_GUIDES).some((guide) => guide === value);
     if (typeof url !== 'string' || !allowed(url)) throw new Error('Unsupported catalog link');
     return shell.openExternal(url);
@@ -313,6 +315,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('window:widget', (event, enabled: unknown) => {
     appWindow(event);
     if (typeof enabled !== 'boolean') throw new TypeError('Expected widget state');
+    if (enabled) vkSite.close();
     return changeWidget?.(enabled) ?? false;
   });
   ipcMain.handle('window:close', (event) => appWindow(event).close());
@@ -331,7 +334,7 @@ async function createWindow() {
   owner.webContents.on('did-start-navigation', ({ isMainFrame, isSameDocument }) => {
     if (isMainFrame && !isSameDocument) { discord.stop(); void floatOutput.stop(); }
   });
-  owner.webContents.on('render-process-gone', () => { discord.stop(); void floatOutput.stop(); });
+  owner.webContents.on('render-process-gone', () => { vkSite.close(); discord.stop(); void floatOutput.stop(); });
   owner.once('closed', () => { discord.stop(); void floatOutput.stop(); });
   window = owner;
   changeWidget = widgetController(owner);
@@ -350,14 +353,9 @@ async function createWindow() {
     owner.setAppDetails({ appId: APP_USER_MODEL_ID, relaunchDisplayName: APP_NAME, appIconPath: launcher,
       relaunchCommand: `"${launcher}"` });
   }
-  owner.webContents.setWindowOpenHandler(({ url, referrer, postBody }) => {
-    const external = !postBody && youTubePopupUrl(url, referrer.url);
-    if (external) void shell.openExternal(external).catch(() => {});
-    return { action: 'deny' };
-  });
+  owner.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   const guardNavigation = (event: Electron.Event<Electron.WebContentsWillFrameNavigateEventParams | Electron.WebContentsWillRedirectEventParams>) => {
-    const main = owner.webContents.mainFrame;
-    if (!(event.isMainFrame ? isAppPage(event.url) : isAppPage(main.url) && allowMusicEmbedFrame(main, event))) event.preventDefault();
+    if (!event.isMainFrame || !isAppPage(event.url)) event.preventDefault();
   };
   owner.webContents.on('will-frame-navigate', guardNavigation);
   owner.webContents.on('will-redirect', guardNavigation);
@@ -433,21 +431,11 @@ if (!app.requestSingleInstanceLock()) {
     const canRouteAudio = (contents: Electron.WebContents | null, permission: string, url: string | undefined, mainFrame: boolean) =>
       process.platform === 'win32' && permission === 'speaker-selection' && mainFrame && !!url
       && !!window && !window.isDestroyed() && contents === window.webContents && isAppPage(url);
-    const canFullscreenYouTube = (contents: Electron.WebContents | null, permission: string, url: string | undefined, mainFrame: boolean) =>
-      permission === 'fullscreen' && !mainFrame && isYouTubeEmbedUrl(url)
-      && !!window && !window.isDestroyed() && contents === window.webContents && isAppPage(contents.getURL());
     session.defaultSession.setPermissionRequestHandler((contents, permission, reply, details) => {
-      reply(canRouteAudio(contents, permission, details.requestingUrl, details.isMainFrame)
-        || canFullscreenYouTube(contents, permission, details.requestingUrl, details.isMainFrame));
+      reply(canRouteAudio(contents, permission, details.requestingUrl, details.isMainFrame));
     });
     session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
-      canRouteAudio(contents, permission, details.requestingUrl, details.isMainFrame)
-        || canFullscreenYouTube(contents, permission, details.requestingUrl, details.isMainFrame));
-    if (!devUrl) session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${YOUTUBE_EMBED_SOURCE}*`], types: ['subFrame'] }, (details, reply) => {
-      const contents = window && !window.isDestroyed() ? window.webContents : null;
-      const requestHeaders = contents && isAppPage(contents.getURL()) ? youTubeAppHeaders(details, contents.id, APP_ORIGIN) : undefined;
-      reply(requestHeaders ? { requestHeaders } : {});
-    });
+      canRouteAudio(contents, permission, details.requestingUrl, details.isMainFrame));
     const library = await DesktopLibrary.open(app.getPath('userData'));
     const cache = await StreamCache.open(join(app.getPath('userData'), 'stream-cache'), net.fetch);
     const audiusFetch = createAudiusFetch(session.fromPartition(AUDIUS_MEDIA_PARTITION, { cache: false }));

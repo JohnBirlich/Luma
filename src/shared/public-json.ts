@@ -6,6 +6,10 @@ export class PublicHttpError extends Error {
   constructor(readonly status: number) { super(`Каталог сейчас недоступен (HTTP ${status}). Повторите попытку позже.`); }
 }
 
+export class PublicCooldownError extends Error {
+  constructor() { super('Каталог временно ограничил поиск. Попробуйте позже.'); }
+}
+
 /** For fixed API endpoints. One in-flight request per provider, with bounded errors and bodies. */
 export function createPublicJsonRequest(fetcher: PublicApiFetch, { spacing, limit, missing404 = false }: {
   spacing: number; limit: number; missing404?: boolean;
@@ -15,7 +19,7 @@ export function createPublicJsonRequest(fetcher: PublicApiFetch, { spacing, limi
   let blockedUntil = 0;
   return async (url: URL, signal: AbortSignal, options: Pick<RequestInit, 'headers' | 'method' | 'body'> = {}): Promise<unknown> => {
     signal.throwIfAborted();
-    if (busy || blockedUntil > Date.now()) throw new Error('Каталог временно ограничил поиск. Попробуйте позже.');
+    if (busy || blockedUntil > Date.now()) throw new PublicCooldownError();
     busy = true;
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(8000)]);
     try {

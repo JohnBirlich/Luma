@@ -21,6 +21,9 @@ import type { GeniusAnnotation, GeniusSong } from './genius.js';
 import type { OpenwhydDraft } from './openwhyd.js';
 import type { RadioBrowserQuery, RadioBrowserStation } from './radio-browser.js';
 
+import type { CatalogReply } from './catalog-reply.js';
+import type { VkBounds, VkSiteAction, VkSiteState } from './vk-site.js';
+
 export const AUDIO_MIMES = {
   mp3: 'audio/mpeg',
   wav: 'audio/wav',
@@ -70,7 +73,7 @@ export interface DesktopBridge {
   getAppInfo(): Promise<AppInfo>;
   openReleases(): Promise<void>;
   updates: { check(): Promise<UpdateReport>; install(version: string): Promise<InstallResult> };
-  searchCommunity(id: number, query: string, source: DesktopCatalogSource): Promise<OnlineTrack[]>;
+  searchCommunity(id: number, query: string, source: DesktopCatalogSource): Promise<CatalogReply>;
   cancelCatalogSearch(id: number): Promise<void>;
   openOnlineLink(url: string): Promise<void>;
   getTracks(): Promise<Track[]>;
@@ -90,7 +93,14 @@ export interface DesktopBridge {
     openBrowser(url: string): Promise<void>;
     copy(url: string): Promise<void>;
   };
-  clearLegacyVkSession(): Promise<void>;
+  vkSite: {
+    open(id: number, url: string, bounds: VkBounds): Promise<void>;
+    layout(id: number, bounds: VkBounds | null): Promise<void>;
+    close(id: number): Promise<void>;
+    command(id: number, action: VkSiteAction): Promise<boolean>;
+    reset(): Promise<boolean>;
+    onState(callback: (id: number, state: VkSiteState) => void): () => void;
+  };
   lyrics: {
     lookup(query: LyricsQuery, refresh?: boolean): Promise<Lyrics | null>;
     lookupPlain(query: Pick<LyricsQuery, 'title' | 'artist'>): Promise<Lyrics | null>;
@@ -136,7 +146,7 @@ export interface DesktopBridge {
     remove(service: CredentialService): Promise<MusicServiceStatus>;
     enableListens(enabled: boolean): Promise<MusicServiceStatus>;
     recordLocalListen(id: string, event: ListeningEvent): void;
-    searchJamendo(id: number, query: string): Promise<OnlineTrack[]>;
+    searchJamendo(id: number, query: string): Promise<CatalogReply>;
     searchGenius(query: string): Promise<GeniusSong[]>;
     geniusAnnotations(id: number): Promise<GeniusAnnotation[]>;
     onChange(callback: (service: CredentialService, status: MusicServiceStatus) => void): () => void;

@@ -1,6 +1,8 @@
-import { CatalogRateLimit, findOnlineTracks } from './online';
+import { CatalogRateLimit, findCatalog } from './online';
 import { jamendoRecording } from '../shared/online';
-import type { OnlineTrack } from '../shared/online';
+import { CatalogError } from '../shared/catalog-reply';
+import type { CatalogReply } from '../shared/catalog-reply';
+import type { OnlineFilter, OnlineTrack } from '../shared/online';
 
 const OPENVERSE = { id: 'openverse', source: 'all', name: 'Jamendo + Wikimedia Commons' } as const;
 const NETLABELS = { id: 'netlabels', source: 'netlabels', name: 'Internet Archive · Netlabels' } as const;
@@ -10,7 +12,7 @@ const JAMENDO = { id: 'jamendo_direct', source: 'jamendo_direct', name: 'Jamendo
 const PHISH = { id: 'phishin', source: 'phishin', name: 'Phish.in · концерты' } as const;
 export type CatalogTarget = typeof OPENVERSE | typeof NETLABELS | typeof SOUTHERN_CITY | typeof AUDIUS | typeof JAMENDO | typeof PHISH;
 export type CatalogId = CatalogTarget['id'];
-export type CatalogResult = { id: CatalogId; tracks: OnlineTrack[] } | { id: CatalogId; error: unknown };
+export type CatalogResult = ({ id: CatalogId } & CatalogReply) | { id: CatalogId; error: unknown };
 export const catalogTargets = (desktop: boolean, phish = false, jamendo = false): readonly CatalogTarget[] => [
   OPENVERSE, ...(desktop ? [NETLABELS, AUDIUS, SOUTHERN_CITY, ...(jamendo ? [JAMENDO] : [])] : []), ...(phish ? [PHISH] : []),
 ];
@@ -22,7 +24,7 @@ export function catalogQuery(text: string) {
 }
 
 /** Memory only: no history of what was searched. Debouncing lives in the UI; repeated queries reuse a short-lived result. */
-export function createCatalogSearch(find = findOnlineTracks, now = Date.now) {
+export function createCatalogSearch(find: (query: string, source: OnlineFilter, signal: AbortSignal) => Promise<CatalogReply | OnlineTrack[]> = findCatalog, now = Date.now) {
   const cache = new Map<string, { tracks: OnlineTrack[]; expires: number }>();
   let openverseBlockedUntil = 0;
   return async (query: string, targets: readonly CatalogTarget[], signal: AbortSignal, report: (result: CatalogResult) => void) => {
@@ -37,14 +39,16 @@ export function createCatalogSearch(find = findOnlineTracks, now = Date.now) {
       if (wait > 0) { report({ id, error: new CatalogRateLimit(wait) }); return; }
       let result: CatalogResult;
       try {
-        const tracks = await find(text, source, signal);
+        const reply = await find(text, source, signal);
+        const { tracks, issue } = Array.isArray(reply) ? { tracks: reply, issue: undefined } : reply;
         if (signal.aborted) return;
-        if (id !== 'jamendo_direct') {
+        if (issue && !tracks.length) throw new CatalogError(issue);
+        if (!issue && id !== 'jamendo_direct') {
           cache.delete(key);
           cache.set(key, { tracks, expires: now() + 2 * 60_000 });
           if (cache.size > 24) cache.delete(cache.keys().next().value!);
         }
-        result = { id, tracks };
+        result = { id, tracks, ...(issue && { issue }) };
       } catch (error) {
         if (signal.aborted) return;
         if (id === 'openverse' && error instanceof CatalogRateLimit) openverseBlockedUntil = Math.max(openverseBlockedUntil, now() + error.retryMs);
