@@ -32,6 +32,7 @@ import { connectionState, recordDiagnostic, subscribeConnection } from './data/d
 import { saveSharedPlaylist } from './data/playlist-share';
 import { musicLaunchUrl, readMusicLink } from './shared/music-links';
 import { vkMusicSearchUrl, vkSiteEntry } from './shared/vk-site';
+import type { VkSiteAppearance } from './shared/vk-site';
 import { VK_MUSIC_URL } from './shared/vk';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
@@ -762,6 +763,8 @@ export default function App() {
     navigate('player');
     selectHomeTab('radio');
   }, [navigate, selectHomeTab]);
+  const changeVkAppearance = useCallback((vkSiteAppearance: VkSiteAppearance) =>
+    setPreferences((data) => ({ ...data, vkSiteAppearance })), []);
   const searchVk = useCallback((query: string) => {
     const url = vkMusicSearchUrl(query);
     if (url) openVk(url);
@@ -837,6 +840,7 @@ export default function App() {
             searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={homeVisible}
             vkUrl={vkOpen ? vkUrl : undefined} closeVk={closeVk} searchVk={window.luma?.vkSite ? searchVk : undefined}
+            vkAppearance={preferences.vkSiteAppearance} changeVkAppearance={changeVkAppearance}
             busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} tuneDiscoveredStation={tuneDiscoveredStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
             openLibrary={goToLibrary} addMusic={choose} openMusicLink={() => setMusicDialog({})}

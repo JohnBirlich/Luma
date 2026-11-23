@@ -1,6 +1,9 @@
 .vk-site { border: 1px solid var(--accent-border); border-radius: 15px; background: var(--panel-bg); overflow: hidden; }
 .vk-site-bar, .vk-site-transport { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 5px 8px; border-bottom: 1px solid var(--accent-border); }
 .vk-site-bar .icon-button, .vk-site-transport .icon-button { width: 32px; height: 31px; flex: none; }
+.vk-site-appearance { flex: none; max-width: 41%; height: 31px; padding: 0 5px; border: 1px solid var(--accent-border);
+  border-radius: 7px; background: var(--raised-bg); color: var(--text); font-size: 12px; text-overflow: ellipsis; }
+.vk-site-appearance:disabled { opacity: .55; }
 .vk-site-origin { display: flex; gap: 6px; align-items: center; flex: 1; min-width: 0; font-size: 12px; }
 .vk-site-origin svg { color: var(--accent-light); flex: none; }
 .vk-site-origin strong, .vk-site-origin small, .vk-site-track > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

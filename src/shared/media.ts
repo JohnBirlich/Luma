@@ -22,7 +22,7 @@ import type { OpenwhydDraft } from './openwhyd.js';
 import type { RadioBrowserQuery, RadioBrowserStation } from './radio-browser.js';
 
 import type { CatalogReply } from './catalog-reply.js';
-import type { VkBounds, VkSiteAction, VkSiteState } from './vk-site.js';
+import type { VkBounds, VkSiteAction, VkSiteAppearance, VkSiteState } from './vk-site.js';
 
 export const AUDIO_MIMES = {
   mp3: 'audio/mpeg',
@@ -94,9 +94,10 @@ export interface DesktopBridge {
     copy(url: string): Promise<void>;
   };
   vkSite: {
-    open(id: number, url: string, bounds: VkBounds | null): Promise<void>;
+    open(id: number, url: string, bounds: VkBounds | null, appearance?: VkSiteAppearance): Promise<void>;
     layout(id: number, bounds: VkBounds | null): Promise<void>;
     close(id: number): Promise<void>;
+    setAppearance(id: number, appearance: VkSiteAppearance): Promise<boolean>;
     command(id: number, action: VkSiteAction, fraction?: number): Promise<boolean>;
     reset(id: number): Promise<boolean>;
     onState(callback: (id: number, state: VkSiteState) => void): () => void;

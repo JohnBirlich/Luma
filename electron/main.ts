@@ -166,9 +166,10 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     await writeFile(filePath, JSON.stringify(playlist, null, 2), 'utf8');
     return true;
   });
-  ipcMain.handle('vk-site:open', (event, id, url, bounds) => vkSite.open(appWindow(event), id, url, bounds));
+  ipcMain.handle('vk-site:open', (event, id, url, bounds, appearance) => vkSite.open(appWindow(event), id, url, bounds, appearance));
   ipcMain.handle('vk-site:layout', (event, id, bounds) => vkSite.layout(appWindow(event), id, bounds));
   ipcMain.handle('vk-site:close', (event, id) => vkSite.close(appWindow(event), id));
+  ipcMain.handle('vk-site:appearance', (event, id, appearance) => vkSite.setAppearance(appWindow(event), id, appearance));
   ipcMain.handle('vk-site:command', (event, id, action, fraction) => vkSite.command(appWindow(event), id, action, fraction));
   ipcMain.handle('vk-site:reset', (event, id) => vkSite.clear(appWindow(event), id, {
     type: 'warning', title: t('Сессия VK'), message: t('Сбросить данные входа VK в Luma?'),

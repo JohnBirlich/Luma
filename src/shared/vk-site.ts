@@ -9,6 +9,12 @@ const siteHosts = new Set([...musicHosts, 'id.vk.ru', 'id.vk.com', 'login.vk.ru'
 export const VK_TRANSPORT = ['previous', 'toggle', 'next'] as const;
 export type VkTransport = typeof VK_TRANSPORT[number];
 export type VkSiteAction = VkTransport | 'seek' | 'back' | 'reload' | 'music';
+export type VkSiteAppearance = 'standard' | 'profile' | 'minimal';
+
+export function readVkSiteAppearance(value: unknown): VkSiteAppearance | undefined {
+  return value === 'standard' || value === 'profile' || value === 'minimal' ? value : undefined;
+}
+
 export interface VkBounds { x: number; y: number; width: number; height: number }
 export interface VkPosition { position: number; duration: number; seek: boolean }
 export interface VkNowPlaying {
