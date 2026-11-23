@@ -1089,7 +1089,7 @@ async function smoke() {
       await waitFor('VK landing has the official site button', () => run(`!!document.querySelector('[data-vk-open]')`));
       assert.equal(vkRequests.length, beforeOpening, 'opening the VK tab makes no request');
       assert.equal(await run(`!!document.querySelector('.vk-site-intro textarea, iframe')`), false, 'no paste-code form or embedded player');
-      await run(`window.vkFixtureStates = []; window.luma.vkSite.onState((_, state) => window.vkFixtureStates.push(state));`);
+      await run(`window.vkFixtureStates = []; void window.luma.vkSite.onState((_, state) => window.vkFixtureStates.push(state));`);
       await click('[data-vk-open]');
       const nativeView = await waitVk(vkFixtureAuth), guest = nativeView.webContents;
       const guestRun = (code) => guest.executeJavaScript(code, true);
