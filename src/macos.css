@@ -48,7 +48,7 @@
 [data-layout='glass'] .window-buttons button:hover { filter: brightness(.88); }
 [data-layout='glass'] .web-status { margin: 0; color: var(--muted); border: 1px solid #fffa; background: #ffffffe0; }
 [data-layout='glass'] > .main-pane { grid-area: 2 / 1 / 3 / 2; background: none; scrollbar-color: #3b5f9366 transparent; }
-[data-layout='glass'] .page { max-width: 1460px; padding-inline: var(--glass-inset); }
+[data-layout='glass'] .page { padding-inline: var(--glass-inset); }
 [data-layout='glass'] :is(.page-header h1,.hub-heading h1) { font-size: clamp(33px, 4.8vw, 60px); font-weight: 770; letter-spacing: -.065em; }
 [data-layout='glass'] .page-kicker { color: var(--accent-light); }
 [data-layout='glass'] .page-kicker > span { border-radius: 50%; }

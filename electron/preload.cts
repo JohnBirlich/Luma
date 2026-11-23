@@ -56,7 +56,7 @@ const bridge: DesktopBridge = {
   },
   vkSite: {
     open: (id, url, bounds, appearance) => ipcRenderer.invoke('vk-site:open', id, url, bounds, appearance),
-    layout: (id, bounds) => ipcRenderer.invoke('vk-site:layout', id, bounds),
+    layout: (id, bounds, foreground) => ipcRenderer.invoke('vk-site:layout', id, bounds, foreground),
     close: (id) => ipcRenderer.invoke('vk-site:close', id),
     setAppearance: (id, appearance) => ipcRenderer.invoke('vk-site:appearance', id, appearance),
     command: (id, action, fraction) => ipcRenderer.invoke('vk-site:command', id, action, fraction),

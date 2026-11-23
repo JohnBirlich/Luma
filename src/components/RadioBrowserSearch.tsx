@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { ArrowUpRight, Pause, Play, Radio, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ArrowUpRight, Pause, Play, Search } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { readRadioBrowserQuery } from '../shared/radio-browser';
 import type { RadioBrowserQuery, RadioBrowserStation } from '../shared/radio-browser';
+import { radioStationCover } from '../shared/radio-artwork';
+import { Artwork } from './Artwork';
 import { SourceLink } from './OnlineMusic';
 
 const empty: RadioBrowserQuery = { name: '', country: '', language: '', genre: '' };
@@ -19,6 +21,7 @@ export function RadioBrowserSearch({ activeId, playing, loading, connected, busy
   const bridge = window.luma?.radioBrowser;
   const [query, setQuery] = useState(empty);
   const [stations, setStations] = useState<RadioBrowserStation[]>();
+  const covers = useMemo(() => new Map(stations?.map(({ id, name }) => [id, radioStationCover(id, name)])), [stations]);
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState(false);
   const filters = readRadioBrowserQuery(query);
@@ -45,7 +48,7 @@ export function RadioBrowserSearch({ activeId, playing, loading, connected, busy
       const active = activeId === station.id;
       const connecting = active && loading, onAir = active && playing && !loading, stop = connecting || onAir;
       return <li key={station.id} data-station={station.id} data-active={active || undefined} data-mode={station.stream ? 'native' : 'browser'} className="station-tile radio-browser-tile">
-        <div className="station-top"><div className="station-logo" aria-hidden="true"><Radio size={26} /></div></div>
+        <div className="station-top"><Artwork className="station-logo" imageUrl={covers.get(station.id)} lazy /></div>
         <h3>{station.name}</h3><p>{[station.country, station.language, station.genre].filter(Boolean).join(' · ')}</p>
         {station.codec && <p>{station.codec}{station.bitrate ? ` · ${t('{0} кбит/с', station.bitrate)}` : ''}</p>}
         <div className="station-bottom">

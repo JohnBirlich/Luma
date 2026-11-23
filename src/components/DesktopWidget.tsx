@@ -3,14 +3,14 @@ import { useText } from '../i18n/context';
 import type { CSSProperties, ReactNode } from 'react';
 import { AudioLines, Maximize2, Minus, Play, Radio, Repeat, Shuffle, SkipBack, SkipForward, Volume2, X } from 'lucide-react';
 import type { Appearance } from '../shared/customization';
-import type { Track } from '../shared/media';
+import type { TrackDisplay } from '../shared/media';
 import { Artwork } from './Artwork';
 import { SceneBackground } from './SceneBackground';
 import type { ReadSpectrum } from '../player/useAudio';
 import { SeekTimeline, TransportControls, VolumeControl } from './PlaybackControls';
 import type { PlaybackProps } from './PlaybackControls';
 
-type WidgetLook = { track: Track | null; tint: string; appearance: Appearance; macos: boolean };
+type WidgetLook = { track: TrackDisplay | null; tint: string; appearance: Appearance; macos: boolean };
 type WidgetMotion = { playing?: boolean; sample?: ReadSpectrum };
 const macLights = ['close', 'minimize', 'restore'] as const;
 
@@ -35,7 +35,7 @@ function WidgetChrome({ children, preview = false }: { children: ReactNode; prev
   </header>;
 }
 
-function WidgetTrack({ track, title, subtitle, children }: { track: Track | null; title: string; subtitle: string; children: ReactNode }) {
+function WidgetTrack({ track, title, subtitle, children }: { track: TrackDisplay | null; title: string; subtitle: string; children: ReactNode }) {
   return <div className="widget-track">
     <Artwork track={track} />
     <div className="widget-copy"><strong title={title}>{title}</strong><small title={subtitle}>{subtitle}</small></div>
@@ -85,7 +85,8 @@ export function DesktopWidget({ restore, controls, pending, ...look }: WidgetLoo
         <Icon size={16} aria-hidden="true" />
       </button>;
     })}</WidgetChrome>
-    <WidgetTrack track={track} title={track?.title ?? t('Нет трека')} subtitle={track?.artist ?? t('Откройте медиатеку')}>
+    <WidgetTrack track={track} title={track?.title ?? t('Нет трека')} subtitle={controls.source === 'vk'
+      ? [track?.artist, t('VK Музыка')].filter(Boolean).join(' · ') : track?.artist ?? t('Откройте медиатеку')}>
       <VolumeControl {...controls} />
     </WidgetTrack>
     <TransportControls {...controls} />

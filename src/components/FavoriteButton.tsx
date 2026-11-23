@@ -4,7 +4,7 @@ import type { Track } from '../shared/media';
 import { sessionCatalogId } from '../shared/online';
 
 export function FavoriteButton({ track, selected, toggle, immersive }: {
-  track: Track; selected: boolean; toggle(id: string): void; immersive?: boolean;
+  track: Pick<Track, 'id' | 'title'>; selected: boolean; toggle(id: string): void; immersive?: boolean;
 }) {
   const t = useText();
   if (sessionCatalogId(track.id)) return null;
@@ -27,7 +27,7 @@ export function FavoriteButton({ track, selected, toggle, immersive }: {
 }
 
 export function DislikeButton({ track, selected, toggle, immersive }: {
-  track: Track; selected: boolean; toggle(id: string): void; immersive?: boolean;
+  track: Pick<Track, 'id' | 'title'>; selected: boolean; toggle(id: string): void; immersive?: boolean;
 }) {
   const t = useText();
   if (sessionCatalogId(track.id)) return null;

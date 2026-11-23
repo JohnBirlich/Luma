@@ -3,6 +3,7 @@ import { createPublicJsonRequest, PublicHttpError } from './public-json.js';
 import type { PublicApiFetch } from './public-json.js';
 import { cleanTrackText } from './russian.js';
 import { RADIO_LINEUP } from './radio-lineup.js';
+import { radioStationCover } from './radio-artwork.js';
 
 const MIRROR = 'de1.api.radio-browser.info';
 const PAGE = 'https://www.radio-browser.info/history/';
@@ -76,6 +77,7 @@ export function radioBrowserTrack(station: RadioBrowserStation): Track | undefin
   const uuid = radioBrowserUuid(station.id), stream = trustedRadioBrowserStream(station.stream);
   if (!uuid || !stream) return;
   return { id: station.id, title: station.name, artist: 'Radio Browser', album: station.country, audioUrl: stream, duration: 0, color: '#92bffa',
+    artworkUrl: radioStationCover(station.id, station.name),
     online: { source: 'broadcast', page: `${PAGE}${uuid}`, license: '', licenseUrl: '' } };
 }
 

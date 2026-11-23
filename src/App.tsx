@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
 import { UiText } from './i18n/context';
+import { VK_ARTWORK_URL } from './data/artwork';
 import type { Text } from './i18n/text';
 import { textFor } from './i18n/text';
 import { CircleAlert, CircleCheck, FileAudio, X } from 'lucide-react';
@@ -32,7 +33,7 @@ import { connectionState, recordDiagnostic, subscribeConnection } from './data/d
 import { saveSharedPlaylist } from './data/playlist-share';
 import { musicLaunchUrl, readMusicLink } from './shared/music-links';
 import { vkMusicSearchUrl, vkSiteEntry } from './shared/vk-site';
-import type { VkSiteAppearance } from './shared/vk-site';
+import type { VkSiteAction, VkSiteAppearance } from './shared/vk-site';
 import { VK_MUSIC_URL } from './shared/vk';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
@@ -43,6 +44,7 @@ import { useSleepTimer } from './player/useSleepTimer';
 import { verifiedLocalReplacement } from './shared/recording-match';
 import { useAudio } from './player/useAudio';
 import { usePresentation } from './player/usePresentation';
+import { useVkSite } from './player/useVkSite';
 import { useTrackLyrics } from './player/useTrackLyrics';
 import { usePalette } from './player/usePalette';
 import { trackCoverKey, withCover } from './shared/artwork';
@@ -60,7 +62,7 @@ import { MAX_PLAYLISTS, playlistTitle, playlistTrackIds } from './shared/luma-pl
 import { rememberSearch } from './shared/search-history';
 import { MAX_ONLINE_TRACKS, readOnlineTrack, sessionCatalogId } from './shared/online';
 import type { OnlineTrack } from './shared/online';
-import type { ImportResult, Track } from './shared/media';
+import type { ImportResult, PlayingTrack, Track } from './shared/media';
 import { adjacentId, appendToQueue, moveUpcoming, reconcileQueue, removeFromQueue, replaceCurrent, startQueue, toggleShuffle, upcomingIds } from './shared/queue';
 import type { QueueState } from './shared/queue';
 
@@ -101,11 +103,9 @@ export default function App() {
   const [page, setPage] = useState<Page>(boot.playback.startPage === 'local' ? 'library' : boot.playback.startPage);
   const [homeTab, setHomeTab] = useState<HomeTab>('home');
   const [homeQuery, setHomeQuery] = useState('');
-  const [vkUrl, setVkUrl] = useState<string>();
-  const closeVk = useCallback(() => {
-    setVkUrl(undefined);
-    setHomeTab((tab) => tab === 'vk' ? 'home' : tab);
-  }, []);
+  const leaveVkTab = useCallback(() => setHomeTab((tab) => tab === 'vk' ? 'home' : tab), []);
+  const vkSite = useVkSite(preferences.vkSiteAppearance, leaveVkTab);
+  const { close: stopVk, open: openVkSite, hasSession: hasVkSession, command: commandVk, pause: pauseVk } = vkSite;
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>();
   const settingsFrom = useRef<{ page: Exclude<Page, 'settings'>; top: number }>({ page: 'player', top: 0 });
   const returningTop = useRef(0);
@@ -186,18 +186,15 @@ export default function App() {
   const { kind: presentationKind, show: showStage, close: closePresentation, stage: presentationStage } = usePresentation(appearance.nativeFullscreen);
   const presentationOpen = presentationKind !== null;
   const homeVisible = page === 'player' && !widget && !modalOpen && !presentationOpen;
-  const vkAvailable = !!window.luma?.vkSite && homeVisible && !widgetPending && !homeQuery.trim() && connected && !dropActive
+  const vkVisible = !!vkSite.view && homeTab === 'vk' && homeVisible && !widgetPending && !homeQuery.trim() && !dropActive
     && !(queueOpen && window.matchMedia('(max-width: 1079px)').matches);
-  const vkOpen = vkAvailable && !!vkUrl && homeTab === 'vk';
-  useLayoutEffect(() => { if (vkUrl && !vkOpen) closeVk(); }, [closeVk, vkOpen, vkUrl]);
-  useEffect(() => {
-    if (!vkUrl) return;
-    const hide = () => { if (document.hidden) closeVk(); };
-    document.addEventListener('visibilitychange', hide);
-    hide();
-    return () => document.removeEventListener('visibilitychange', hide);
-  }, [closeVk, vkUrl]);
-  const canUseLyrics = !!current && !live && !sessionCatalogId(current.id);
+  const vkEngaged = vkSite.view?.state.engaged === true;
+  const vkTrack = vkEngaged ? vkSite.view?.state.track : undefined;
+  const vkTitle = vkTrack?.title || t('VK Музыка'), vkArtist = vkTrack?.artist ?? '';
+  const vkDisplay = useMemo<PlayingTrack>(() => ({ source: 'vk', id: 'vk-now-playing', title: vkTitle, artist: vkArtist,
+    album: '', artworkUrl: VK_ARTWORK_URL, color: '#8cbfff' }), [vkTitle, vkArtist]);
+  const displayTrack = vkEngaged ? vkDisplay : current;
+  const canUseLyrics = !!current && !live && !vkEngaged && !sessionCatalogId(current.id);
   const karaokeOpen = presentationKind === 'karaoke' && canUseLyrics;
   const showPresentation = useCallback(() => showStage('player'), [showStage]);
   const showKaraoke = useCallback(() => { if (canUseLyrics) showStage('karaoke'); }, [showStage, canUseLyrics]);
@@ -206,14 +203,15 @@ export default function App() {
     const recent = rememberTrack(data.recent, id);
     return recent === data.recent ? data : { ...data, recent };
   }), []);
-  const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition, recover);
+  const player = useAudio(preferences.volume, preferences.equalizer, audioQuality, preferences.nativeFloat, ended, trackStarted, transition, recover, stopVk);
   const { load, isPlaying, position, play, pause, toggle, seek } = player;
+  const pausePlayback = useCallback(() => { pause(); pauseVk(); }, [pause, pauseVk]);
   const sleepExpired = useCallback(() => setNotice({ message: 'Таймер сна поставил музыку на паузу' }), []);
-  const { deadline: sleepDeadline, change: changeSleepTimer, expire: expireSleep } = useSleepTimer(pause, sleepExpired);
+  const { deadline: sleepDeadline, change: changeSleepTimer, expire: expireSleep } = useSleepTimer(pausePlayback, sleepExpired);
   useLayoutEffect(() => {
     recover.current = (failed) => {
       const state = queueRef.current;
-      if (!preferences.localFallback || state.currentId !== failed.id || expireSleep()) return false;
+      if (!preferences.localFallback || state.currentId !== failed.id || hasVkSession() || expireSleep()) return false;
       const replacement = verifiedLocalReplacement(failed, collection.filter(({ id }) => !dislikedIds.has(id)));
       if (!replacement) return false;
       const next = replaceCurrent(state, failed.id, replacement.id);
@@ -223,7 +221,7 @@ export default function App() {
       setNotice({ message: 'Включён резервный локальный файл', detail: (t) => t('Онлайн-источник недоступен. Играет «{0}» с этого устройства.', replacement.title) });
       return true;
     };
-  }, [collection, commit, dislikedIds, expireSleep, load, preferences.localFallback]);
+  }, [collection, commit, dislikedIds, expireSleep, hasVkSession, load, preferences.localFallback]);
   const { discord } = preferences;
   const discordTitle = player.playing && !live && !sessionCatalogId(current?.id) ? current?.title : undefined;
   const discordArtist = discordTitle ? current?.artist : undefined;
@@ -269,10 +267,12 @@ export default function App() {
     desktop.addEventListener('change', resized);
     return () => desktop.removeEventListener('change', resized);
   }, [widget, presentationOpen]);
-  const sampledTone = usePalette(current);
+  const localTone = usePalette(current);
+  const sampledTone = vkEngaged ? '#8cbfff' : localTone;
   const tint = appearance.coverColors ? sampledTone : theme['--accent'];
   const transportPlaying = player.playing || !!player.loading;
-  const playbackError = player.error;
+  const displayPlaying = vkEngaged ? vkTrack?.playing === true : transportPlaying;
+  const playbackError = vkEngaged ? '' : player.error;
   const queued = useMemo(() => queue.order.flatMap((id) => byId.get(id) ?? []), [queue.order, byId]);
   const upcoming = useMemo(() => upcomingIds(queue).flatMap((id) => byId.get(id) ?? []), [queue, byId]);
   const visibleNotice = notice && (notice.error || playback.successNotices) ? notice : undefined;
@@ -307,9 +307,9 @@ export default function App() {
   useEffect(() => {
     if (!ready || bootPlayback.current) return;
     bootPlayback.current = true;
-    if (boot.playback.autoPlay && current && !current.online && !isPlaying()) play();
-  }, [ready, boot, current, isPlaying, play]);
-  useEffect(() => { if (presentationOpen && !current) closePresentation(); }, [presentationOpen, current, closePresentation]);
+    if (boot.playback.autoPlay && current && !current.online && !isPlaying() && !hasVkSession()) play();
+  }, [ready, boot, current, isPlaying, play, hasVkSession]);
+  useEffect(() => { if (presentationOpen && !displayTrack) closePresentation(); }, [presentationOpen, displayTrack, closePresentation]);
   useLayoutEffect(() => {
     scrollArea.current?.scrollTo({ top: returningTop.current });
     returningTop.current = 0;
@@ -367,9 +367,9 @@ export default function App() {
   }, [playTrack, position, seek]);
   useEffect(() => {
     ended.current = () => {
-      if (!expireSleep() && shouldAdvanceAfterEnd(playback, queueRef.current.repeat)) next(true);
+      if (!hasVkSession() && !expireSleep() && shouldAdvanceAfterEnd(playback, queueRef.current.repeat)) next(true);
     };
-  }, [expireSleep, next, playback]);
+  }, [expireSleep, hasVkSession, next, playback]);
   const cancelTransitions = player.cancelTransitions;
   useEffect(() => {
     if (!playback.autoNext || !playback.crossfade) {
@@ -381,12 +381,12 @@ export default function App() {
       seconds: playback.crossfade,
       next(track) {
         const state = queueRef.current;
-        if (state.currentId !== track.id || expireSleep()) return;
+        if (state.currentId !== track.id || hasVkSession() || expireSleep()) return;
         return byId.get(adjacentId(state, 1, true) ?? '');
       },
       advance(id) { commit({ ...queueRef.current, currentId: id }); },
     };
-  }, [byId, cancelTransitions, commit, expireSleep, playback.autoNext, playback.crossfade]);
+  }, [byId, cancelTransitions, commit, expireSleep, hasVkSession, playback.autoNext, playback.crossfade]);
   const mediaActions = useMemo(() => ({
     play, pause, ...(!live || connected ? { nexttrack: () => next(), previoustrack: previous } : {}),
     stop: () => { pause(); seek(0); },
@@ -396,7 +396,24 @@ export default function App() {
       seekbackward: ({ seekOffset }: MediaSessionActionDetails) => seek(-(seekOffset ?? playback.seekStep), true),
     }),
   }), [next, previous, play, pause, seek, live, connected, playback.seekStep]);
-  useMediaSession(vkOpen ? null : current, player.playing, player.elapsed, player.duration, vkOpen ? noMediaActions : mediaActions, playback.publishTrack);
+  // The audible guest already owns Chromium's system media session. Do not publish a second controller.
+  const delegateMediaSession = vkVisible || vkEngaged;
+  useMediaSession(delegateMediaSession ? null : current, player.playing, player.elapsed, player.duration,
+    delegateMediaSession ? noMediaActions : mediaActions, playback.publishTrack, vkEngaged ? vkTitle : undefined);
+
+  const vkAction = useCallback((action: VkSiteAction, ratio?: number) => {
+    void commandVk(action, ratio).then((ok) => {
+      if (!ok && hasVkSession()) setNotice({ message: 'Эта команда сейчас недоступна в плеере VK.', error: true });
+    });
+  }, [commandVk, hasVkSession]);
+  const seekVk = useCallback((seconds: number, relative = false) => {
+    const timeline = vkTrack?.timeline;
+    if (timeline?.seek) vkAction('seek', clamp((seconds + (relative ? timeline.position : 0)) / timeline.duration, 0, 1));
+  }, [vkTrack?.timeline, vkAction]);
+  const togglePlayback = useCallback(() => {
+    if (!vkEngaged) toggle();
+    else if (vkTrack?.toggle && !vkSite.view?.resetting) vkAction('toggle');
+  }, [toggle, vkEngaged, vkTrack?.toggle, vkSite.view?.resetting, vkAction]);
 
   const setVolume = useCallback((value: number) => {
     const volume = clamp(value, 0, 1);
@@ -484,8 +501,7 @@ export default function App() {
         if (!event.repeat) choose();
         return;
       }
-      if (vkOpen) return; // VK has its own transport controls.
-      if (!event.altKey && !event.metaKey && !event.ctrlKey && event.code === 'KeyF' && current
+      if (!event.altKey && !event.metaKey && !event.ctrlKey && event.code === 'KeyF' && displayTrack
         && !(event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable]'))) {
         event.preventDefault();
         if (!event.repeat) (presentationOpen ? closePresentation : showPresentation)();
@@ -493,22 +509,28 @@ export default function App() {
       }
       if (!presentationOpen && event.key === 'Escape' && queueOpen && window.matchMedia('(max-width: 1079px)').matches) { setQueueOpen(false); return; }
       if (event.altKey || event.metaKey || event.ctrlKey || (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], button, a'))) return;
-      if (event.code === 'KeyL' && current && !widget) {
+      if (event.code === 'KeyL' && canUseLyrics && !widget) {
         event.preventDefault();
         if (!event.repeat) (presentationKind === 'karaoke' ? closePresentation : showKaraoke)();
-      } else if (event.code === 'Space' || event.code === 'KeyK') { event.preventDefault(); if (!event.repeat) toggle(); }
+      } else if (event.code === 'Space' || event.code === 'KeyK') {
+        if (vkVisible && !vkEngaged) return;
+        event.preventDefault(); if (!event.repeat) togglePlayback();
+      }
       else if (event.code === 'ArrowRight' || event.code === 'ArrowLeft') {
+        if (vkVisible && !vkEngaged) return;
         event.preventDefault();
         const forward = event.code === 'ArrowRight';
-        if (live) {
+        if (vkEngaged) seekVk(forward ? playback.seekStep : -playback.seekStep, true);
+        else if (live) {
           if (!event.repeat) (forward ? next : previous)();
         } else seek(forward ? playback.seekStep : -playback.seekStep, true);
-      } else if (event.code === 'KeyM' && !event.repeat) mute();
+      } else if (event.code === 'KeyM' && !event.repeat && !vkEngaged) mute();
       else if (!presentationOpen && event.code === 'KeyQ' && !event.repeat) setQueueOpen((open) => !open);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [choose, mute, seek, toggle, next, previous, live, modalOpen, presentationOpen, presentationKind, showPresentation, showKaraoke, closePresentation, current, queueOpen, widget, changeWidget, openSettings, playback.seekStep, vkOpen]);
+  }, [choose, mute, seek, seekVk, togglePlayback, next, previous, live, modalOpen, presentationOpen, presentationKind, showPresentation, showKaraoke,
+    closePresentation, canUseLyrics, displayTrack, queueOpen, widget, changeWidget, openSettings, playback.seekStep, vkVisible, vkEngaged]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -744,21 +766,31 @@ export default function App() {
   }, []);
   const goToLibrary = useCallback(() => navigate('library'), [navigate]);
   const openMixes = useCallback(() => navigate('mixes'), [navigate]);
-  const openVk = useCallback((url: string) => {
-    if (!window.luma?.vkSite || !connected || document.hidden || !vkSiteEntry(url)) return;
-    pause(); // VK owns its queue. Keep the position and contents of the local queue.
+  const showVkTab = useCallback(() => {
     if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
     setPage('player');
     setHomeTab('vk');
     setHomeQuery('');
-    setVkUrl(url);
-  }, [connected, pause]);
+  }, []);
+  const openVk = useCallback((url: string) => {
+    if (!window.luma?.vkSite || !connected || document.hidden || !vkSiteEntry(url)) return;
+    pause(); // Keep the position and contents of the local queue.
+    openVkSite(url);
+    showVkTab();
+  }, [connected, pause, openVkSite, showVkTab]);
+  const returnToVk = useCallback(() => {
+    if (hasVkSession()) { closePresentation(); showVkTab(); }
+    else openVk(VK_MUSIC_URL);
+  }, [hasVkSession, closePresentation, openVk, showVkTab]);
+  const closeVk = useCallback(() => {
+    void stopVk()?.catch(() => setNotice({ message: 'Не удалось отключить воспроизведение VK.', error: true }));
+  }, [stopVk]);
   const selectHomeTab = useCallback((tab: HomeTab) => {
-    if (tab === 'vk' && vkOpen) return;
+    if (tab === 'vk' && vkVisible) return;
     setHomeTab(tab); setHomeQuery('');
     scrollArea.current?.scrollTo({ top: 0 });
-    if (tab === 'vk') openVk(VK_MUSIC_URL);
-  }, [openVk, vkOpen]);
+    if (tab === 'vk') returnToVk();
+  }, [returnToVk, vkVisible]);
   const openRadio = useCallback(() => {
     navigate('player');
     selectHomeTab('radio');
@@ -805,6 +837,15 @@ export default function App() {
       commit({ ...state, repeat: state.repeat === 'off' ? 'all' : state.repeat === 'all' ? 'one' : 'off' });
     }, previous, next: () => next(), toggleMute: mute, setVolume, seek,
   };
+  const vkControllable = !!vkTrack && !vkSite.view?.resetting;
+  const displayControls: PlaybackProps = vkEngaged ? {
+    source: 'vk', hasTrack: true, canToggle: vkControllable && vkTrack.toggle, playing: displayPlaying,
+    elapsed: vkTrack?.timeline?.position ?? 0, duration: vkTrack?.timeline?.duration ?? 0, seekable: vkControllable && vkTrack.timeline?.seek === true,
+    shuffle: false, repeat: 'off', volume: preferences.volume,
+    hasPrevious: vkControllable && vkTrack.previous, hasNext: vkControllable && vkTrack.next,
+    togglePlay: togglePlayback, previous: () => vkAction('previous'), next: () => vkAction('next'), seek: seekVk,
+    toggleRepeat: noop, toggleShuffle: noop, toggleMute: noop, setVolume: noop,
+  } : localControls;
 
   return (
     <UiText.Provider value={t}><div data-theme={effectiveAppearance.theme} data-layout={glass ? 'glass' : undefined} data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={!glass ? appearance.compactSidebar ? 'compact' : 'expanded' : undefined} className={`app-shell${widget ? ' widget-mode' : queueOpen ? ' queue-visible' : ''}${!glass && appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
@@ -839,15 +880,15 @@ export default function App() {
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={homeVisible}
-            vkUrl={vkOpen ? vkUrl : undefined} closeVk={closeVk} searchVk={window.luma?.vkSite ? searchVk : undefined}
+            vkSite={vkVisible ? vkSite : undefined} closeVk={closeVk} searchVk={window.luma?.vkSite ? searchVk : undefined}
             vkAppearance={preferences.vkSiteAppearance} changeVkAppearance={changeVkAppearance}
             busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} tuneDiscoveredStation={tuneDiscoveredStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
             openLibrary={goToLibrary} addMusic={choose} openMusicLink={() => setMusicDialog({})}
             sharePlaylist={sharePlaylist} seedFavorites={seedFavorites} openFavorites={() => navigate('favorites')}
-            nowPlaying={<NowPlayingCard track={current} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
-              playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
-              count={queue.order.length} toggle={toggle} shareTrack={shareTrack}
+            nowPlaying={<NowPlayingCard track={displayTrack} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
+              playing={vkEngaged ? displayPlaying : player.playing} loading={!vkEngaged && !!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
+              count={queue.order.length} toggle={togglePlayback} canToggle={displayControls.canToggle} shareTrack={shareTrack} openVk={returnToVk} closeVk={closeVk}
               favorite={!!current && (live ? stationIds : favoriteIds).has(current.id)} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)}
               openPresentation={showPresentation} openKaraoke={showKaraoke} sleepActive={sleepDeadline !== undefined} openSleepTimer={() => { setSettingsSection('playback'); openSettings(); }} sceneVisible={page === 'player' && !widget && !presentationOpen && !modalOpen}
               readSpectrum={player.readSpectrum} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} />}
@@ -875,35 +916,35 @@ export default function App() {
             discord={preferences.discord} changeDiscord={(discord) => setPreferences((data) => ({ ...data, discord }))}
             sleepDeadline={sleepDeadline} changeSleepTimer={changeSleepTimer} localFallback={preferences.localFallback}
             toggleLocalFallback={() => setPreferences((data) => ({ ...data, localFallback: !data.localFallback }))}
-            previewTrack={current} tint={tint} localCount={localTracks.length} recentCount={preferences.recent.length}
+            previewTrack={current} tint={appearance.coverColors ? localTone : theme['--accent']} localCount={localTracks.length} recentCount={preferences.recent.length}
             volumeControls={localControls} eqEnabled={preferences.equalizer.enabled} openEqualizer={openEqualizer} openRecent={() => navigate('recent')}
             clearRecent={() => setPreferences((data) => ({ ...data, recent: [] }))} openDiagnostics={() => navigate('diagnostics')} changeAppearance={changeAppearance}
             changePlayback={(playback) => setPreferences((data) => ({ ...data, playback }))} toggleDemos={toggleDemos}
             changeQuality={(audioQuality) => setPreferences((data) => ({ ...data, audioQuality }))}
             toggleLyrics={(option) => setPreferences((data) => ({ ...data, [option]: !data[option] }))}
             toggleEffects={() => setPreferences((data) => ({ ...data, equalizer: { ...data.equalizer, enabled: !data.equalizer.enabled } }))}
-            openLocalLibrary={() => navigate('library', 'offline')} widgetTint={sampledTone} openWidget={() => { void changeWidget(true); }}
+            openLocalLibrary={() => navigate('library', 'offline')} widgetTint={localTone} openWidget={() => { void changeWidget(true); }}
             openTrackInfo={current && !current.demo && !current.online ? () => editTrackDetails(current.id) : undefined}
             reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
         </div>}
       </main>
       {!widget && queueOpen && <>
         <button type="button" className="queue-scrim" onClick={closeQueue} aria-label={t("Закрыть панель очереди")} />
-        <QueuePanel active={current} upcoming={upcoming} count={queued.length} fullNumbers={appearance.fullNumbers} duration={queued.reduce((sum, track) => sum + track.duration, 0)} playing={player.playing}
+        <QueuePanel active={current} upcoming={upcoming} count={queued.length} fullNumbers={appearance.fullNumbers} duration={queued.reduce((sum, track) => sum + track.duration, 0)} playing={player.playing} foreignPlayback={vkEngaged}
           close={closeQueue} play={(id) => playTrack(id, true)} remove={removeQueued} move={(from, to) => commit(moveUpcoming(queueRef.current, from, to))} goToLibrary={goToLibrary} />
       </>}
-      {widget ? <DesktopWidget macos={glass} track={current} tint={sampledTone} appearance={appearance} playing={player.playing} sample={player.readSpectrum} controls={localControls} pending={widgetPending} restore={() => { void changeWidget(false); }} />
-      : <PlayerBar {...localControls} track={current} classic={!glass && appearance.classicDock}
+      {widget ? <DesktopWidget macos={glass} track={displayTrack} tint={sampledTone} appearance={appearance} playing={displayPlaying} sample={vkEngaged ? undefined : player.readSpectrum} controls={displayControls} pending={widgetPending} restore={() => { void changeWidget(false); }} />
+      : <PlayerBar {...displayControls} track={displayTrack} classic={!glass && appearance.classicDock}
         goToPlayer={() => { navigate('player'); scrollArea.current?.scrollTo({ top: 0 }); }} openPresentation={showPresentation} openKaraoke={showKaraoke} queueOpen={queueOpen} toggleQueue={toggleQueue} />}
-      {presentationKind && current && !widget && <FullscreenPlayer {...localControls} karaoke={karaokeOpen} lyrics={lyrics} clock={player.playing ? position : undefined}
+      {presentationKind && displayTrack && !widget && <FullscreenPlayer {...displayControls} karaoke={karaokeOpen} lyrics={lyrics} clock={player.playing ? position : undefined}
         karaokeStyle={preferences.karaokeStyle} changeKaraokeStyle={(karaokeStyle) => setPreferences((data) => ({ ...data, karaokeStyle }))}
-        toggleKaraoke={karaokeOpen ? showPresentation : showKaraoke} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={current} tint={tint} appearance={effectiveAppearance}
-        favorite={(live ? stationIds : favoriteIds).has(current.id)} disliked={dislikedIds.has(current.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
+        toggleKaraoke={karaokeOpen ? showPresentation : showKaraoke} upcoming={upcoming} playUpcoming={playTrack} autoNext={playback.autoNext} stage={presentationStage} track={displayTrack} tint={tint} appearance={effectiveAppearance}
+        favorite={(live ? stationIds : favoriteIds).has(displayTrack.id)} disliked={dislikedIds.has(displayTrack.id)} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} readSpectrum={player.readSpectrum} sceneVisible={!modalOpen} close={closePresentation}
         toggleQueue={() => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, fullscreenQueue: !data.appearance.fullscreenQueue } }))}
-        openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} />}
-      <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" onPlay={closeVk} />
-      <audio ref={player.blendRef} data-blend-audio crossOrigin="anonymous" preload="none" onPlay={closeVk} />
-      <audio ref={player.streamRef} data-online-audio preload="none" onPlay={closeVk} />
+        openAppearance={() => setShowAppearance(true)} openEqualizer={openEqualizer} openVk={returnToVk} />}
+      <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />
+      <audio ref={player.blendRef} data-blend-audio crossOrigin="anonymous" preload="none" />
+      <audio ref={player.streamRef} data-online-audio preload="none" />
       <input type="file" ref={fileInput} hidden accept={AUDIO_ACCEPT} multiple onChange={(event) => {
         handleFiles(Array.from(event.currentTarget.files ?? []));
         event.currentTarget.value = '';
@@ -926,7 +967,7 @@ export default function App() {
       }} /></Suspense>}
       {coverTarget && <CoverEditor key={coverTarget.key} target={coverTarget} currentUrl={covers.get(coverTarget.key)} update={saveCover} close={() => setCoverTarget(undefined)} />}
       {detailsTrack && <TrackDetailsEditor key={detailsTrack.id} locale={locale} track={detailsTrack} edited={details.has(detailsTrack.id)} save={saveDetails} close={() => setDetailsId(undefined)} />}
-      {showAppearance && <NowPlayingDialog appearance={appearance} tint={tint} track={current} playing={player.playing} sample={player.playing && !current?.online ? player.readSpectrum : undefined} change={changeAppearance} close={() => setShowAppearance(false)} />}
+      {showAppearance && <NowPlayingDialog appearance={appearance} tint={tint} track={displayTrack} playing={displayPlaying} sample={player.playing && !vkEngaged && !current?.online ? player.readSpectrum : undefined} change={changeAppearance} close={() => setShowAppearance(false)} />}
       {showEqualizer && <Equalizer settings={preferences.equalizer} sampleRate={player.sampleRate} spectrum={player.readSpectrum} live={appearance.motion && player.playing && !current?.online} online={!!current?.online} change={(equalizer) => setPreferences((data) => ({ ...data, equalizer }))} close={() => setShowEqualizer(false)} />}
     </div></UiText.Provider>
   );

@@ -3,7 +3,7 @@ import { useText } from '../i18n/context';
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { Activity, AudioLines, ChartNoAxesColumnIncreasing, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Music2, Droplets, Sparkles, Sunset, Hexagon, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
-import type { Track } from '../shared/media';
+import type { TrackDisplay } from '../shared/media';
 import type { ReadSpectrum } from '../player/useAudio';
 import { EFFECT_TEMPOS } from '../shared/customization';
 import type { Appearance, EffectTempo } from '../shared/customization';
@@ -75,7 +75,7 @@ export function NowPlayingOptions({ appearance, change }: SceneOptionsProps) {
   </div>;
 }
 
-export function NowPlayingDialog({ appearance, change, close, tint, track, playing, sample }: SceneOptionsProps & { close(): void; tint: string; track: Track | null; playing: boolean; sample?: ReadSpectrum }) {
+export function NowPlayingDialog({ appearance, change, close, tint, track, playing, sample }: SceneOptionsProps & { close(): void; tint: string; track: TrackDisplay | null; playing: boolean; sample?: ReadSpectrum }) {
   const t = useText();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); }, []);

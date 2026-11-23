@@ -1,11 +1,10 @@
 import { useText } from '../i18n/context';
 import { useMemo, useState, useSyncExternalStore } from 'react';
-import { Cloud, CloudOff, Clock3, Link2, Sparkles, UserRound, ArrowRight, Disc3, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, MicVocal, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, Share2, Trash2, X } from 'lucide-react';
+import { Cloud, CloudOff, Clock3, Link2, Sparkles, UserRound, ArrowRight, Disc3, Globe2, Headphones, Heart, History, ImagePlus, LayoutGrid, List, ListPlus, Maximize2, MicVocal, Music2, Palette, Pause, Pencil, Play, Plus, Radio, Search, Share2, Trash2, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 import { formatCount } from '../shared/customization';
 import { musicGroups, tracksInGroup } from '../shared/mix';
-import { DEFAULT_ARTWORK_URL } from '../data/artwork';
 import { formatTime, trackCount } from '../shared/media';
 import { sessionCatalogId } from '../shared/online';
 import type { OnlineTrack } from '../shared/online';
@@ -15,7 +14,7 @@ import { OnlineCredit, OnlineImport, OnlineSearch } from './OnlineMusic';
 import type { CatalogSearchPreferences } from './OnlineMusic';
 import { catalogQuery } from '../data/catalog-search';
 import type { OnlineAction } from './OnlineMusic';
-import type { Track } from '../shared/media';
+import type { PlayingTrack, Track } from '../shared/media';
 import type { Appearance, LibraryLayout } from '../shared/customization';
 import { musicSearchKey, searchWords } from '../shared/russian';
 import { Artwork } from './Artwork';
@@ -71,7 +70,7 @@ function TrackCard({ track, active, playing, row, play, add, editCover, editDeta
 }
 
 interface NowPlayingProps {
-  track: Track | null;
+  track: PlayingTrack | null;
   disliked: ReadonlySet<string>;
   toggleDislike(id: string): void;
   tint: string;
@@ -85,9 +84,12 @@ interface NowPlayingProps {
   openAppearance(): void;
   openPresentation(): void;
   openKaraoke(): void;
+  openVk(): void;
+  closeVk(): void;
   sceneVisible: boolean;
   playing: boolean;
   loading: boolean;
+  canToggle?: boolean;
   position: number;
   count: number;
   toggle(): void;
@@ -100,56 +102,62 @@ export function NowPlayingCard(props: NowPlayingProps) {
   const t = useText();
   const { track, tint, playing, appearance } = props;
   const { hero, effect, effectStrength, motion } = appearance;
-  const [failedPicture, setFailedPicture] = useState<string>();
-  const source = track?.backdropUrl ?? track?.artworkUrl;
-  const fallback = !source || source === failedPicture;
-  const artwork = fallback ? DEFAULT_ARTWORK_URL : source;
+  const vk = !!track && 'source' in track;
+  const native = vk ? null : track;
+  const radio = track?.online?.source === 'broadcast';
   const showPicture = !!track && effect === 'off' && (hero === 'cover' || hero === 'blur');
   const centered = hero === 'center';
+  const featured = (radio || vk) && (hero === 'cover' || hero === 'blur');
+  const toggleLabel = track ? props.loading ? t('Отменить загрузку') : playing ? t('Пауза') : t('Воспроизвести') : t('Добавить музыку');
   return (
-    <section className="home-now" aria-labelledby="home-now-title">
+    <section className="home-now" aria-labelledby="home-now-title" data-playback-source={vk ? 'vk' : radio ? 'radio' : undefined}>
       <header className="home-now-header">
         <h2 id="home-now-title">{t("Сейчас играет")}</h2>
         <div className="page-actions">
           <button type="button" className="button outline-button scene-open" onClick={props.openAppearance} aria-label={t("Оформление экрана «Сейчас играет»")} title={t("Оформление")} aria-haspopup="dialog"><Palette size={17} /></button>
           <button type="button" className="button outline-button sleep-timer-open" onClick={props.openSleepTimer} aria-pressed={props.sleepActive}
             aria-label={t('Таймер сна')} title={t('Таймер сна')}><Clock3 size={17} /></button>
-          {track && !track.demo && track.online?.source !== 'broadcast' && !sessionCatalogId(track.id) && <button type="button" className="button outline-button"
-            onClick={() => props.shareTrack(track)} aria-label={t('Поделиться треком')} title={t('Поделиться треком')}><Share2 size={16} /></button>}
-          {track && !track.demo && !track.online && <button type="button" className="button outline-button track-details-button" onClick={() => props.editDetails(track.id)}
+          {vk && <button type="button" className="button outline-button" onClick={props.closeVk}
+            aria-label={t('Закрыть сайт VK и остановить воспроизведение')} title={t('Закрыть сайт VK и остановить воспроизведение')}><X size={17} /></button>}
+          {native && !native.demo && !radio && !sessionCatalogId(native.id) && <button type="button" className="button outline-button"
+            onClick={() => props.shareTrack(native)} aria-label={t('Поделиться треком')} title={t('Поделиться треком')}><Share2 size={16} /></button>}
+          {native && !native.demo && !native.online && <button type="button" className="button outline-button track-details-button" onClick={() => props.editDetails(native.id)}
             aria-label={t("Редактировать данные трека")} title={t("Редактировать данные трека")} aria-haspopup="dialog"><Pencil size={16} /></button>}
-          {track && track.online?.source !== 'broadcast' && !sessionCatalogId(track.id) && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(track.id)}
+          {native && !radio && !sessionCatalogId(native.id) && <button type="button" className="button outline-button track-cover-button" onClick={() => props.editCover(native.id)}
             aria-label={t("Редактировать обложку")} title={t("Редактировать обложку")} aria-haspopup="dialog"><ImagePlus size={17} /></button>}
 
         </div>
       </header>
-      <section aria-label={t("Текущий трек")} data-effect={effect} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl && !fallback ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
-        <SceneBackground effect={effect} tone={track ? tint : undefined} strength={effectStrength} tempo={appearance.effectTempo} animate={playing} visible={motion && props.sceneVisible} sample={playing && appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
-        {showPicture && <img className={`hero-image${fallback ? ' hero-image-fallback' : ''}`} key={artwork} src={artwork} alt="" draggable={false}
-          onError={() => { if (!fallback) setFailedPicture(source); }} />}
+      <section aria-label={t("Текущий трек")} data-effect={effect} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}${featured ? ' hero-featured-art' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
+        <SceneBackground effect={effect} tone={track ? tint : undefined} strength={effectStrength} tempo={appearance.effectTempo} animate={playing} visible={motion && props.sceneVisible} sample={!vk && playing && appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
+        {showPicture && !featured && <Artwork className="hero-image" track={track} imageUrl={track?.backdropUrl} />}
         {hero === 'vinyl' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
         <div className="hero-scrim" aria-hidden="true" />
         {centered && <Artwork track={track} className="hero-center-art" />}
         <div className="hero-content">
-          <div className="hero-label"><Signal playing={playing} /> {track?.online?.source === "broadcast" ? t("Прямой эфир") : track?.demo ? t("Демо-трек") : track?.online ? t("Онлайн-трек") : track ? t("Воспроизведение") : t("Ваша коллекция")}</div>
+          <div className="hero-label"><Signal playing={playing} /> {vk ? t('VK Музыка') : radio ? t("Прямой эфир") : track?.demo ? t("Демо-трек") : track?.online ? t("Онлайн-трек") : track ? t("Воспроизведение") : t("Ваша коллекция")}</div>
           <h2 title={track?.title}>{track?.title ?? t("Время для музыки")}</h2>
           <div className="hero-meta">
-            {track ? <><span>{track.artist}</span><span className="hero-dot" />{track.online ? <OnlineCredit track={{ online: track.online }} /> : <span>{track.album}</span>}</> : <span>{t("Добавьте аудиофайлы, чтобы начать.")}</span>}
+            {track ? <>{track.artist && <span>{track.artist}</span>}{(track.online || track.album) && <>
+              {track.artist && <span className="hero-dot" />}{track.online ? <OnlineCredit track={{ online: track.online }} /> : <span>{track.album}</span>}</>}</> : <span>{t("Добавьте аудиофайлы, чтобы начать.")}</span>}
           </div>
           <div className="hero-actions-row">
-            <button type="button" className="button primary-button hero-action" aria-label={track ? props.loading ? t("Отменить загрузку") : playing ? t("Пауза") : t("Воспроизвести") : t("Добавить музыку")} onClick={track ? props.toggle : props.addMusic}>
+            <button type="button" className="button primary-button hero-action" aria-label={toggleLabel} disabled={props.canToggle === false} onClick={track ? props.toggle : props.addMusic}>
               {track ? playing || props.loading ? <Pause size={16} fill="currentColor" /> : <Play className="play-icon" size={16} fill="currentColor" /> : <Plus size={18} />}
-              <span>{track ? props.loading ? t("Отменить загрузку") : playing ? t("Пауза") : t("Воспроизвести") : t("Добавить музыку")}</span>
+              <span>{toggleLabel}</span>
             </button>
             {track && <>
-              <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />
-              {track.online?.source !== "broadcast" && <DislikeButton track={track} selected={props.disliked.has(track.id)} toggle={props.toggleDislike} />}
-              <button type="button" className="icon-button hero-karaoke" disabled={track.online?.source === "broadcast" || sessionCatalogId(track.id)} onClick={props.openKaraoke} aria-label={t("Караоке")} title={t("Караоке (L)")} aria-haspopup="dialog"><MicVocal size={17} /></button>
+              {vk ? <button type="button" className="icon-button hero-vk-return" onClick={props.openVk} aria-label={t('Вернуться к сайту VK')} title={t('Вернуться к сайту VK')}><Globe2 size={17} /></button> : <>
+                <FavoriteButton track={track} selected={props.favorite} toggle={props.toggleFavorite} />
+                {!radio && <DislikeButton track={track} selected={props.disliked.has(track.id)} toggle={props.toggleDislike} />}
+                <button type="button" className="icon-button hero-karaoke" disabled={radio || sessionCatalogId(track.id)} onClick={props.openKaraoke} aria-label={t("Караоке")} title={t("Караоке (L)")} aria-haspopup="dialog"><MicVocal size={17} /></button>
+              </>}
               <button type="button" className="icon-button hero-fullscreen" onClick={props.openPresentation} aria-label={t("Развернуть текущий трек")} title={t("Во весь экран (F)")} aria-haspopup="dialog"><Maximize2 size={17} /></button>
             </>}
           </div>
         </div>
-        {track && <span className="hero-index" title={t("Позиция в очереди")}><span>{formatCount(props.position, appearance.fullNumbers, t.language).padStart(2, '0')}</span><b>/</b>{formatCount(props.count, appearance.fullNumbers, t.language).padStart(2, '0')}</span>}
+        {featured && <Artwork track={track} className="hero-featured-cover" />}
+        {native && <span className="hero-index" title={t("Позиция в очереди")}><span>{formatCount(props.position, appearance.fullNumbers, t.language).padStart(2, '0')}</span><b>/</b>{formatCount(props.count, appearance.fullNumbers, t.language).padStart(2, '0')}</span>}
       </section>
     </section>
   );

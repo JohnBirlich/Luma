@@ -167,7 +167,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     return true;
   });
   ipcMain.handle('vk-site:open', (event, id, url, bounds, appearance) => vkSite.open(appWindow(event), id, url, bounds, appearance));
-  ipcMain.handle('vk-site:layout', (event, id, bounds) => vkSite.layout(appWindow(event), id, bounds));
+  ipcMain.handle('vk-site:layout', (event, id, bounds, foreground) => vkSite.layout(appWindow(event), id, bounds, foreground));
   ipcMain.handle('vk-site:close', (event, id) => vkSite.close(appWindow(event), id));
   ipcMain.handle('vk-site:appearance', (event, id, appearance) => vkSite.setAppearance(appWindow(event), id, appearance));
   ipcMain.handle('vk-site:command', (event, id, action, fraction) => vkSite.command(appWindow(event), id, action, fraction));
@@ -327,7 +327,6 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('window:widget', (event, enabled: unknown) => {
     appWindow(event);
     if (typeof enabled !== 'boolean') throw new TypeError('Expected widget state');
-    if (enabled) vkSite.close();
     return changeWidget?.(enabled) ?? false;
   });
   ipcMain.handle('window:close', (event) => appWindow(event).close());

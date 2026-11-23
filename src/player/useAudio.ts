@@ -105,7 +105,7 @@ function unload(audio: HTMLAudioElement) {
   if (audio.getAttribute('src')) { audio.removeAttribute('src'); audio.load(); }
 }
 
-export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQuality, nativeFloat: boolean, ended: RefObject<() => void>, trackStarted: (id: string) => void, transition: RefObject<Transition>, recover: RefObject<(track: Track) => boolean>) {
+export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQuality, nativeFloat: boolean, ended: RefObject<() => void>, trackStarted: (id: string) => void, transition: RefObject<Transition>, recover: RefObject<(track: Track) => boolean>, beforePlay: () => Promise<void> | undefined) {
   const ref = useRef<HTMLAudioElement>(null);
   const blendRef = useRef<HTMLAudioElement>(null);
   const streamRef = useRef<HTMLAudioElement>(null);
@@ -296,6 +296,16 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
     const intent = ++playIntent.current;
     const deck = active.current;
     if (!deck) return;
+    // Hand off from an embedded source before asking Chromium or native output to play.
+    const handoff = beforePlay();
+    if (handoff) {
+      try { await handoff; }
+      catch {
+        if (intent === playIntent.current) setSnapshot((previous) => ({ ...previous, error: 'Не удалось отключить воспроизведение VK.' }));
+        return;
+      }
+      if (intent !== playIntent.current || active.current !== deck) return;
+    }
     const { audio, track } = deck;
     deck.requested = true;
     if (track.online) {
@@ -364,7 +374,7 @@ export function useAudio(volume: number, eq: EqualizerSettings, quality: AudioQu
         ...previous, playing: false, loading: false, error: autoplayBlocked ? 'Нажмите «Воспроизвести», чтобы начать.' : errorText(),
       }));
     }).finally(() => window.clearTimeout(deadline));
-  }, [errorText, recoverSource]);
+  }, [beforePlay, errorText, recoverSource]);
 
   const load = useCallback((track: Track | null, autoplay = false) => {
     const previous = active.current;

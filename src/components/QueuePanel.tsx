@@ -19,6 +19,7 @@ interface QueuePanelProps {
   fullNumbers: boolean;
   duration: number;
   playing: boolean;
+  foreignPlayback?: boolean;
   close(): void;
   play(id: string): void;
   remove(id: string): void;
@@ -26,7 +27,7 @@ interface QueuePanelProps {
   goToLibrary(): void;
 }
 
-export function QueuePanel({ active, upcoming, count, fullNumbers, duration, playing, close, play, remove, move, goToLibrary }: QueuePanelProps) {
+export function QueuePanel({ active, upcoming, count, fullNumbers, duration, playing, foreignPlayback, close, play, remove, move, goToLibrary }: QueuePanelProps) {
   const t = useText();
   const [drag, setDrag] = useState<string>();
   const [over, setOver] = useState<string>();
@@ -36,7 +37,7 @@ export function QueuePanel({ active, upcoming, count, fullNumbers, duration, pla
     <aside className="queue-panel" id="play-queue" aria-label={t("Очередь воспроизведения")}>
       <header className="queue-header">
         <div>
-          <p className="overline">{t("Воспроизведение")}</p>
+          <p className="overline">{t(foreignPlayback ? 'Воспроизведение Luma' : 'Воспроизведение')}</p>
           <h2>{t("Очередь")}</h2>
           <p>{trackCount(count, fullNumbers, t.language)} <span className="middle-dot">·</span> {formatTime(duration)}</p>
         </div>
@@ -44,7 +45,7 @@ export function QueuePanel({ active, upcoming, count, fullNumbers, duration, pla
       </header>
       <div className="queue-body">
         {active ? <>
-          <p className="overline queue-section active-label"><span />{playing ? t("Сейчас играет") : t("Текущий трек")}</p>
+          <p className="overline queue-section active-label"><span />{playing ? t('Сейчас играет') : t(foreignPlayback ? 'Выбранный трек' : 'Текущий трек')}</p>
           <div className="queue-current">
             <button type="button" className="queue-song" onClick={() => play(active.id)} aria-label={`${playing ? t("Приостановить") : t("Воспроизвести")} ${active.title}`}>
               <Artwork track={active} />

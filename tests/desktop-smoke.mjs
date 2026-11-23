@@ -631,13 +631,16 @@ async function smoke() {
   const radioCalls = [];
   const recordStation = STATIONS.find(({ id }) => id === 'radio-record-record');
   const piStation = STATIONS.find(({ id }) => id === 'radio-ru-pi-fm');
-  const radioFixtureUrls = new Set([recordStation.stream, piStation.stream, discoveryStation.url_resolved]);
+  const russkoeStation = STATIONS.find(({ id }) => id === 'radio-ru-russkoe');
+  const missingLogoStation = STATIONS.find(({ id }) => id === 'radio-record-rus');
+  const radioFixtureUrls = new Set([recordStation.stream, piStation.stream, russkoeStation.stream, discoveryStation.url_resolved]);
   const directorySearches = [];
   const recordTrack = stationTracks.find(({ id }) => id === recordStation.id);
   const webStation = RADIO_DIRECTORY.find(({ id }) => id === 'radio-ru-mir-far-east');
   const stationSection = '[aria-labelledby="radio-stations"]';
   const savedStations = '[aria-labelledby="radio-added"]';
   const recordTile = `[data-station=${JSON.stringify(recordStation.id)}]`;
+  const russkoeTile = `[data-station=${JSON.stringify(russkoeStation.id)}]`;
   const webTile = `[data-station=${JSON.stringify(webStation.id)}]`;
   const recordPlay = `${recordTile} .station-play`;
   const titleQueries = [];
@@ -819,6 +822,7 @@ async function smoke() {
       return Response.json({ data: url.searchParams.get('query') === 'jazz' ? [audiusRecording, { ...audiusRecording, id: '1233T', title: 'Restricted', is_stream_gated: true }] : [] });
     }
     if (url.href === 'https://archive.org/metadata/Luma-Desktop-Smoke-Only-Archive-2026') return Response.json(archiveRelease);
+    if (url.href === missingLogoStation.logo) return new Response(null, { status: 404 });
     if (STATIONS.some(({ logo }) => logo === url.href)) return new Response(cover, { headers: { ...fixtureHeaders, 'Content-Type': 'image/webp' } });
     const radioFixture = radioFixtureUrls.has(url.href);
     if (radioFixture || [jamendoRecording.url, economyUrl, commonsRecording.url, synced.url, plain.url, phishTrack.mp3_url].includes(url.href)) {
@@ -1085,6 +1089,21 @@ async function smoke() {
         return expected.every((title, index) => headings.filter(h => h === title).length === 1 &&
           (index === 0 || headings.indexOf(title) > headings.indexOf(expected[index - 1]))) && !headings.includes('Жанры и настроения');
       })()`));
+      const originalBounds = window.getBounds();
+      const originalZoom = window.webContents.getZoomFactor();
+      const homeLayout = (wide) => run(`(() => {
+        const pane = document.querySelector('.main-pane'), home = document.querySelector('.home-page');
+        const now = home.querySelector('.home-now').getBoundingClientRect(), mix = home.querySelector('.hub-hero').getBoundingClientRect();
+        return Math.abs(home.getBoundingClientRect().width - pane.clientWidth) <= 1 && pane.scrollWidth <= pane.clientWidth + 1
+          && (${wide} ? mix.left > now.right && Math.abs(now.top - mix.top) <= 1 : mix.top > now.bottom);
+      })()`);
+      try {
+        window.webContents.setZoomFactor(.48);
+        await waitFor('wide Home fills the pane and places Now Playing alongside the mix', () => homeLayout(true));
+        window.webContents.setZoomFactor(originalZoom);
+        window.setSize(620, 560);
+        await waitFor('narrow Home stacks the cards without horizontal overflow', () => homeLayout(false));
+      } finally { window.webContents.setZoomFactor(originalZoom); window.setBounds(originalBounds); }
       const homeImport = '.hub-top-actions [data-playlist-import]';
       assert.deepEqual(await run(`[...document.querySelectorAll('.hub-top-actions button')].map(button => [button.textContent.trim(), button.getAttribute('aria-label')])`),
         [['', 'Добавить музыку'], ['', 'Импорт из сервисов'], ['', 'Открыть музыкальную ссылку']]);
@@ -1103,6 +1122,7 @@ async function smoke() {
       }
       assert.equal(await run(`window.luma.vkSite.open(1, 'https://outside.invalid/', { x: 0, y: 0, width: 350, height: 300 }).then(() => false, () => true)`), true);
       const vkQueue = (await preferences()).queue;
+      const vkRecent = (await preferences()).recent;
       await run(`window.vkFixtureStates = []; void window.luma.vkSite.onState((id, state) => window.vkFixtureStates.push({ id, state }));`);
       const readyView = () => run(`document.querySelector('.vk-site-slot')?.getAttribute('aria-busy') === 'false'`);
       const vkAppearance = '.vk-site-appearance';
@@ -1246,6 +1266,8 @@ async function smoke() {
       await guestRun(`history.pushState(null, '', '${profileUrl}')`);
       await waitVk(profileUrl);
       await waitFor('VK profile page keeps all of its own navigation', () => shellIs('standard'));
+      assert.equal(nativeView.webContents.isAudioMuted(), true, 'an unrelated VK page never inherits the music lease');
+      await waitFor('non-music route clears the mirror', () => run(`!document.querySelector('.player-bar[data-playback-source="vk"]')`));
       await guestRun(`history.pushState(null, '', ${JSON.stringify(vkLink.url)})`);
       await waitVk(vkLink.url);
       await waitFor('SPA return to music reapplies the saved layout', () => shellIs('minimal'));
@@ -1278,8 +1300,59 @@ async function smoke() {
       await waitFor('MediaSession next delegates without rendered VK buttons', async () => await titleIs(1) && await guestRun(`window.fixtureAction === 'nexttrack'`));
       await click('[data-vk-action="previous"]');
       await waitFor('MediaSession previous delegates without rendered VK buttons', async () => await titleIs(0) && await guestRun(`window.fixtureAction === 'previoustrack'`));
+      const mirrored = (selector, index) => run(`document.querySelector(${JSON.stringify(selector)})?.textContent === ${JSON.stringify(vkFixtureTracks[index])}`);
+      const vkDock = '.player-bar[data-playback-source="vk"]';
+      const vkStage = '.immersive-player[open][data-playback-source="vk"]';
+      await click(`${vkDock} .playing-mini`);
+      await waitFor('the same signed-in guest is hidden but retained on Now Playing', async () => vkView() === nativeView
+        && !nativeView.getVisible() && !guest.isAudioMuted() && await mirrored('.home-now[data-playback-source="vk"] .hero h2', 0)
+        && await run(`document.querySelector('.home-now .hero-meta').textContent === ${JSON.stringify(vkFixtureArtist)}`));
+      assert.equal(await run(`!navigator.mediaSession.metadata && [...document.querySelectorAll('audio')].every(audio => audio.paused)
+        && !document.querySelector('.home-now :is(.favorite-toggle,.hero-index,.track-cover-button,.hero-karaoke)')`), true);
+      const beforeBackground = await guestRun('fixtureAudio.currentTime');
+      await click('.home-now .hero-action');
+      await waitFor('Now Playing resumes the actual hidden guest', () => guestRun(`!fixtureAudio.paused && fixtureAudio.currentTime > ${beforeBackground + .1}`));
+      await click('.home-now button[aria-label="Развернуть текущий трек"]');
+      await waitFor('fullscreen shows the VK track and supports only delegated controls', async () => await mirrored(`${vkStage} h1`, 0) && await run(`
+        !document.querySelector('${vkStage} :is(.mode-button,.immersive-upcoming,.volume,.immersive-karaoke-toggle,.immersive-feedback)')
+        && document.querySelector('${vkStage} .play-button')?.getAttribute('aria-label') === 'Пауза'`));
+      assert.equal(vkView(), nativeView);
+      assert.equal(nativeView.getVisible(), false);
+      await click(`${vkStage} .play-button`);
+      await waitFor('fullscreen pause reaches the website', () => guestRun('fixtureAudio.paused && fixtureAction === "pause"'));
+      await fill(`${vkStage} .timeline input`, '4');
+      await waitFor('fullscreen seek uses the VK clock', () => guestRun('fixtureAction === "seekto" && !fixtureAudio.seeking && Math.abs(fixtureAudio.currentTime - 4) < .25'));
+      await click(`${vkStage} [aria-label="Следующий трек"]`);
+      await waitFor('fullscreen Next updates title and artist via the guest', async () => await mirrored(`${vkStage} h1`, 1) && await guestRun('fixtureAction === "nexttrack"'));
+      await click(`${vkStage} [aria-label="Предыдущий трек"]`);
+      await waitFor('fullscreen Previous restores the first track', () => mirrored(`${vkStage} h1`, 0));
+      const beforeReturn = pageCount();
+      await click(`${vkStage} [aria-label="Вернуться к сайту VK"]`);
+      await waitFor('returning from fullscreen reveals the original tab without reloading', async () => !window.isFullScreen() && nativeView.getVisible() && await titleIs(0));
+      assert.equal(pageCount(), beforeReturn);
       await guestRun(`navigator.mediaSession.setActionHandler('nexttrack', null)`);
       await waitFor('actions that VK unregisters disable again', () => run(`document.querySelector('[data-vk-action="next"]').disabled`));
+      assert.equal(await run(`document.querySelector('${vkDock} [aria-label="Следующий трек"]').disabled`), true);
+
+      await click(`${vkDock} .playing-mini`);
+      await sendWidgetChord();
+      await waitFor('desktop widget retains the same VK playback', async () => await widgetOpen() && await mirrored('.desktop-widget .widget-copy strong', 0)
+        && vkView() === nativeView && !nativeView.getVisible());
+      await click('.widget-window-buttons [data-widget-window="restore"]');
+      await waitFor('restoring the widget retains the mirrored selection', async () => await widgetClosed() && await mirrored('.home-now[data-playback-source="vk"] .hero h2', 0));
+      await click('.sleep-timer-open');
+      await waitFor('VK sleep timer is available', () => run(`!!document.querySelector('.sleep-timer button')`));
+      await click('.sleep-timer button:first-child');
+      await waitFor('VK timer has a deadline', () => run(`document.querySelector('.sleep-timer button')?.textContent === 'Отменить таймер'`));
+      await run(`void (window.originalClock = Date.now, Date.now = () => window.originalClock() + 6 * 60_000)`);
+      try {
+        powerMonitor.emit('resume');
+        await waitFor('sleep timer cannot resume a paused VK track', async () => await guestRun('fixtureAudio.paused && fixtureAction === "pause"')
+          && await run(`document.querySelector('.sleep-timer button')?.textContent === '5 мин'`));
+      } finally { await run(`void (Date.now = window.originalClock, delete window.originalClock)`); }
+      await closeSettings();
+      await click('.home-now [aria-label="Вернуться к сайту VK"]');
+      await waitFor('retained authorized VK catalogue and its seek bar reappear', async () => nativeView.getVisible() && await titleIs(0));
 
       const detachedUrl = 'https://vk.ru/audio?fixture=detached';
       await guestRun(`setTimeout(() => { location.href = '${detachedUrl}'; }, 0)`);
@@ -1295,6 +1368,7 @@ async function smoke() {
       assert.equal(await vkCommand('seek', .75), true);
       await waitFor('detached audio position follows the bounded seek', () => guestRun(`!fixtureAudio.seeking && Math.abs(fixtureAudio.currentTime - fixtureAudio.duration * .75) < .25`));
       assert.deepEqual((await preferences()).queue, vkQueue);
+      assert.deepEqual((await preferences()).recent, vkRecent, 'playing and changing VK tracks does not write Luma history');
       const observed = await run(`JSON.stringify(window.vkFixtureStates)`);
       assert.doesNotMatch(observed, /vk-fixture-sign-in-only|signed-in|https:\/\/|fixture-password|fixtureVkAuthorized|luma-smoke-audio/);
       assert.doesNotMatch(JSON.stringify(await preferences()), new RegExp(vkFixturePrivate));
@@ -1302,6 +1376,8 @@ async function smoke() {
       await guestRun(`setTimeout(() => { location.href = 'https://outside.invalid/'; }, 0);`);
       await delay(250);
       assert.equal(guest.getURL(), detachedUrl);
+      await waitFor('a blocked external link leaves the authorized player visible and selected', async () => nativeView.getVisible()
+        && await readyView() && await mirrored(`${vkDock} .playing-mini strong`, 0));
       assert.ok(vkRequests.every((value) => ['vk.ru', 'id.vk.ru'].includes(new URL(value).hostname)));
       assert.equal(BrowserWindow.getAllWindows().length, 1);
       const vkBounds = window.getBounds();
@@ -1316,10 +1392,37 @@ async function smoke() {
         })()`);
       });
       window.setBounds(vkBounds);
+      await waitFor('the detached track is still selected before minimizing', async () => nativeView.getVisible() && await mirrored(`${vkDock} .playing-mini strong`, 0));
+      await click(toggleVk);
+      await waitPauseVk();
+      const beforeMinimize = await guestRun('fixtureAudio.currentTime');
       window.minimize();
-      await waitFor('minimizing destroys the VK view', () => !vkView());
+      try {
+        await waitFor('minimizing hides the selected VK guest without stopping its session', async () => window.isMinimized()
+          && vkView() === nativeView && !nativeView.getVisible() && !guest.isAudioMuted()
+          && await guestRun(`!fixtureAudio.paused && fixtureAudio.currentTime > ${beforeMinimize + .1}`));
+      } catch (error) {
+        const sameGuest = vkView() === nativeView;
+        throw new Error(`VK minimize: window=${window.isMinimized()} guest=${sameGuest ? `visible=${nativeView.getVisible()}, muted=${guest.isAudioMuted()}` : 'closed or replaced'}`, { cause: error });
+      }
       window.restore();
-      await waitFor('VK does not reopen on restore', () => run(`document.querySelector('[data-home-tab="home"]').getAttribute('aria-current') === 'page' && !document.querySelector('.vk-site')`));
+      await waitFor('restoring shows the existing VK guest', async () => nativeView.getVisible() && await titleIs(0));
+      await click(`${vkDock} .playing-mini`);
+      await click('.home-now [aria-label="Закрыть сайт VK и остановить воспроизведение"]');
+      await waitFor('explicit stop disposes a hidden guest and clears the mirror', async () => !vkView() && await run(`!document.querySelector('${vkDock}')`));
+
+      await click('[data-home-tab="vk"]');
+      const backgroundView = await waitVk(VK_MUSIC_URL);
+      await waitFor('authorized guest can play again after explicit stop', () => titleIs(0));
+      await click(toggleVk);
+      await waitPauseVk();
+      await click(`${vkDock} .playing-mini`);
+      await waitFor('playing guest is hidden again', () => !backgroundView.getVisible());
+      await click(`${vkDock} [aria-label="Следующий трек"]`);
+      await waitFor('the hidden guest can also use the website button fallback', () => mirrored('.home-now[data-playback-source="vk"] .hero h2', 1));
+      await backgroundView.webContents.executeJavaScript(`void setTimeout(() => history.pushState(null, '', ${JSON.stringify(profileUrl)}), 0)`);
+      await waitFor('a hidden departure from VK Music ends the background session', async () => !vkView() && await run(`!document.querySelector('${vkDock}')`));
+      assert.equal((await isolatedVk.cookies.get({ name: authCookie.name })).length, 1);
 
       const trackUrl = 'https://vk.ru/audio123_456';
       await click('[data-open-music-link]');
@@ -1338,9 +1441,15 @@ async function smoke() {
           && document.querySelector('.audio_page_player2').getBoundingClientRect().bottom <= document.querySelector('[role=tablist]').getBoundingClientRect().top
           && document.querySelector('#fixture-toggle').getBoundingClientRect().width > 0`));
       assert.equal(vkRequests[reopenAt], trackUrl);
-      await click('.player-bar .play-button');
-      await waitFor('native playback closes VK', () => !vkView());
+      const lastGuest = vkView().webContents;
+      await click(toggleVk);
+      await waitFor('the signed-in legacy page plays before source handoff', async () => await lastGuest.executeJavaScript('document.querySelector("audio").currentTime > .12')
+        && await mirrored(`${vkDock} .playing-mini strong`, 0));
+      if (!await run(`!!document.querySelector('#play-queue')`)) await click('.player-bar .queue-toggle');
+      await click('#play-queue .queue-current .queue-song');
+      await waitFor('the Luma queue can take over from a playing VK guest', () => !vkView());
       await waitFor('return to Luma audio', () => run(`!document.querySelector('${onlineAudio}').paused`));
+      assert.deepEqual((await preferences()).queue, vkQueue);
       await click('[data-home-tab="vk"]');
       const resettingView = await waitVk(VK_MUSIC_URL);
       await waitFor('VK ready for toolbar reset', readyView);
@@ -1370,7 +1479,7 @@ async function smoke() {
       assert.equal((await isolatedVk.cookies.get({ name: authCookie.name })).length, 0);
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
       assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
-      fixtureNotice('VK website', 'Official-host fixture: QR, VK ID isolation, playlist return, reversible VK chrome, media controls, MP3 decode and seek, clipping, teardown and reset. No real account used.');
+      fixtureNotice('VK website', 'Official-host fixture: sign-in, chrome, MP3, fullscreen and widget mirroring, supported controls, retained session, stop, source handoff and reset. No real account used.');
       await click('[data-home-tab="home"]');
       await run(`document.querySelector('${homeImport}').focus()`);
       await click(homeImport);
@@ -1555,6 +1664,12 @@ async function smoke() {
         && document.querySelector('${stationSection} ${recordTile} .station-logo img')?.naturalWidth > 0`));
       assert.deepEqual(await run(`[...document.querySelectorAll('${stationSection} > .station-grid > .station-tile')].map(tile => tile.dataset.station)`), RADIO_DIRECTORY.map(({ id }) => id));
       assert.equal(radioCalls.length, 0);
+      await fill('.radio-search input', missingLogoStation.name);
+      const deadArt = `[data-station="${missingLogoStation.id}"] .station-logo img`;
+      await waitFor('a missing station logo falls back to its own local cover, not headphones', () => run(`(() => {
+        const image = document.querySelector('${deadArt}');
+        return image?.naturalWidth === 360 && image.src.startsWith('data:image/svg+xml,');
+      })()`));
       await fill('.radio-search input', 'МИР Дальний');
       await waitFor('radio search finds the exact regional feed as a browser listing', () => run(`document.querySelectorAll('${stationSection} .station-tile').length === 1
         && document.querySelector('${stationSection} ${webTile}[data-mode="browser"]:not(:has(.station-play))') !== null`));
@@ -1605,6 +1720,36 @@ async function smoke() {
       await click('[data-home-tab="home"]');
       await waitFor('Home omits lyrics and disables karaoke for a station', () => run(`document.querySelector('.hero h2')?.textContent === ${JSON.stringify(recordStation.name)}
         && document.querySelector('.hero-karaoke')?.disabled && !document.querySelector('.home-page .lyrics-card')`));
+      await isolatedVk.cookies.set(authCookie);
+      await click('[data-home-tab="vk"]');
+      const guestBeforeRadio = await waitVk(VK_MUSIC_URL);
+      await waitFor('guest ready for radio handoff', () => run(`!!document.querySelector('[data-vk-action="toggle"]:enabled')`));
+      await click('[data-vk-action="toggle"]');
+      await waitFor('VK plays before switching to radio', () => run(`document.querySelector('.player-bar[data-playback-source="vk"] .play-button')?.getAttribute('aria-label') === 'Пауза'`));
+      await click('[data-home-tab="radio"]');
+      await fill('.radio-search input', 'Русское радио');
+      const hasRusskoeCover = (selector) => run(`(() => {
+        const img = document.querySelector(${JSON.stringify(selector)});
+        return img?.naturalWidth === 360 && img.src === ${JSON.stringify(russkoeStation.cover)};
+      })()`);
+      await waitFor('the Russian Radio tile loads its own offline cover', () => hasRusskoeCover(`${russkoeTile} .station-logo img`));
+      assert.equal(vkView(), guestBeforeRadio, 'opening Radio alone does not stop VK');
+      assert.equal(guestBeforeRadio.getVisible(), false);
+      await click(`${russkoeTile} .station-play`);
+      await waitForStation(russkoeStation);
+      assert.equal(vkView(), undefined, 'choosing a station hands off from VK before radio plays');
+      await isolatedVk.cookies.remove(authCookie.url, authCookie.name);
+      await click('.player-bar .playing-mini');
+      await waitFor('Russian Radio cover shows in Now Playing over the active visual scene', async () => await hasRusskoeCover('.home-now .hero-featured-cover img')
+        && await hasRusskoeCover('.player-bar .playing-mini img'));
+      await withArt(russkoeStation.name);
+      await expand();
+      await waitForDialog();
+      await waitFor('radio fullscreen uses the same art and wraps the complete station name', async () => await hasRusskoeCover('.immersive-art img')
+        && await run(`document.querySelector('#immersive-title').textContent === ${JSON.stringify(russkoeStation.name)}
+          && getComputedStyle(document.querySelector('#immersive-title')).whiteSpace !== 'nowrap'`));
+      await click('.immersive-collapse');
+      await waitFor('radio fullscreen closes', () => !window.isFullScreen());
       await click('.player-bar .play-button');
       await waitFor('stopping radio unloads the network source', () => run(`document.querySelector('${onlineAudio}').paused && !document.querySelector('${onlineAudio}').hasAttribute('src')`));
       await click('[data-home-tab="radio"]');
@@ -1631,6 +1776,11 @@ async function smoke() {
       await waitFor('safe station fallback leaves the app', () => opened.at(-1) === `https://www.radio-browser.info/history/${browserStation.stationuuid}`);
       await click(`${direct} .station-play`);
       await waitForStation({ name: discoveryStation.name, stream: discoveryStation.url_resolved });
+      await waitFor('Radio Browser covers are shared between search and player without fetching favicons', () => run(`(() => {
+        const result = document.querySelector('${direct} .station-logo img');
+        const player = document.querySelector('.playing-mini img');
+        return result?.naturalWidth === 360 && player?.naturalWidth === 360 && result.src === player.src;
+      })()`));
       assert.ok(!(await preferences()).queue.order.includes(`radio-browser-${discoveryStation.stationuuid}`));
       await click(`${direct} .station-play`);
       await waitFor('stopping a discovered station also unloads its source', () => run(`!document.querySelector('${onlineAudio}').hasAttribute('src')`));

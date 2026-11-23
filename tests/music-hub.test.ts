@@ -7,6 +7,7 @@ import { startQueue } from '../src/shared/queue.js';
 import { classifiedTracks, GENRES, mergeDiscoveryTracks } from '../src/shared/discovery.js';
 import { MAX_PLAYLIST_TRACKS, readLumaPlaylists } from '../src/shared/luma-playlists.js';
 import { adjacentStationId, tuneStation, stationTracks, EXTRA_STATIONS, RADIO_DIRECTORY, RADIO_LISTINGS, RADIO_ORIGINS, STATIONS, isStationPage } from '../src/shared/radio.js';
+import { radioStationCover } from '../src/shared/radio-artwork.js';
 import { streamUrl } from '../src/shared/audio-quality.js';
 import { decodeOpenverse, readOnlineTrack } from '../src/shared/online.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
@@ -150,4 +151,27 @@ test('radio keeps the requested directory, regional identities and browser-only 
   assert.deepEqual(list.stationIds, [browser[0].id]);
   assert.deepEqual(list.favorites, []);
   assert.equal(isStationPage('https://radioplayer.ru/station/radio-mariya?unexpected'), false);
+});
+
+test('each radio listing has its own offline cover, and playback keeps the same cover on errors', () => {
+  const prefix = 'data:image/svg+xml,';
+  assert.equal(new Set(RADIO_LISTINGS.map(({ cover }) => cover)).size, RADIO_LISTINGS.length);
+  for (const { id, name, cover, logo, stream } of RADIO_LISTINGS) {
+    assert.equal(cover, radioStationCover(id, name));
+    assert.ok(cover.startsWith(prefix));
+    const art = decodeURIComponent(cover.slice(prefix.length));
+    assert.match(art, /^<svg[^>]*width="360" height="360"/);
+    assert.doesNotMatch(art, /<(?:image|script|foreignObject)|https:\/\//i);
+    if (stream) {
+      const track = stationTracks.find((track) => track.id === id)!;
+      assert.equal(track.artworkUrl, logo ?? cover);
+      assert.equal(track.fallbackArtworkUrl, logo ? cover : undefined);
+    }
+  }
+  const station = RADIO_DIRECTORY.find(({ id }) => id === 'radio-ru-russkoe')!;
+  assert.match(decodeURIComponent(station.cover), /Русское радио.*Россия/s);
+  const untrusted = decodeURIComponent(radioStationCover('external', '<script>alert(1)</script> & \u202e\uD800'));
+  assert.match(untrusted, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(untrusted, /&amp;/);
+  assert.doesNotMatch(untrusted, /<script|\u202e/u);
 });

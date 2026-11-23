@@ -1,6 +1,6 @@
 import electron = require('electron');
 const { contextBridge } = electron;
-import type { VkTransport } from '../src/shared/vk-site.js';
+import type { VkPlaybackAction } from '../src/shared/vk-site.js';
 
 // Runs before VK's scripts, in the guest's page world. The hook only observes standard media
 // APIs and calls the same handlers VK provides for system media controls. It exposes no IPC or
@@ -61,7 +61,7 @@ function installVkPlayback() {
     return true;
   };
 
-  Object.defineProperty(globalThis, '__lumaVkPlayback', { value(action?: VkTransport | 'seek', ratio?: number, useElement = false) {
+  Object.defineProperty(globalThis, '__lumaVkPlayback', { value(action?: VkPlaybackAction | 'seek', ratio?: number, useElement = false) {
     if (!musicPage()) return;
     const audio = currentAudio();
     const playing = media.playbackState === 'playing' || (media.playbackState === 'none' && audio?.paused === false && !audio.ended);
@@ -82,8 +82,9 @@ function installVkPlayback() {
     };
     if (action === 'previous') return run('previoustrack');
     if (action === 'next') return run('nexttrack');
-    if (action === 'toggle') {
-      if (!useElement) return run(toggle);
+    if (action === 'toggle' || action === 'pause') {
+      if (!useElement) return run(action === 'pause' ? 'pause' : toggle);
+      if (action === 'pause' && audio) { audio.pause(); return true; }
       if (!canUseAudio) return false;
       if (playing) { audio.pause(); return true; }
       return audio.play().then(() => true, () => false);

@@ -8,6 +8,8 @@ The Russian directory follows the requested 96 stations and their order. The exi
 
 ## Playback verification
 
+The station tiles, Now Playing and fullscreen use the same artwork. Record and SomaFM keep their curated publisher logos. Where no vetted logo is available or a logo fails to load, Luma draws a station-specific cover locally, including for Русское радио and Radio Browser results. These are Luma designs, not official logos; no third-party favicons are used.
+
 Dispatch the Windows build with `live_radio=true` on the commit under review. This checks the actual Electron renderer decoder and shipped Content Security Policy, including an audio clock advance from each direct URL. It does not record or save media; the only report is the status/URL and optional logo dimensions. A fixture-only test is not evidence that a station is live. If an outlet changes its source, first confirm the station/region and public HTTPS URL; keep its existing ID and listening page. If the replacement is not usable in the renderer, omit its `stream` field.
 
 ### Initial lineup verification

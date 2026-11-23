@@ -2,13 +2,11 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ArrowLeft, AudioLines, Globe2, LoaderCircle, LockKeyhole, Pause, Play, RotateCcw, RotateCw, ScanLine, SkipBack, SkipForward, X } from 'lucide-react';
 import { useText } from '../i18n/context';
+import type { VkSiteController } from '../player/useVkSite';
 import { formatTime } from '../shared/media';
 import { readVkSiteAppearance } from '../shared/vk-site';
-import type { VkBounds, VkPosition, VkSiteAction, VkSiteAppearance, VkSiteState } from '../shared/vk-site';
+import type { VkBounds, VkPosition, VkSiteAction, VkSiteAppearance } from '../shared/vk-site';
 import './vk-site.css';
-
-const initial: VkSiteState = { phase: 'loading', host: '', back: false, signIn: false };
-let nextView = 0;
 
 function showBounds(slot: HTMLElement, pane: Element): VkBounds | null {
   const box = slot.getBoundingClientRect(), clip = pane.getBoundingClientRect();
@@ -36,33 +34,21 @@ function VkTimeline({ timeline, seek }: { timeline: VkPosition; seek(ratio: numb
   </div>;
 }
 
-interface AppearanceProps { appearance: VkSiteAppearance; changeAppearance(appearance: VkSiteAppearance): void }
+interface SettingsProps { appearance: VkSiteAppearance; changeAppearance(appearance: VkSiteAppearance): void; close(): void }
+type PanelController = Pick<VkSiteController, 'view' | 'layout' | 'command' | 'retry' | 'reset'>;
 
 /** The official QR and password screen is the site's own page inside the sandboxed view. */
-function SiteView({ url, close, appearance, changeAppearance }: AppearanceProps & { url: string; close(): void }) {
+function SiteView({ view, layout: layoutView, command: send, retry, reset, close, appearance, changeAppearance }:
+  SettingsProps & PanelController & { view: NonNullable<PanelController['view']> }) {
   const t = useText();
-  const api = window.luma?.vkSite;
   const panel = useRef<HTMLElement>(null);
   const slot = useRef<HTMLDivElement>(null);
-  const view = useRef(0);
-  const [state, setState] = useState(initial);
-  const [attempt, setAttempt] = useState(0);
-  const [resetting, setResetting] = useState(false);
+  const { id, state, resetting } = view;
   const [notice, setNotice] = useState('');
-  const initialAppearance = useRef(appearance);
-  // Use the latest preference for new views without reopening VK when it changes.
-  useLayoutEffect(() => { initialAppearance.current = appearance; }, [appearance]);
   useLayoutEffect(() => {
     const node = slot.current, section = panel.current, pane = node?.closest('.main-pane');
-    if (!api || !node || !section || !pane) return;
-    const id = view.current = ++nextView;
+    if (!node || !section || !pane) return;
     let frame = 0;
-    let live = true;
-    const unsubscribe = api.onState((current, next) => {
-      if (!live || current !== id) return;
-      if (next.phase === 'closed') { close(); return; }
-      setState(next);
-    });
     let last = '';
     const layout = () => {
       if (frame) return;
@@ -70,7 +56,7 @@ function SiteView({ url, close, appearance, changeAppearance }: AppearanceProps 
         frame = 0;
         const bounds = showBounds(node, pane);
         const key = JSON.stringify(bounds);
-        if (key !== last) { last = key; void api.layout(id, bounds).catch(() => {}); }
+        if (key !== last) { last = key; layoutView(id, bounds, true); }
       });
     };
     const resize = new ResizeObserver(layout);
@@ -79,37 +65,22 @@ function SiteView({ url, close, appearance, changeAppearance }: AppearanceProps 
     window.addEventListener('resize', layout);
     pane.addEventListener('scroll', layout, { passive: true });
     section.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
-    const bounds = showBounds(node, pane);
-    last = JSON.stringify(bounds);
-    setState(initial);
-    void api.open(id, url, bounds, initialAppearance.current).catch(() => { if (live) setState({ ...initial, phase: 'failed' }); });
+    layout();
     return () => {
-      live = false;
-      view.current = 0;
-      unsubscribe();
       cancelAnimationFrame(frame);
       resize.disconnect(); observer.disconnect();
       window.removeEventListener('resize', layout);
       pane.removeEventListener('scroll', layout);
-      void api.close(id).catch(() => {});
+      layoutView(id, null, false);
     };
-  }, [api, url, attempt, close]);
-  const retry = () => { setNotice(''); setAttempt((n) => n + 1); };
+  }, [id, layoutView]);
   const command = (action: VkSiteAction, ratio?: number) => {
-    if (!api || resetting) return;
-    const id = view.current;
     setNotice('');
-    void api.command(id, action, ratio).then((ok) => {
-      if (!ok && view.current === id) setNotice('Эта команда сейчас недоступна в плеере VK.');
-    }).catch(() => { if (view.current === id) setNotice('Эта команда сейчас недоступна в плеере VK.'); });
+    void send(action, ratio).then((ok) => { if (!ok) setNotice('Эта команда сейчас недоступна в плеере VK.'); });
   };
-  async function reset() {
-    if (!api || resetting) return;
-    const id = view.current;
-    setResetting(true); setNotice('');
-    try { if (await api.reset(id) && view.current === id) retry(); }
-    catch { if (view.current === id) { setNotice('Не удалось очистить сессию VK.'); setState({ ...initial, phase: 'failed' }); } }
-    finally { if (view.current === id) setResetting(false); }
+  function resetSession() {
+    setNotice('');
+    void reset().catch(() => setNotice('Не удалось очистить сессию VK.'));
   }
   const track = state.track;
   const toggle = t(track?.playing ? 'Пауза VK' : 'Воспроизвести в VK');
@@ -126,15 +97,13 @@ function SiteView({ url, close, appearance, changeAppearance }: AppearanceProps 
       <select className="vk-site-appearance" aria-label={t('Вид страниц VK Музыки')} title={t('Вид страниц VK Музыки')} value={appearance}
         disabled={state.phase !== 'ready' || state.signIn || resetting} onChange={(event) => {
           const next = readVkSiteAppearance(event.currentTarget.value);
-          if (!next || !api || !view.current) return;
-          changeAppearance(next);
-          void api.setAppearance(view.current, next).catch(() => {});
+          if (next) changeAppearance(next);
         }}>
         <option value="standard">{t('Обычный вид')}</option>
         <option value="profile">{t('Только профиль')}</option>
         <option value="minimal">{t('Без панелей')}</option>
       </select>
-      <button className="icon-button" type="button" data-vk-reset disabled={resetting || state.phase === 'loading'} title={resetLabel} aria-label={resetLabel} onClick={() => void reset()}><RotateCcw size={17} /></button>
+      <button className="icon-button" type="button" data-vk-reset disabled={resetting || state.phase === 'loading'} title={resetLabel} aria-label={resetLabel} onClick={resetSession}><RotateCcw size={17} /></button>
       <button className="icon-button" type="button" title={t('Закрыть сайт VK')} aria-label={t('Закрыть сайт VK')} onClick={close}><X size={19} /></button>
     </header>
     {state.signIn ? <div className="vk-site-login">
@@ -161,10 +130,10 @@ function SiteView({ url, close, appearance, changeAppearance }: AppearanceProps 
   </section>;
 }
 
-export function VkSitePanel({ url, connected, ...view }: AppearanceProps & { url?: string; connected: boolean; close(): void }) {
+export function VkSitePanel({ controller, connected, ...settings }: SettingsProps & { controller?: PanelController; connected: boolean }) {
   const t = useText();
   const api = window.luma?.vkSite;
-  if (url && api) return <SiteView url={url} {...view} />;
+  if (controller?.view && api) return <SiteView key={controller.view.id} {...controller} {...settings} view={controller.view} />;
   return <p className="vk-site-placeholder" role="status">{t(!api ? 'Сайт VK внутри Luma доступен в приложении для Windows.'
     : !connected ? 'Для VK Музыки нужно подключение к интернету.' : 'Выберите вкладку VK Музыка, чтобы открыть сайт.')}</p>;
 }
