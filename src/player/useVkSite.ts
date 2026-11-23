@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import type { VkBounds, VkSiteAction, VkSiteAppearance, VkSiteState } from '../shared/vk-site';
+import type { VkBounds, VkSiteAction, VkSiteState } from '../shared/vk-site';
 
 const initial: VkSiteState = { phase: 'loading', host: '', back: false, signIn: false };
 let nextView = 0;
@@ -12,7 +12,7 @@ interface Session {
 }
 
 /** Own the official guest for the app's lifetime, not for the lifetime of its catalogue pane. */
-export function useVkSite(appearance: VkSiteAppearance, onClosed: () => void) {
+export function useVkSite(onClosed: () => void) {
   const api = window.luma?.vkSite;
   const [view, setView] = useState<Session>();
   const active = useRef<Session>(undefined);
@@ -43,16 +43,11 @@ export function useVkSite(appearance: VkSiteAppearance, onClosed: () => void) {
     if (!api) return;
     const id = ++nextView;
     store({ id, url, state: initial, resetting: false });
-    void api.open(id, url, null, appearance).catch(() => {
+    void api.open(id, url, null).catch(() => {
       const session = active.current;
       if (session?.id === id) store({ ...session, state: { ...initial, phase: 'failed' } });
     });
-  }, [api, appearance, store]);
-
-  const id = view?.id;
-  useLayoutEffect(() => {
-    if (id !== undefined) void api?.setAppearance(id, appearance).catch(() => {});
-  }, [api, id, appearance]);
+  }, [api, store]);
 
   const close = useCallback(() => {
     const session = active.current;

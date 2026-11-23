@@ -102,7 +102,7 @@ test('prism rotates a square base beneath a single upright apex, independently o
   assert.deepEqual(geometry(0, .98), outline);
   assert.notDeepEqual(geometry(1.5, 0), outline);
   assert.equal(isCanvasEffect('tunnel'), false);
-  assert.equal(isCanvasEffect('mix-flow'), false, 'the mix banner uses SVG ribbons rather than a second canvas');
+  assert.equal(isCanvasEffect('mix-flow'), false, 'the mix banner uses soft CSS gradients rather than a second canvas');
 });
 
 test('all requested scenes run at idle; transport visualizers do not', () => {

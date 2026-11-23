@@ -308,8 +308,8 @@ export function SettingsPage(props: SettingsProps) {
                 enabled={props.localFallback} change={props.toggleLocalFallback} />
               <ToggleRow title={t("Автозапуск")} detail={t("Начать воспроизведение локального трека при запуске Luma. Онлайн-потоки автоматически не запускаются.")} enabled={playback.autoPlay} change={() => changePlayback({ ...playback, autoPlay: !playback.autoPlay })} />
               <ToggleRow title={t("Следующий трек автоматически")} detail={t("Если выключено, плеер остановится в конце. Повтор одного трека действует отдельно.")} enabled={playback.autoNext} change={() => changePlayback({ ...playback, autoNext: !playback.autoNext })} />
-              <label className="setting-row select-row"><span><strong>{t("Кроссфейд")}</strong><small>{t("Плавный переход при автосмене между двумя файлами. Для онлайн-потоков и повтора одного трека не применяется.")}</small></span>
-                <select value={playback.crossfade} disabled={!playback.autoNext} onChange={(event) => changePlayback({ ...playback, crossfade: Number(event.currentTarget.value) as CrossfadeTime })}>
+              <label className="setting-row select-row"><span><strong>{t("Кроссфейд")}</strong><small>{t("Плавное наложение при ручной и автоматической смене записей. Для VK, радио и повтора той же записи не применяется.")}</small></span>
+                <select value={playback.crossfade} onChange={(event) => changePlayback({ ...playback, crossfade: Number(event.currentTarget.value) as CrossfadeTime })}>
                   {CROSSFADE_TIMES.map((seconds) => <option key={seconds} value={seconds}>{seconds ? t("{0} с", seconds) : t("Выключен")}</option>)}
                 </select></label>
               <label className="setting-row select-row"><span><strong>{t("Шаг перемотки")}</strong><small>{t("Для горячих клавиш ← и →.")}</small></span>
@@ -372,7 +372,7 @@ export function SettingsPage(props: SettingsProps) {
             <StreamCacheSettings />
             <SettingCard title={t("Локальный профиль")} detail={t("Настройки, обложки и история остаются на устройстве; на Windows исходные аудиофайлы не копируются при добавлении.")}>
               <dl className="settings-storage"><div><dt>{t("Треков с устройства")}</dt><dd>{formatCount(props.localCount, appearance.fullNumbers, t.language)}</dd></div><div><dt>{t("Недавних треков")}</dt><dd>{formatCount(props.recentCount, appearance.fullNumbers, t.language)}</dd></div></dl>
-              <ToggleRow title={t("Запоминать прослушанные треки")} detail={t("Хранить локально до 60 последних треков. При отключении новая история не записывается.")} enabled={playback.rememberRecent} change={() => changePlayback({ ...playback, rememberRecent: !playback.rememberRecent })} />
+              <ToggleRow title={t("Запоминать прослушанные треки")} detail={t("Хранить на устройстве до 60 записей Luma и до 60 записей VK. При отключении новые записи не добавляются.")} enabled={playback.rememberRecent} change={() => changePlayback({ ...playback, rememberRecent: !playback.rememberRecent })} />
               <div className="settings-actions">
                 <button type="button" className="button outline-button" onClick={props.openRecent}>{t("Недавно слушали")}</button>
                 <button type="button" className="button outline-button" disabled={!props.recentCount} onClick={() => setConfirmClear((value) => !value)} aria-expanded={confirmClear}>{t("Очистить историю")}</button>

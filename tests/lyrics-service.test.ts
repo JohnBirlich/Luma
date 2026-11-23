@@ -34,7 +34,7 @@ test('LRCLIB spaces a v1 search after a signature miss and caches the final resu
     assert.equal(options.credentials, 'omit');
     assert.equal(options.referrerPolicy, 'no-referrer');
     assert.equal(options.redirect, 'error');
-    assert.equal(new Headers(options.headers).get('User-Agent'), 'LumaPlayer/1.0.0 (https://github.com/JohnBirlich/VKX-Modded)');
+    assert.equal(new Headers(options.headers).get('User-Agent'), 'LumaPlayer/1.0.0 (https://github.com/JohnBirlich/Luma)');
     if (url.pathname === '/api/get') {
       assert.equal(url.searchParams.get('duration'), '245.1', 'do not round away a duration mismatch');
       firstAt = performance.now();

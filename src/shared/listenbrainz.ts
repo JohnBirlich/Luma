@@ -27,7 +27,7 @@ export function createListenBrainzApi(fetcher: PublicApiFetch, version: string) 
   function headers(value: unknown) {
     const token = serviceCredential('listenbrainz', value);
     if (!token) throw new TypeError('Invalid ListenBrainz credential');
-    return { Authorization: `Token ${token}`, 'User-Agent': `Luma-Player/${version} (https://github.com/JohnBirlich/VKX-Modded)` };
+    return { Authorization: `Token ${token}`, 'User-Agent': `Luma-Player/${version} (https://github.com/JohnBirlich/Luma)` };
   }
   return {
     async validate(token: unknown, signal: AbortSignal) {

@@ -26,8 +26,11 @@ test('stable releases and setup assets are compared numerically and scoped to th
   assert.equal(newerStableVersion('1.0.0', '0.20.0'), true);
   assert.equal(newerStableVersion('1.0.0', '2.0.0'), false);
   assert.equal(newerStableVersion('1.0.0-rc.1', '0.19.0'), false);
-  assert.equal(readWindowsRelease(release)?.asset, asset);
+  assert.equal(LATEST_RELEASE_API, 'https://api.github.com/repos/JohnBirlich/Luma/releases/latest');
+  assert.equal(readWindowsRelease(release)?.asset, `https://github.com/JohnBirlich/Luma/releases/download/v${version}/${name}`);
   assert.equal(readWindowsRelease(release, 'portable')?.asset, portableFile.browser_download_url);
+  const legacyAsset = asset.replace('/JohnBirlich/Luma/', '/JohnBirlich/VKX-Modded/');
+  assert.equal(readWindowsRelease({ ...release, assets: [{ ...installer, browser_download_url: legacyAsset }] }), undefined);
   assert.equal(readWindowsRelease({ ...release, assets: [installer] }, 'portable'), undefined, 'Portable never falls back to Setup');
   assert.equal(readWindowsRelease({ ...release, assets: [portableFile, portableFile] }, 'portable'), undefined, 'ambiguous assets are rejected');
   assert.equal(readWindowsRelease({ ...release, draft: true }), undefined);

@@ -2,8 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, Globe2, LoaderCircle, LockKeyhole, RotateCcw, RotateCw, ScanLine, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { VkSiteController } from '../player/useVkSite';
-import { readVkSiteAppearance } from '../shared/vk-site';
-import type { VkBounds, VkSiteAction, VkSiteAppearance } from '../shared/vk-site';
+import type { VkBounds, VkSiteAction } from '../shared/vk-site';
 import './vk-site.css';
 
 function showBounds(slot: HTMLElement, pane: Element): VkBounds | null {
@@ -13,12 +12,11 @@ function showBounds(slot: HTMLElement, pane: Element): VkBounds | null {
   return width >= 170 && height >= 82 ? { x, y, width, height } : null;
 }
 
-interface SettingsProps { appearance: VkSiteAppearance; changeAppearance(appearance: VkSiteAppearance): void; close(): void }
 type PanelController = Pick<VkSiteController, 'view' | 'layout' | 'command' | 'retry' | 'reset'>;
 
 /** The official QR and password screen is the site's own page inside the sandboxed view. */
-function SiteView({ view, layout: layoutView, command: send, retry, reset, close, appearance, changeAppearance }:
-  SettingsProps & PanelController & { view: NonNullable<PanelController['view']> }) {
+function SiteView({ view, layout: layoutView, command: send, retry, reset, close }:
+  PanelController & { close(): void; view: NonNullable<PanelController['view']> }) {
   const t = useText();
   const panel = useRef<HTMLElement>(null);
   const slot = useRef<HTMLDivElement>(null);
@@ -68,15 +66,6 @@ function SiteView({ view, layout: layoutView, command: send, retry, reset, close
       <span className="vk-site-origin" role="status"><LockKeyhole size={13} /><strong>{state.host || 'VK Музыка'}</strong>
         <small>{t(state.phase === 'loading' ? 'Загружаем…' : state.phase === 'failed' ? 'Недоступно' : 'Официальный сайт')}</small></span>
       <button className="icon-button" type="button" disabled={state.phase !== 'ready' || state.signIn || resetting} title={t('К музыке VK')} aria-label={t('К музыке VK')} onClick={() => command('music')}><Globe2 size={17} /></button>
-      <select className="vk-site-appearance" aria-label={t('Вид страниц VK Музыки')} title={t('Вид страниц VK Музыки')} value={appearance}
-        disabled={state.phase !== 'ready' || state.signIn || resetting} onChange={(event) => {
-          const next = readVkSiteAppearance(event.currentTarget.value);
-          if (next) changeAppearance(next);
-        }}>
-        <option value="standard">{t('Обычный вид')}</option>
-        <option value="profile">{t('Только профиль')}</option>
-        <option value="minimal">{t('Без панелей')}</option>
-      </select>
       <button className="icon-button" type="button" data-vk-reset disabled={resetting || state.phase === 'loading'} title={resetLabel} aria-label={resetLabel} onClick={resetSession}><RotateCcw size={17} /></button>
       <button className="icon-button" type="button" title={t('Закрыть сайт VK')} aria-label={t('Закрыть сайт VK')} onClick={close}><X size={19} /></button>
     </header>
@@ -93,10 +82,10 @@ function SiteView({ view, layout: layoutView, command: send, retry, reset, close
   </section>;
 }
 
-export function VkSitePanel({ controller, connected, ...settings }: SettingsProps & { controller?: PanelController; connected: boolean }) {
+export function VkSitePanel({ controller, connected, close }: { controller?: PanelController; connected: boolean; close(): void }) {
   const t = useText();
   const api = window.luma?.vkSite;
-  if (controller?.view && api) return <SiteView key={controller.view.id} {...controller} {...settings} view={controller.view} />;
+  if (controller?.view && api) return <SiteView key={controller.view.id} {...controller} close={close} view={controller.view} />;
   return <p className="vk-site-placeholder" role="status">{t(!api ? 'Сайт VK внутри Luma доступен в приложении для Windows.'
     : !connected ? 'Для VK Музыки нужно подключение к интернету.' : 'Выберите вкладку VK Музыка, чтобы открыть сайт.')}</p>;
 }

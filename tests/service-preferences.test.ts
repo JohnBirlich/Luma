@@ -79,7 +79,7 @@ test('lyrics requests send only recording tags, identify client, cache and honor
     assert.deepEqual([...url.searchParams.keys()], ['track_name', 'artist_name', 'duration']);
     assert.equal(options.credentials, 'omit');
     assert.equal(options.redirect, 'error');
-    assert.match(new Headers(options.headers).get('Lrclib-Client') ?? '', /^LumaPlayer\/dev \(https:\/\/github\.com\/JohnBirlich\/VKX-Modded\)$/);
+    assert.match(new Headers(options.headers).get('Lrclib-Client') ?? '', /^LumaPlayer\/dev \(https:\/\/github\.com\/JohnBirlich\/Luma\)$/);
     return Response.json(response);
   });
   const signal = new AbortController().signal;
