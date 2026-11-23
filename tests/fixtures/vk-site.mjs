@@ -89,6 +89,8 @@ export function vkPlayerPage(audioPath, { inline = false, legacy = false, unmark
       <button type="button" id="fixture-shuffle" ${unmarked ? 'aria-pressed="false"><svg class="vkuiIcon--shuffle_20"></svg>' : 'aria-label="Перемешивание" aria-pressed="false">⇄'}</button>
       <button type="button" id="fixture-repeat" ${unmarked ? 'data-repeat="off"><svg class="vkuiIcon--repeat_20"></svg>' : 'aria-label="Повтор" data-repeat="off">↻'}</button>
       <button type="button" id="fixture-save" aria-label="Добавить в мою музыку">＋</button>
+      <button type="button" id="fixture-like" ${unmarked ? 'aria-pressed="false"><svg class="vkuiIcon--like_outline_20"></svg>' : 'aria-label="Нравится" aria-pressed="false">♡'}</button>
+      <button type="button" id="fixture-dislike" ${unmarked ? 'aria-pressed="false"><svg class="vkuiIcon--dislike_outline_20"></svg>' : 'aria-label="Не нравится" aria-pressed="false">✕'}</button>
       <input type="range" id="fixture-volume" aria-label="Громкость" min="0" max="100" value="100">
       <button type="button" id="fixture-mute" aria-label="Выключить звук">◉</button>
     </div>`;
@@ -141,6 +143,17 @@ export function vkPlayerPage(audioPath, { inline = false, legacy = false, unmark
       if (duplicate) duplicate.onclick = toggle.onclick;
       const shuffle = document.querySelector('#fixture-shuffle'), repeat = document.querySelector('#fixture-repeat');
       const save = document.querySelector('#fixture-save'), volume = document.querySelector('#fixture-volume'), mute = document.querySelector('#fixture-mute');
+      const like = document.querySelector('#fixture-like'), dislike = document.querySelector('#fixture-dislike');
+      // VK's feedback pair keeps one element and swaps a filled icon for outlined ones.
+      const feedback = (button, kind) => {
+        button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true'));
+        const on = button.getAttribute('aria-pressed') === 'true', svg = button.querySelector('svg');
+        if (svg) svg.setAttribute('class', 'vkuiIcon--' + kind + (on ? '_20' : '_outline_20'));
+      };
+      like.onclick = () => feedback(like, 'like');
+      // The built-in build ignores anything that is not real input, which is what the
+      // trusted fallback exists for.
+      dislike.onclick = (event) => { if (event.isTrusted) feedback(dislike, 'dislike'); };
       shuffle.onclick = () => shuffle.setAttribute('aria-pressed', String(shuffle.getAttribute('aria-pressed') !== 'true'));
       repeat.onclick = () => repeat.dataset.repeat = ({ off: 'all', all: 'one', one: 'off' })[repeat.dataset.repeat];
       save.onclick = () => save.setAttribute('aria-label', save.getAttribute('aria-label').startsWith('Добавить') ? 'Удалить из моей музыки' : 'Добавить в мою музыку');

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readVkNowPlaying, vkArtworkUrl } from '../src/shared/vk-site.js';
+import { readVkNowPlaying, vkArtworkPixels, vkArtworkUrl } from '../src/shared/vk-site.js';
 import { MAX_VK_ARTWORK_BYTES, fetchVkArtwork } from '../electron/vk-artwork.js';
 
 const src = 'https://sun9-72.userapi.com/impg/music-fixture?size=720x720&quality=95&sign=test';
@@ -70,4 +70,23 @@ test('VK player options exist only when backed by a recognized capability', () =
     assert.equal(omitted?.favorite, undefined);
     assert.equal(omitted?.shuffle, undefined);
   }
+});
+
+test('VK art advertises the rendition it carries so the sharpest one is kept', () => {
+  assert.equal(vkArtworkPixels(src), 720);
+  assert.equal(vkArtworkPixels(photo), 200);
+  assert.equal(vkArtworkPixels('https://sun1-7.vkuserphoto.ru/s/v1/ig2/current.jpg?as=80x80,160x160&cs=160x160'), 160);
+  assert.equal(vkArtworkPixels('https://sun9-42.userapi.com/s/v1/luma-fixture-inline.webp'), 0);
+  assert.equal(vkArtworkPixels('https://sun9-42.userapi.com/s/v1/ig2/track-cover?from=bu&cs=1080x1080'), 1080);
+  for (const value of [null, 42, {}, 'https://sun9.userapi.com/impg/art.jpg?size=big', 'https://sun9.userapi.com/impg/art.jpg?size=0x0']) {
+    assert.equal(vkArtworkPixels(value), 0, String(value));
+  }
+});
+
+test('VK feedback pair is read from the rendered player, not assumed', () => {
+  const playable = { title: 'Трек', artist: 'VK', toggle: true };
+  assert.equal(readVkNowPlaying({ ...playable, liked: true, disliked: false })?.liked, true);
+  assert.equal(readVkNowPlaying({ ...playable, liked: true, disliked: false })?.disliked, false);
+  assert.equal(readVkNowPlaying({ ...playable, liked: 'true', disliked: 1 })?.liked, undefined);
+  assert.equal(readVkNowPlaying({ ...playable, liked: 'true', disliked: 1 })?.disliked, undefined);
 });

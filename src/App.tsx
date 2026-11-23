@@ -860,6 +860,8 @@ export default function App() {
     volume: vkTrack?.volume ?? 0, canVolume: vkControllable && vkTrack.volume !== undefined,
     canMute: vkControllable && vkTrack.canMute === true,
     vkFavorite: vkControllable && vkTrack.favorite !== undefined ? { selected: vkTrack.favorite, toggle: () => vkAction('favorite') } : undefined,
+    vkLike: vkControllable && vkTrack.liked !== undefined ? { liked: vkTrack.liked, toggle: () => vkAction('like') } : undefined,
+    vkDislike: vkControllable && vkTrack.disliked !== undefined ? { disliked: vkTrack.disliked, toggle: () => vkAction('dislike') } : undefined,
     hasPrevious: vkControllable && vkTrack.previous, hasNext: vkControllable && vkTrack.next,
     togglePlay: togglePlayback, previous: () => vkAction('previous'), next: () => vkAction('next'), seek: seekVk,
     toggleRepeat: () => vkAction('repeat'), toggleShuffle: () => vkAction('shuffle'), toggleMute: () => vkAction('mute'), setVolume: (value) => vkAction('volume', value),

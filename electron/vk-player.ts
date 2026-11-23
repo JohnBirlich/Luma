@@ -4,7 +4,7 @@ import type { VkPlaybackAction } from '../src/shared/vk-site.js';
 
 // Serialized into the guest's isolated world. Observe only rendered music controls
 // and the standard Media Session. Never inspect VK internals, media URLs or login data.
-function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: number | null, artworkHost: string, gesture: 'click' | 'pointer' = 'click') {
+function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: number | null, artworkHost: string, gesture: 'click' | 'pointer' | 'trusted' = 'click') {
   if (window.top !== window || location.protocol !== 'https:' || location.port
     || !['vk.ru', 'vk.com', 'm.vk.ru', 'm.vk.com', 'music.vk.ru', 'music.vk.com'].includes(location.hostname)
     || !/^\/(?:audio(?:-?\d+_\d+)?\/?|audios-?\d+\/?|music(?:\/.*)?)$/.test(location.pathname)) return;
@@ -27,7 +27,7 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
   const readable = (el: Element) => visible(el) || (laidOut(el)
     && !!el.closest(header) && getComputedStyle(el).getPropertyValue('interactivity') === 'inert');
   const actionable = (el: Element): el is HTMLElement => el instanceof HTMLElement
-    && !el.matches('a, input, button[type="submit"], :disabled, .disabled') && !el.closest(`form, [aria-disabled="true"], ${trackRow}`) && readable(el);
+    && !el.matches('a:not([role="button"]), input, button[type="submit"], :disabled, .disabled') && !el.closest(`form, [aria-disabled="true"], ${trackRow}`) && readable(el);
   const signedOut = [...document.querySelectorAll(
     ':is(header,#page_header,#top_nav) a:is([href="/join"],[href^="/join?"],[href="https://vk.ru/join"],[href="https://vk.com/join"])',
   )].some(laidOut);
@@ -59,10 +59,62 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
       }
     }
   };
-  // Mode switches are offered by the rendered player; the retained compact bar can
-  // still be inert behind Luma, so an on-screen control always wins.
-  const mode = (selector: string, pattern: RegExp, icon: string) =>
-    pick(roots, selector, pattern, icon, true) ?? pick(roots, selector, pattern, icon);
+  // VK rebuilds its player and renames the switches between builds, so a control is
+  // recognized by whatever that build exposes: an accessible label, a test id, a
+  // style class or the icon it draws. Recognition is ranked, never guessed — the
+  // rendered player wins over a look-alike elsewhere on the page.
+  const shape = (node: Element) => {
+    const parts = [label(node), node.getAttribute('data-testid') ?? '', [...node.classList].join(' ')];
+    for (const child of [...node.children].slice(0, 6)) {
+      parts.push(label(child), child.getAttribute('data-testid') ?? '', [...child.classList].join(' '));
+      const nested = child.firstElementChild;
+      if (nested && nested !== child) parts.push(label(nested), [...nested.classList].join(' '));
+    }
+    return { text: parts.join(' '), icons: [...node.querySelectorAll('svg')].slice(0, 4).map(svg => svg.getAttribute('class') ?? '').join(' ') };
+  };
+  const target = (node: Element) => {
+    const control = node.closest<HTMLElement>(buttons);
+    return control && actionable(control) && !control.closest(trackRow) ? control : undefined;
+  };
+  // Every labelled or icon-bearing control, probed once per call: the switches sit
+  // beside the transport on one VK build and in a toolbar on another, and the same
+  // control answers for several actions, so the page is walked a single time.
+  const anything = `${buttons}, [aria-label], [title], [data-tooltip], [data-testid], [class*="huffle"], [class*="epeat"], [class*="ike"], [class*="Repeat"]`;
+  let probes: { control: HTMLElement; text: string; icons: string }[] | undefined;
+  const controlsOnPage = () => {
+    if (probes) return probes;
+    const list: { control: HTMLElement; text: string; icons: string }[] = [];
+    const seen = new Set<HTMLElement>();
+    // Cheapest signals first: a node without switch vocabulary, a marker or a switch
+    // icon cannot answer for one, and skipping it avoids a layout read.
+    const vocabulary = /huffle|epeat|ike|нрав|повтор|перемеш|favorit|library|избранн|коллекци|мою музыку/i;
+    const switchIcon = /vkuiIcon--(?:shuffle|repeat|like|dislike|thumbs_down)_/i;
+    const relevant = (node: Element) => vocabulary.test(`${label(node)} ${node.getAttribute('data-testid') ?? ''} ${[...node.classList].join(' ')}`)
+      || [...node.querySelectorAll('svg')].slice(0, 6).some(svg => switchIcon.test(svg.getAttribute('class') ?? ''));
+    const add = (node: Element) => {
+      if (list.length >= 1_500 || !relevant(node)) return;
+      const control = target(node);
+      if (!control || seen.has(control)) return;
+      seen.add(control);
+      const { text, icons } = shape(control);
+      list.push({ control, text, icons });
+    };
+    for (const root of roots) for (const node of root.querySelectorAll(anything)) add(node);
+    for (const node of document.querySelectorAll(anything)) add(node);
+    return probes = list;
+  };
+  const findControl = (pattern: RegExp, icons: RegExp, exclude?: RegExp) => {
+    let best: { control: HTMLElement; rank: number; gap: number } | undefined;
+    const anchor = transport.toggle?.getBoundingClientRect();
+    for (const { control, text, icons: drawn } of controlsOnPage()) {
+      if (exclude?.test(text) || !(pattern.test(text) || icons.test(drawn))) continue;
+      const rect = control.getBoundingClientRect();
+      const score = (roots.some(root => root.contains(control)) ? 0 : 2) + (visible(control) ? 0 : 1);
+      const gap = anchor ? Math.hypot(rect.left - anchor.left, rect.top - anchor.top) : 0;
+      if (!best || score < best.rank || (score === best.rank && gap < best.gap)) best = { control, rank: score, gap };
+    }
+    return best?.control;
+  };
 
   const inPage = [...document.querySelectorAll(inline)]
     .filter(el => !el.closest(`${header}, ${top}`) && visible(el) && pick([el], ...toggle))
@@ -128,15 +180,17 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
     if (node.getBoundingClientRect().height > 260) break;
     if (!roots.includes(node)) roots.push(node);
   }
+  // The switches sit beside the transport on one build and in a toolbar on another,
+  // so each is matched by any of its marker, label or icon, and the closest one to
+  // the play button wins. “Не нравится” is never allowed to answer for “Нравится”.
+  const dislikedLabel = /(?:не нрав|не понрав|не рекоменд|дизлайк|dislike|\bhate\b)/i;
   const controls = {
     ...transport,
-    shuffle: mode('.top_audio_player_shuffle, .audio_page_player_shuffle, .audio_page_player2_shuffle',
-      /^(?:(?:включить |выключить )?(?:перемешивание|случайный порядок|случайное воспроизведение)|перемешать(?: треки| очередь)?|в случайном порядке|(?:enable |disable )?shuffle)$/i,
-      'svg:is([class*="vkuiIcon--shuffle_"],[class*="vkuiIcon--shuffle_outline_"])'),
-    repeat: mode('.top_audio_player_repeat, .audio_page_player_repeat, .audio_page_player2_repeat',
-      /^(?:(?:(?:включить |выключить )?повтор|повторять)(?:(?:[: ]+)(?:всё|все|один трек|трек|очередь|плейлист|выключен))?|repeat(?: (?:all|one|off))?)$/i,
-      'svg:is([class*="vkuiIcon--repeat_"],[class*="vkuiIcon--repeat_one_"])'),
-    favorite: pick(roots, '.audio_page_player2_add, [data-testid="audio-player-library"]',
+    shuffle: findControl(/(?:перемеш|вперемешк|в случайном порядке|случайный порядок|shuffle)/i, /vkuiIcon--shuffle_/i),
+    repeat: findControl(/(?:повтор|зацикл|repeat)/i, /vkuiIcon--repeat_/i),
+    like: findControl(/(?:нравится|понрав|\blike\b|favorite)/i, /vkuiIcon--like_/i, dislikedLabel),
+    dislike: findControl(dislikedLabel, /vkuiIcon--(?:dislike|thumbs_down)_/i),
+    favorite: pick(roots, '.audio_page_player2_add, [data-testid="audio-player-library"], [data-testid*="library" i]',
       /^(?:(?:добавить|удалить) аудиозапись|добавить в (?:мою (?:музыку|коллекцию)|аудиозаписи)|удалить из (?:моей музыки|моей коллекции|аудиозаписей)|add to (?:my music|library)|remove from (?:my music|library))$/i),
     mute: pick(roots, '', /^(?:(?:выключить|включить) звук|mute|unmute)$/i),
   };
@@ -184,6 +238,14 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
     }
     const control = controls[action];
     if (!control) return false;
+    // A real input event is the only gesture the page cannot tell from a person's
+    // click, so the host replays one at this point instead of synthesizing it here.
+    if (gesture === 'trusted') {
+      control.scrollIntoView({ block: 'center', inline: 'center' });
+      const { left, top, width, height } = control.getBoundingClientRect();
+      const x = Math.round(left + width / 2), y = Math.round(top + height / 2);
+      return x > 0 && y > 0 && x < innerWidth && y < innerHeight ? { point: { x, y } } : false;
+    }
     press(control);
     return true;
   }
@@ -191,15 +253,30 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
   const active = (node: HTMLElement) => ['aria-pressed', 'aria-checked'].some(name => node.getAttribute(name) === 'true')
     || /^(?:on|active|true)$/i.test(node.getAttribute('data-state') ?? '')
     || [...node.classList].some(name => /^(?:active|on|enabled|(?:top_audio|audio_page)_player(?:2)?_(?:repeat|shuffle|add)_(?:on|active))$|__[a-z]+--(?:on|active)(?:--|$)/i.test(name));
+  // VK switches a mode by swapping a filled icon for an outlined one and by
+  // relabelling the button to describe what it will do next, so a pressed state is
+  // read from any of those signals instead of from the legacy classes alone.
+  const filled = (node: HTMLElement, icon: string) => {
+    for (const name of ['aria-pressed', 'aria-checked']) {
+      const value = node.getAttribute(name);
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+    }
+    const drawn = [...node.querySelectorAll('svg')].map(svg => svg.getAttribute('class') ?? '').join(' ');
+    const kind = icon === 'dislike' ? '(?:dislike|thumbs_down)' : icon;
+    if (new RegExp(`vkuiIcon--${kind}_`, 'i').test(drawn)) return !/outline/i.test(drawn);
+    if (active(node)) return true;
+    return /(?:выключить|отключить|убрать|disable|remove)/i.test(label(node));
+  };
   const repeatMode = (): Repeat | undefined => {
     const node = controls.repeat;
     if (!node) return;
     const mode = node.getAttribute('data-repeat');
     if (mode === 'all' || mode === 'one' || mode === 'off') return mode;
     const value = label(node);
-    if (/(?:один трек|повторять трек|repeat one)$/i.test(value) || node.matches('.audio_page_player_repeat_one, .top_audio_player_repeat_one')
+    if (/(?:один|one)/i.test(value) || node.matches('.audio_page_player_repeat_one, .top_audio_player_repeat_one')
       || node.querySelector('svg[class*="vkuiIcon--repeat_one_"]')) return 'one';
-    return /(?:выключить повтор|повтор[: ]+(?:всё|все|очередь)|repeat all)$/i.test(value) || active(node) ? 'all' : 'off';
+    return /(?:все|всё|all|очеред|плейлист)/i.test(value) || filled(node, 'repeat') ? 'all' : 'off';
   };
   const text = (root: Element, selector: string) => [...root.querySelectorAll<HTMLElement>(selector)].find(readable)?.innerText.trim().slice(0, 256) || '';
   const key = (s = '') => s.normalize('NFC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase();
@@ -262,20 +339,28 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
     const url = src.length <= 2_048 && URL.parse(src);
     return !!url && url.protocol === 'https:' && !url.username && !url.password && !url.port && host.test(url.hostname);
   };
-  const push = (src: string) => { if (artwork.length < 8 && isCdn(src) && !artwork.includes(src)) artwork.push(src); };
+  const push = (src: string) => { if (artwork.length < 12 && isCdn(src) && !artwork.includes(src)) artwork.push(src); };
   if (metadata && matches(metadata)) {
     const score = (sizes = '') => {
       const px = Math.max(0, ...[...sizes.slice(0, 120).matchAll(/\b(\d{1,4})x(\d{1,4})\b/g)].map((match) => Math.min(Number(match[1]), Number(match[2]))));
       return px >= 640 && px <= 1400 ? 2200 - px : px < 640 ? px : -1;
     };
+    // Every rendition Media Session exposes, sharpest first: the host keeps the
+    // largest address so the hero is not upscaled from a thumbnail.
     for (const image of [...metadata.artwork.slice(0, 12)].sort((a, b) => score(b.sizes) - score(a.sizes))) {
-      if (artwork.length < 2) push(image.src);
+      if (artwork.length < 4) push(image.src);
     }
   }
+  // srcset holds the same picture at several densities; the widest candidate is
+  // the one worth requesting.
+  const widest = (img: HTMLImageElement) => [...(img.getAttribute('srcset') ?? '').split(',')]
+    .map(entry => entry.trim().split(/\s+/))
+    .sort((a, b) => (Number.parseFloat(b[1]) || 0) - (Number.parseFloat(a[1]) || 0))
+    .map(entry => entry[0]).filter(Boolean);
   const sources = (cover: Element) => {
     const img = cover instanceof HTMLImageElement ? cover : cover.querySelector('img');
     const background = getComputedStyle(cover).backgroundImage;
-    return [...(img && readable(img) ? [img.currentSrc || img.src] : []),
+    return [...(img && readable(img) ? [...widest(img), img.currentSrc || img.src] : []),
       ...Array.from(background.matchAll(/url\(["']?(https:\/\/[^"'()\s]+)["']?\)/g), match => match[1])].filter(isCdn);
   };
   for (const root of relevant) {
@@ -290,10 +375,11 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
   }
   if (row) sources(row.image).forEach(push);
   return { title, artist, link, playing, previous: !!controls.previous, toggle: !!controls.toggle, next: !!controls.next, timeline,
-    shuffle: controls.shuffle && (active(controls.shuffle) || /^(?:выключить |disable )/i.test(label(controls.shuffle))), repeat: repeatMode(),
+    shuffle: controls.shuffle && filled(controls.shuffle, 'shuffle'), repeat: repeatMode(),
     favorite: controls.favorite && (active(controls.favorite) || /^(?:удалить|remove) /i.test(label(controls.favorite)) || !!controls.favorite.querySelector('svg[class*="vkuiIcon--done_"]')),
+    liked: controls.like && filled(controls.like, 'like'), disliked: controls.dislike && filled(controls.dislike, 'dislike'),
     volume: volume && (volume.input.valueAsNumber - volume.min) / (volume.max - volume.min), canMute: !!controls.mute, artwork };
 }
 
-export const inspectVkPlayer = (action: VkPlaybackAction | 'seek' | null = null, ratio?: number, gesture: 'click' | 'pointer' = 'click') =>
+export const inspectVkPlayer = (action: VkPlaybackAction | 'seek' | null = null, ratio?: number, gesture: 'click' | 'pointer' | 'trusted' = 'click') =>
   `(${visibleMusicPlayer.toString()})(...${JSON.stringify([action, ratio ?? null, VK_ARTWORK_HOST.source, gesture])})`;

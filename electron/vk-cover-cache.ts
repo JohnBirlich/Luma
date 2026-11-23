@@ -10,6 +10,8 @@ import type { VkArtwork } from './vk-artwork.js';
 /** Opaque, URL-free handle for one VK cover image. */
 export const VK_COVER_KEY = /^[a-f0-9]{32}$/;
 export const MAX_VK_COVERS = 120;
+/** Total on-disk budget for saved covers; the newest listens always win. */
+export const MAX_VK_COVER_BYTES = 64 * 1024 * 1024;
 
 const TYPES: Readonly<Record<CoverMime, string>> = { 'image/webp': '.webp', 'image/png': '.png', 'image/jpeg': '.jpg' };
 const EXTENSIONS: Readonly<Record<string, CoverMime>> = { '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg' };
@@ -66,10 +68,19 @@ export class VkCoverCache {
   private async sweep() {
     try {
       const names = (await readdir(this.root())).filter((name) => /^[a-f0-9]{32}\.(?:webp|png|jpg)$/.test(name));
-      if (names.length <= this.limit) return;
-      const sized = await Promise.all(names.map(async (name) => ({ name, at: (await stat(join(this.root(), name)).catch(() => null))?.mtimeMs ?? 0 })));
+      if (names.length <= 1) return;
+      const sized = await Promise.all(names.map(async (name) => {
+        const info = await stat(join(this.root(), name)).catch(() => null);
+        return { name, at: info?.mtimeMs ?? 0, size: info?.size ?? 0 };
+      }));
       sized.sort((a, b) => b.at - a.at);
-      await Promise.all(sized.slice(this.limit).map(({ name }) => unlink(join(this.root(), name)).catch(() => {})));
+      let total = 0;
+      // The newest listen is always kept, even if it alone is larger than the budget.
+      const drop = sized.filter((entry, index) => {
+        total += entry.size;
+        return index > 0 && (index >= this.limit || total > MAX_VK_COVER_BYTES);
+      });
+      await Promise.all(drop.map(({ name }) => unlink(join(this.root(), name)).catch(() => {})));
     } catch { /* a read-only cache only means the branded fallback stays */ }
   }
 }

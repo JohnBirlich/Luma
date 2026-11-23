@@ -1284,6 +1284,12 @@ async function smoke() {
       await waitFor('shuffle from the dock changes only the player on VK', () => guestRun(`document.querySelector('#fixture-shuffle').getAttribute('aria-pressed') === 'true'`));
       await click(`${vkDock} [aria-label="Повтор выключен"]`);
       await waitFor('repeat delegates to the native player', () => guestRun(`document.querySelector('#fixture-repeat').dataset.repeat === 'all'`));
+      assert.equal(await vkCommand('like'), true);
+      await waitFor('a VK like is delegated and read back from the rendered player',
+        () => guestRun(`document.querySelector('#fixture-like').getAttribute('aria-pressed') === 'true'`));
+      assert.equal(await vkCommand('dislike'), true);
+      await waitFor('a switch that ignores scripted clicks still receives real input',
+        () => guestRun(`document.querySelector('#fixture-dislike').getAttribute('aria-pressed') === 'true'`));
       await fill(`${vkDock} .volume input`, '34');
       await waitFor('VK volume delegates to the native slider', () => guestRun(`Math.abs(document.querySelector('audio').volume - .34) < .01`));
       const catalogueFits = () => guestRun(`(() => {
@@ -1377,6 +1383,10 @@ async function smoke() {
       await waitFor('the same signed-in guest is hidden but retained on Now Playing', async () => vkView() === nativeView
         && !nativeView.getVisible() && !guest.isAudioMuted() && await mirrored('.home-now[data-playback-source="vk"] .hero h2', 0)
         && await run(`document.querySelector('.home-now .hero-meta').textContent === ${JSON.stringify(vkFixtureArtist)}`));
+      await waitFor('Now Playing offers the same like and dislike pair as a local track', async () => await run(`(() => {
+        const like = document.querySelector('.home-now .vk-like'), dislike = document.querySelector('.home-now .vk-dislike');
+        return like?.getAttribute('aria-pressed') === 'true' && dislike?.getAttribute('aria-pressed') === 'true';
+      })()`));
       assert.equal(await run(`!navigator.mediaSession.metadata && [...document.querySelectorAll('audio')].every(audio => audio.paused)
         && !document.querySelector('.home-now :is(.favorite-toggle,.hero-index,.track-cover-button,.hero-karaoke)')`), true);
       const beforeBackground = await guestRun('fixtureAudio.currentTime');
