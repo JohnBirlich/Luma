@@ -7,8 +7,9 @@ import type { OnlineTrack } from '../shared/online';
 import { OnlineCredit } from './OnlineMusic';
 import type { OnlineAction } from './OnlineMusic';
 
-export function MusicLinkDialog({ initial = '', connected, disabled, close, choose }: {
+export function MusicLinkDialog({ initial = '', connected, disabled, close, choose, openVk }: {
   initial?: string; connected: boolean; disabled: boolean; close(): void; choose(track: OnlineTrack, action: OnlineAction): void;
+  openVk?(url: string): void;
 }) {
   const t = useText(), id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -46,7 +47,7 @@ export function MusicLinkDialog({ initial = '', connected, disabled, close, choo
     </header>
     <form className="online-search-form" onSubmit={(event) => {
       event.preventDefault();
-      setSubmitted(value); setError(readMusicLink(value) ? '' : 'Нужна ссылка на трек или плейлист VK, Яндекс Музыки либо запись Openverse.');
+      setSubmitted(value); setError(readMusicLink(value) ? '' : 'Нужна ссылка на VK, Яндекс Музыку или Openverse.');
     }}>
       <input type="text" inputMode="url" required maxLength={2048} value={value} onChange={(event) => change(event.currentTarget.value)} autoComplete="off"
         spellCheck={false} aria-label={t('Музыкальная ссылка')} placeholder="https://…" />
@@ -59,7 +60,9 @@ export function MusicLinkDialog({ initial = '', connected, disabled, close, choo
           <button type="button" className="button primary-button" disabled={disabled || !connected} onClick={() => { choose(track, 'play'); close(); }}><Play size={16} />{t('Слушать в Luma')}</button></>
           : <button type="button" className="button primary-button" disabled={!connected || busy} onClick={() => void find()}>{t(busy ? 'Проверяем…' : 'Загрузить карточку')}</button>}
       </> : <>
-        <p>{t('Ссылка распознана. Для воспроизведения внутри Luma нужен подтверждённый доступ к каталогу этого сервиса.')}</p>
+        <p>{t(link.provider === 'vk' ? 'Ссылка откроется на официальном сайте VK. Ограничения VK сохраняются.' : 'Ссылка распознана. Для воспроизведения внутри Luma нужен подтверждённый доступ к каталогу этого сервиса.')}</p>
+        {link.provider === 'vk' && openVk && <button type="button" className="button primary-button" disabled={!connected} onClick={() => { close(); openVk(link.url); }}>
+          <Play size={16} aria-hidden="true" />{t('Открыть в VK')}</button>}
         <a className="button outline-button" href={link.url} target="_blank" rel="noopener noreferrer" onClick={(event) => {
           if (!window.luma) return;
           event.preventDefault();

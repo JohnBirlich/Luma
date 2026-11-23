@@ -4,7 +4,7 @@ import type { ReadSpectrum } from '../player/useAudio';
 import { compactScene, sceneBufferSize, sceneFps } from '../shared/scene-budget';
 
 import { advanceColumns, advanceSpectrum, columnPalettes, drawColumns, drawAurora, drawNotes, drawOrbits, drawPrism, drawSpectrum, drawStars, flattenSpectrum, seeded, spectrumColumns, spectrumFrames } from './scene-art';
-import { CANVAS_EFFECTS, coastSpeed } from '../shared/scene-motion';
+import { CANVAS_EFFECTS, coastSpeed, isAmbientEffect } from '../shared/scene-motion';
 import type { CanvasEffect } from '../shared/scene-motion';
 
 const scatter = seeded(971);
@@ -20,7 +20,7 @@ const bursts = Array.from({ length: 6 }, (_, i) => ({
 
 function fireworks(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
   const size = Math.min(w * .8, h);
-  ctx.lineWidth = Math.max(.9, Math.min(2.8, size / 246));
+  ctx.lineWidth = Math.max(1.2, Math.min(2.9, size / 224));
   ctx.lineCap = 'round';
   for (const { x, y, color, phase, sparks } of bursts) {
     const age = ((t + phase) % FIREWORKS_CYCLE) - .74;
@@ -50,7 +50,7 @@ function fireworks(ctx: CanvasRenderingContext2D, w: number, h: number, t: numbe
     ctx.stroke();
     ctx.globalAlpha = brightness * .85;
     ctx.fillStyle = '#fff3da';
-    const tip = Math.max(1.25, size / 366);
+    const tip = Math.max(1.9, size / 304);
     for (let i = 0; i < sparks.length; i += 2) {
       const spark = sparks[i];
       if (age <= spark.life) { ctx.beginPath(); ctx.arc(cx + spark.x * distance * size, cy + (spark.y * distance + drift) * size, tip / 2, 0, 2 * Math.PI); ctx.fill(); }
@@ -67,9 +67,9 @@ const fraction = (v: number) => v - Math.floor(v);
 function drawRain(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
   ctx.lineCap = 'round';
   for (let front = 0; front < 2; front++) {
-    ctx.strokeStyle = front ? '#c3e8ff9c' : '#b4b8ecd5';
-    ctx.globalAlpha = front ? .55 : .36;
-    ctx.lineWidth = front ? Math.max(1, h / 414) : Math.max(.62, h / 690);
+    ctx.strokeStyle = front ? '#d7f1ffcb' : '#c7ceffd5';
+    ctx.globalAlpha = front ? .73 : .5;
+    ctx.lineWidth = front ? Math.max(1.28, h / 370) : Math.max(.83, h / 620);
     ctx.beginPath();
     for (const { x, y, depth } of rainDrops) {
       if (Number(depth > .68) !== front) continue;
@@ -81,7 +81,7 @@ function drawRain(ctx: CanvasRenderingContext2D, w: number, h: number, t: number
     ctx.stroke();
   }
   ctx.strokeStyle = '#f5d0a1';
-  ctx.lineWidth = Math.max(.75, w / 1460);
+  ctx.lineWidth = Math.max(.95, w / 1320);
   for (const { x, y, phase } of reflections) {
     const age = (t + phase) % 1.28;
     if (age > .76) continue;
@@ -106,8 +106,8 @@ function drawMeteors(ctx: CanvasRenderingContext2D, w: number, h: number, t: num
     ctx.strokeStyle = light;
     ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + dx * tail, yy - dy * tail);
     ctx.globalAlpha = fade * .26; ctx.lineWidth = Math.max(1.9, scale * .015 * depth); ctx.stroke();
-    ctx.globalAlpha = fade; ctx.lineWidth = Math.max(.9, scale * .0038 * depth); ctx.stroke();
-    ctx.fillStyle = '#e7f5ff'; ctx.beginPath(); ctx.arc(xx, yy, Math.max(.65, scale * .0032 * depth), 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = fade; ctx.lineWidth = Math.max(1.24, scale * .0045 * depth); ctx.stroke();
+    ctx.fillStyle = '#e7f5ff'; ctx.beginPath(); ctx.arc(xx, yy, Math.max(1.05, scale * .0039 * depth), 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1;
 }
@@ -136,7 +136,7 @@ function drawSolar(ctx: CanvasRenderingContext2D, w: number, h: number, t: numbe
     ctx.strokeStyle = filament; ctx.beginPath(); ctx.moveTo(start, y(0));
     for (let j = 1; j <= 24; j++) { const p = j / 24; ctx.lineTo(x(p), y(p)); }
     ctx.globalAlpha = (.12 + .06 * glow); ctx.lineWidth = Math.max(2.8, h * .016); ctx.stroke();
-    ctx.globalAlpha = .41 + .19 * glow; ctx.lineWidth = Math.max(.62, h * (.0018 + .0014 * (i % 3 === 0 ? 1 : 0))); ctx.stroke();
+    ctx.globalAlpha = .52 + .19 * glow; ctx.lineWidth = Math.max(.9, h * (.0018 + .0014 * (i % 3 === 0 ? 1 : 0))); ctx.stroke();
     // Advect short light packets rather than moving the entire filament back and forth.
     for (let k = i; k < solarSparks.length; k += count) {
       const { progress, speed, glow: bright } = solarSparks[k], p = fraction(progress + t * speed);
@@ -144,7 +144,7 @@ function drawSolar(ctx: CanvasRenderingContext2D, w: number, h: number, t: numbe
       const packet = ctx.createLinearGradient(x(rear), y(rear), x(p), y(p));
       packet.addColorStop(0, '#fdaafe00'); packet.addColorStop(.84, '#ffd5b0b8'); packet.addColorStop(1, '#ffefc6');
       ctx.beginPath(); ctx.moveTo(x(rear), y(rear)); ctx.quadraticCurveTo(x((p + rear) / 2), y((p + rear) / 2), x(p), y(p));
-      ctx.lineWidth = Math.max(.85, h * .0037 * bright); ctx.strokeStyle = packet; ctx.globalAlpha = bright * Math.sin(Math.PI * p) ** .60; ctx.stroke();
+      ctx.lineWidth = Math.max(1.09, h * .0044 * bright); ctx.strokeStyle = packet; ctx.globalAlpha = bright * Math.sin(Math.PI * p) ** .60; ctx.stroke();
     }
   }
   // A feathered terminator covers the roots, so the wind blends into the illuminated limb.
@@ -196,7 +196,8 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
     const bars = effect === 'columns' ? spectrumColumns() : undefined;
     let barColors: ReturnType<typeof columnPalettes> | undefined;
     const reactive = !!(bars || terrain) || effect === 'pulse';
-    const coast = CANVAS_EFFECTS[effect];
+    const ambient = isAmbientEffect(effect);
+    const coast = !ambient && CANVAS_EFFECTS[effect];
     let period = 1000 / sceneFps(false, reactive);
     let raf = 0, last = 0, previous = 0, t = 0, velocity = 0, elapsed = 0;
     let pulseHalo: CanvasGradient | undefined;
@@ -234,7 +235,7 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
     }
     function schedule() {
       const { playing: active, enabled: canMove } = runtime.current;
-      if (!canMove || (!active && (!coast || !velocity))) {
+      if (!canMove || (!(ambient || active) && (!coast || !velocity))) {
         if (raf) cancelAnimationFrame(raf);
         if (velocity) { velocity = 0; paint(0); }
         raf = last = previous = 0;
@@ -251,12 +252,12 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
         previous = now;
         last = delta >= period ? now - delta % period : now;
         const { playing: active, enabled: canMove, tempo: factor } = runtime.current;
-        const next = canMove ? coast ? coastSpeed(velocity, active, dt) : Number(active) : 0;
+        const next = canMove ? coast ? coastSpeed(velocity, active, dt) : Number(ambient || active) : 0;
         t += (next + velocity) * .5 * dt / factor;
         velocity = next;
         paint(dt);
       }
-      if (runtime.current.enabled && (runtime.current.playing || (coast && velocity))) raf = requestAnimationFrame(draw);
+      if (runtime.current.enabled && (ambient || runtime.current.playing || (coast && velocity))) raf = requestAnimationFrame(draw);
       else previous = last = 0;
     }
     const resize = new ResizeObserver(([{ contentRect }]) => {

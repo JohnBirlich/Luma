@@ -71,7 +71,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
       {!ambient && scene === 'off' && artworkBackdrop && (hero === 'cover' || appearance.coverColors) &&
         <Artwork track={track} className="immersive-backdrop" imageUrl={artworkBackdrop} />}
       <SceneBackground effect={scene} tone={tint} strength={effectStrength * (karaoke ? .62 : 1)} tempo={appearance.effectTempo}
-        animate={playing} visible={motion && props.sceneVisible} sample={appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
+        animate={playing} visible={motion && props.sceneVisible} sample={playing && appearance.audioReactive && !track.online ? props.readSpectrum : undefined} />
       {(!ambient || scene !== 'off') && <div aria-hidden="true" className="immersive-scrim" />}
       <header className="immersive-header">
         <button type="button" className="icon-button immersive-collapse" onClick={close} title={t("Свернуть (Esc)")} aria-label={t("Свернуть полноэкранный плеер")}><ChevronDown size={24} /></button>

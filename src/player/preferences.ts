@@ -133,7 +133,7 @@ export function encodePreferences(preferences: Preferences, current: QueueState)
     beforeShuffle: resumeShuffle && current.beforeShuffle ? persistentIds(current.beforeShuffle) : null, repeat: resumeRepeat,
   } : undefined;
   const stored = { ...preferences, resumeRepeat, resumeShuffle, queue };
-  // Audius API content is session-only, even when a track is in the current queue.
+  // Session-only streams never enter the persisted queue, links, history or playlists.
   return JSON.stringify({ ...stored,
     favorites: persistentIds(stored.favorites), disliked: persistentIds(stored.disliked), recent: persistentIds(stored.recent),
     playlists: readLumaPlaylists(stored.playlists), onlineTracks: stored.onlineTracks.filter(({ id }) => !sessionCatalogId(id)),

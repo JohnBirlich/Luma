@@ -65,3 +65,6 @@ export function musicSearchKey(value: string): string {
 export function artistCreditKey(value: string) {
   return musicSearchKey(value).replace(/[!！]+$/u, '').trimEnd();
 }
+
+/** Search phrases can be pasted as “artist — title”, in either order. */
+export const searchWords = (value: string) => musicSearchKey(value).match(/[\p{L}\p{N}]+/gu) ?? [];

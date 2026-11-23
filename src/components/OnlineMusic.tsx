@@ -4,9 +4,12 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import type { FormEvent, ReactNode } from 'react';
 import { ArrowUpRight, BookmarkPlus, Check, ChevronDown, HardDriveDownload, Cloud, CloudOff, Download, Globe2, Link2, ListPlus, Play, RotateCw, Search } from 'lucide-react';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
-import { CATALOG_DEBOUNCE_MS, catalogQuery, catalogTargets, mergeCatalogResults, searchCatalogs } from '../data/catalog-search';
+import { CATALOG_DEBOUNCE_MS, catalogQuery, catalogTargets, compareJamendo, mergeCatalogResults, searchCatalogs } from '../data/catalog-search';
 import type { CatalogId, CatalogResult } from '../data/catalog-search';
+import { CatalogError } from '../shared/catalog-reply';
+import type { CatalogIssue } from '../shared/catalog-reply';
 import { importOnlineTrack } from '../data/online';
+import { useMusicServiceStatus } from '../data/music-services';
 import { formatTime } from '../shared/media';
 import type { Track } from '../shared/media';
 import { bundleRecordings, recordingEvidence } from '../shared/recording-match';
@@ -36,7 +39,20 @@ export function OnlineCredit({ track, compact }: { track: { online: OnlineCredit
     {!compact && <> · {licenseUrl ? <SourceLink url={licenseUrl}>{license}</SourceLink> : t(license)}</>}</span>;
 }
 
+const catalogMessages: Record<CatalogIssue, string> = {
+  network: 'Не удалось связаться с каталогом. Проверьте подключение и повторите попытку.',
+  timeout: 'Каталог не ответил вовремя. Можно повторить поиск.',
+  quota: 'Каталог временно ограничил запросы. Попробуйте позже.',
+  unavailable: 'Сервис сейчас не может выполнить поиск. Попробуйте позже.',
+  response: 'Каталог вернул неожиданный ответ.',
+  credentials: 'Jamendo отклонил Client ID. Замените его в настройках сервисов.',
+};
+const catalogIssueLabel: Record<CatalogIssue, string> = {
+  network: 'Нет связи', timeout: 'Тайм-аут', quota: 'Лимит запросов', unavailable: 'Недоступен', response: 'Ошибка ответа', credentials: 'Client ID отклонён',
+};
+
 function message(error: unknown, t: Text) {
+  if (error instanceof CatalogError) return t(catalogMessages[error.issue]);
   const code = error instanceof Error && /^Каталог сейчас недоступен \(HTTP (\d+)\)\. Повторите попытку позже\.$/.exec(error.message);
   if (code) return t("Каталог сейчас недоступен (HTTP {0}). Повторите попытку позже.", code[1]);
   return error instanceof Error && !(error instanceof TypeError) && !(error instanceof SyntaxError) && error.name !== 'TimeoutError'
@@ -51,7 +67,7 @@ function subscribeVisibility(listener: () => void) {
   return () => document.removeEventListener('visibilitychange', listener);
 }
 
-type SearchAttempt = { term: string };
+type SearchAttempt = { term: string; keep?: Partial<Record<CatalogId, CatalogResult>> };
 type SearchSnapshot = { term: string; attempt?: SearchAttempt; results: Partial<Record<CatalogId, CatalogResult>> };
 
 function OnlineResultActions({ track, saved, disabled, connected, choose }: {
@@ -70,9 +86,9 @@ function OnlineResultActions({ track, saved, disabled, connected, choose }: {
 }
 
 /** Both search surfaces share one policy and show each supported catalog as it finishes. */
-export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCatalogSearch, saved, disabled, choose, library, playLibrary, renderLibrary, remember }: CatalogSearchPreferences & {
+export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCatalogSearch, saved, disabled, choose, library, playLibrary, renderLibrary, remember, searchVk }: CatalogSearchPreferences & {
   query: string; visible: boolean; saved: ReadonlySet<string>; disabled: boolean; choose(track: OnlineTrack, action: OnlineAction): void;
-  library: Track[]; playLibrary(id: string): void; renderLibrary(tracks: Track[]): ReactNode; remember(query: string): void;
+  library: Track[]; playLibrary(id: string): void; renderLibrary(tracks: Track[]): ReactNode; remember(query: string): void; searchVk?(query: string): void;
 }) {
   const t = useText();
   const connected = useSyncExternalStore(subscribeConnection, connectionState);
@@ -80,15 +96,19 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
   const desktop = !!window.luma?.searchCommunity;
   const term = catalogQuery(query);
   const phish = Boolean(phishSongQuery(term));
-  const targets = useMemo(() => catalogTargets(desktop, phish), [desktop, phish]);
+  const directJamendo = useMusicServiceStatus('jamendo').status?.configured === true;
+  const targets = useMemo(() => catalogTargets(desktop, phish, directJamendo), [desktop, phish, directJamendo]);
   const [manual, setManual] = useState<SearchAttempt>();
   const attempt = manual?.term === term ? manual : undefined;
   // A manual request (including a retry) never carries over to later input.
   if (manual && !attempt) setManual(undefined);
   const [snapshot, setSnapshot] = useState<SearchSnapshot>();
   const active = !!term && connected && visible && foreground && (autoCatalogSearch || !!attempt);
-  const results = active && snapshot?.term === term && snapshot.attempt === attempt ? snapshot.results : undefined;
+  const results = snapshot?.term === term && snapshot.attempt === attempt ? snapshot.results : attempt?.keep;
   const settled = targets.flatMap(({ id }) => results?.[id] ?? []);
+  const indexed = results?.openverse, direct = results?.jamendo_direct;
+  const comparison = directJamendo && direct && indexed && 'tracks' in direct && 'tracks' in indexed
+    ? compareJamendo(indexed.tracks, direct.tracks) : undefined;
   const searching = active && settled.length < targets.length;
   const tracks = mergeCatalogResults(settled);
   const { bundles, bundledIds } = bundleRecordings(tracks, library.filter(({ online }) => !online));
@@ -108,14 +128,15 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
     const remote = onlineById.get(track.id);
     return remote ? <OnlineCredit track={remote} /> : <span>{track.fileName ?? t('Файл')}</span>;
   };
-  const failures = settled.filter((result) => 'error' in result);
+  const incomplete = settled.filter((result) => 'error' in result || result.issue);
+  const failures = incomplete.filter((result) => 'error' in result);
 
   useEffect(() => {
     if (!active) return;
     const request = new AbortController();
     const timeout = window.setTimeout(() => {
-      setSnapshot({ term, attempt, results: {} });
-      void searchCatalogs(term, targets, request.signal, (result) => {
+      setSnapshot({ term, attempt, results: attempt?.keep ?? {} });
+      void searchCatalogs(term, targets.filter(({ id }) => !attempt?.keep?.[id]), request.signal, (result) => {
         setSnapshot((state) => state?.term === term && state.attempt === attempt
           ? { ...state, results: { ...state.results, [result.id]: result } } : state);
       });
@@ -135,26 +156,33 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
             setSnapshot(undefined); setManual(undefined); changeAutoCatalogSearch(event.currentTarget.checked);
           }} />{t('Автопоиск')}
         </label>
-        {(!autoCatalogSearch || failures.length > 0) && <button className="icon-button catalog-request" type="button" disabled={!canRequest}
-          aria-label={searchLabel} title={searchLabel} onClick={() => { remember(query); setManual({ term }); }}><SearchIcon size={16} aria-hidden="true" /></button>}
+        {(!autoCatalogSearch || incomplete.length > 0) && <button className="icon-button catalog-request" type="button" disabled={!canRequest}
+          aria-label={searchLabel} title={searchLabel} onClick={() => {
+            remember(query);
+            const keep = incomplete.length ? Object.fromEntries(settled.filter((result) => !('error' in result) && !result.issue).map((result) => [result.id, result])) : undefined;
+            setManual({ term, keep });
+          }}><SearchIcon size={16} aria-hidden="true" /></button>}
       </div>
     </header>
     <details className="catalog-details">
       <summary><ChevronDown size={13} aria-hidden="true" />{t('Источники')}
-        {!!failures.length && <span className="catalog-failure-count">{t('Не ответили: {0}', failures.length)}</span>}
+        {!!incomplete.length && <span className="catalog-failure-count">{t('Не завершили: {0}', incomplete.length)}</span>}
       </summary>
       <ul className="catalog-sources" aria-label={t('Статус каталогов')}>
         {targets.map(({ id, name }) => {
           const row = results?.[id];
-          const error = row && 'error' in row;
-          const status = error ? t('Не ответил') : row && 'tracks' in row ? t('Записей: {0}', row.tracks.length)
-            : searching ? t('Ищем…') : null;
-          return <li key={id} data-catalog={id} data-state={error ? 'error' : row ? 'done' : searching ? 'loading' : 'idle'}>
+          const error = row && 'error' in row ? row.error : undefined;
+          const issue = error instanceof CatalogError ? error.issue : row && 'tracks' in row ? row.issue : undefined;
+          const status = error ? t(issue ? catalogIssueLabel[issue] : 'Не ответил') : row && 'tracks' in row
+            ? t(issue ? 'Часть результатов: {0}' : row.tracks.length ? 'Записей: {0}' : 'Нет совпадений', row.tracks.length) : searching ? t('Ищем…') : null;
+          return <li key={id} data-catalog={id} data-state={error ? 'error' : issue ? 'partial' : row ? 'done' : searching ? 'loading' : 'idle'}>
             <strong>{t(name)}</strong>{status && <span>{status}</span>}
-            {error && <small>{message(row.error, t)}</small>}
+            {issue ? <small>{t(catalogMessages[issue])}</small> : !!error && <small>{message(error, t)}</small>}
           </li>;
         })}
       </ul>
+      {comparison && <p className="catalog-privacy" data-jamendo-comparison>{t('Jamendo напрямую: {0} дополнительных записей · {1} совпали с выдачей Openverse.', comparison.additional, comparison.matches)}</p>}
+      {directJamendo && <p className="catalog-privacy">{t('Прямой Jamendo: воспроизведение и очередь только в текущей сессии.')}</p>}
       <p className="catalog-privacy">{t(desktop ? 'При поиске каталоги получают только текущий запрос.'
         : 'В веб-версии доступны Openverse и концертный архив Phish.in.')}</p>
       <p className="catalog-privacy">{t('Закладка сохраняет ссылку, а не аудиофайл.')}</p>
@@ -163,6 +191,12 @@ export function OnlineSearch({ query, visible, autoCatalogSearch, changeAutoCata
       {desktop && <p className="catalog-privacy"><SourceLink url={AUDIUS_LEGAL.terms}>{t('Условия API Audius')}</SourceLink>
         {' · '}<SourceLink url={AUDIUS_LEGAL.privacy}>{t('Конфиденциальность Audius')}</SourceLink></p>}
     </details>
+    {!!term && searchVk && <div className="catalog-vk-handoff">
+      <p>{t('Открытые каталоги не охватывают весь музыкальный каталог. Эту фразу можно отдельно поискать на сайте VK.')}</p>
+      <button type="button" className="button outline-button" data-catalog-vk disabled={!connected || !visible} onClick={() => { remember(query); searchVk(term); }}>
+        {t('Искать в VK Музыке')} <ArrowUpRight size={15} aria-hidden="true" />
+      </button>
+    </div>}
     {!connected && <p className="online-offline" role="status"><CloudOff size={17} />{' '}{t('Устройство вне сети. Онлайн-поиск пока недоступен.')}</p>}
     {!term && !!query.trim() && <p className="online-message">{t('Введите не менее двух символов, чтобы искать треки.')}</p>}
     {searching && !settled.length && <p className="online-message" role="status">{t('Ищем записи в каталогах…')}</p>}

@@ -1,4 +1,4 @@
-import { parseVkShareLink, vkShelfUrl } from './vk.js';
+import { parseVkShareLink, vkPlaylistUrl } from './vk.js';
 
 export const MUSIC_LINK_SCHEME = 'luma-player';
 const OPEN = `${MUSIC_LINK_SCHEME}://open`;
@@ -30,7 +30,7 @@ export function readMusicLink(value: unknown): MusicLink | undefined {
   if (!url || url.protocol !== 'https:') return;
   if (['vk.ru', 'vk.com'].includes(url.hostname)) {
     const list = parseVkShareLink(url.href);
-    if (list) return { provider: 'vk', kind: 'playlist', url: vkShelfUrl({ ...list, name: '' }) };
+    if (list) return { provider: 'vk', kind: 'playlist', url: vkPlaylistUrl(list) };
     const overlay = url.searchParams.getAll('z');
     const track = trackVK.exec(url.pathname)?.[1]
       ?? (overlay.length === 1 && /^\/(?:music|audio|audios-?\d+)?\/?$/.test(url.pathname) ? overlayVK.exec(overlay[0])?.[1] : undefined);

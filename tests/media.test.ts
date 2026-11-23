@@ -105,7 +105,10 @@ test('desktop protocol streams only indexed media and returns range metadata to 
   assert.equal((await handle(new Request('luma://app/media/audio/not-indexed'))).status, 404);
   const page = await handle(new Request('luma://app/'));
   assert.match(page.headers.get('Content-Security-Policy') ?? '', /script-src 'self'/);
-  assert.match(page.headers.get('Content-Security-Policy') ?? '', /frame-src 'none';/);
+  assert.equal(page.headers.get('Content-Security-Policy')?.split('; ').find((part) => part.startsWith('frame-src ')),
+    "frame-src 'none'");
+  assert.match(page.headers.get('Content-Security-Policy') ?? '', /frame-ancestors 'none';/);
+  assert.equal(page.headers.get('Referrer-Policy'), 'no-referrer');
   assert.equal(await page.text(), '<h1>Luma Player</h1>');
 });
 

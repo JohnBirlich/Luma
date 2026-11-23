@@ -32,9 +32,23 @@ test('Audius only offers available, ungated full streams and ignores search payl
   assert.ok(!isOnlineExternalUrl('https://audius.co/legal/api-terms?next=https://example.org'));
 });
 
+test('Audius can find a full-stream candidate beyond the old 12 results without widening entitlement', () => {
+  const filtered = Array.from({ length: 12 }, () => ({ ...audiusRecording, is_stream_gated: true, access: { stream: false }, preview: { url: 'https://example.invalid/preview' } }));
+  const later = { ...audiusRecording, id: 'QVlxV', title: 'Ambient New Start #2', user: { name: 'Ob_Sounds' },
+    duration: 344, permalink: '/Ob_sounds/ambient-new-start-2' };
+  const tracks = audiusTracks({ data: [...filtered, later] });
+  assert.deepEqual(tracks.map(({ id, title, duration, audioUrl }) => ({ id, title, duration, audioUrl })), [
+    { id: 'audius-QVlxV', title: 'Ambient New Start #2', duration: 344, audioUrl: 'luma://app/media/audius/QVlxV' },
+  ]);
+  assert.equal(commonsMp3Export(tracks[0]), false);
+  assert.equal(audiusTracks({ data: [...Array(36).fill(filtered[0]), later] }).length, 0);
+  const many = Array.from({ length: 36 }, (_, index) => ({ ...later, id: `F${100 + index}` }));
+  assert.equal(audiusTracks({ data: many }).length, 20);
+});
+
 test('Audius is bounded and throttled separately from Internet Archive', async () => {
   const query = 'Газ & jazz';
-  assert.equal(audiusSearchUrl(query).searchParams.get('limit'), '12');
+  assert.equal(audiusSearchUrl(query).searchParams.get('limit'), '36');
   const urls: URL[] = [];
   const catalog = createCommunitySearch(async (value, options) => {
     const url = new URL(value);
@@ -48,12 +62,12 @@ test('Audius is bounded and throttled separately from Internet Archive', async (
     return Response.json({ data: [audiusRecording, audiusRecording] });
   });
   const results = await Promise.allSettled([catalog.search(1, query, 'netlabels'), catalog.search(2, query, 'audius')]);
-  assert.deepEqual(results[1], { status: 'fulfilled', value: [audius] });
-  assert.equal(results[0].status, 'rejected');
-  await assert.rejects(catalog.search(3, query, 'southern_city'), /недоступен/);
+  assert.deepEqual(results[1], { status: 'fulfilled', value: { tracks: [audius] } });
+  assert.deepEqual(results[0], { status: 'fulfilled', value: { tracks: [], issue: 'quota' } });
+  assert.deepEqual(await catalog.search(3, query, 'southern_city'), { tracks: [], issue: 'quota' });
   assert.equal(urls.length, 2);
-  assert.deepEqual(await catalog.search(4, query, 'ccmixter'), [], 'an unverified catalog is not queried');
-  assert.deepEqual(await catalog.search(5, query, 'https://example.org'), []);
+  assert.deepEqual(await catalog.search(4, query, 'ccmixter'), { tracks: [] }, 'an unverified catalog is not queried');
+  assert.deepEqual(await catalog.search(5, query, 'https://example.org'), { tracks: [] });
 });
 
 test('Audius playback uses bounded official resolution, forwards ranges and never stores stream URLs', async () => {

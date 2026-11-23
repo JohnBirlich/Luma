@@ -1,22 +1,28 @@
 import { useText } from '../i18n/context';
 import type { CSSProperties, ReactNode } from 'react';
 import { AudioLines, Maximize2, Minus, Play, Radio, Repeat, Shuffle, SkipBack, SkipForward, Volume2, X } from 'lucide-react';
-import type { WidgetBackground } from '../shared/customization';
+import type { Appearance } from '../shared/customization';
 import type { Track } from '../shared/media';
 import { Artwork } from './Artwork';
+import { SceneBackground } from './SceneBackground';
+import type { ReadSpectrum } from '../player/useAudio';
 import { SeekTimeline, TransportControls, VolumeControl } from './PlaybackControls';
 import type { PlaybackProps } from './PlaybackControls';
 
-type WidgetLook = { track: Track | null; tint: string; background: WidgetBackground; macos: boolean };
+type WidgetLook = { track: Track | null; tint: string; appearance: Appearance; macos: boolean };
+type WidgetMotion = { playing?: boolean; sample?: ReadSpectrum };
 const macLights = ['close', 'minimize', 'restore'] as const;
 
-/** The widget and its settings preview share the material and layout. */
-function WidgetSurface({ track, tint, background, macos, label, preview = false, children }: WidgetLook & {
+/** The widget and preview share their material, scene and layout. */
+function WidgetSurface({ track, tint, appearance, macos, label, preview = false, playing, sample, children }: WidgetLook & WidgetMotion & {
   label: string; preview?: boolean; children: ReactNode;
 }) {
+  const { widgetBackground: background, effect, effectStrength, effectTempo, motion, audioReactive } = appearance;
   return <section className={`desktop-widget${preview ? ' widget-sample' : ''}`} aria-label={label} data-widget-layout={macos ? 'macos' : undefined}
-    data-widget-background={background} style={{ '--widget-tint': tint } as CSSProperties}>
+    data-widget-background={background} data-effect={effect === 'off' ? undefined : effect} style={{ '--widget-tint': tint } as CSSProperties}>
     {(background === 'blur' || background === 'album') && <Artwork track={track} imageUrl={track?.backdropUrl} className="widget-backdrop" />}
+    <SceneBackground effect={effect} tone={track ? tint : undefined} strength={effectStrength} tempo={effectTempo} visible={motion}
+      animate={playing} sample={audioReactive && !track?.online && playing ? sample : undefined} />
     {children}
   </section>;
 }
@@ -58,7 +64,7 @@ export function WidgetPreview(look: WidgetLook) {
   </WidgetSurface>;
 }
 
-export function DesktopWidget({ restore, controls, pending, ...look }: WidgetLook & {
+export function DesktopWidget({ restore, controls, pending, ...look }: WidgetLook & WidgetMotion & {
   restore(): void; controls: PlaybackProps; pending: boolean;
 }) {
   const t = useText();

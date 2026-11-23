@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const headers = { 'Content-Security-Policy': "frame-src 'none'" };
+
 export default defineConfig({
   base: './',
   plugins: [react()],
@@ -10,6 +12,7 @@ export default defineConfig({
   build: { assetsInlineLimit: 0 },
   server: {
     allowedHosts: ['.e2b.app'],
-    headers: { 'Content-Security-Policy': "frame-src 'none'" },
+    headers,
   },
+  preview: { allowedHosts: ['.e2b.app'], headers },
 });

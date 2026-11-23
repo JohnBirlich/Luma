@@ -6,6 +6,8 @@ type MetadataFetch = (url: string, init?: RequestInit) => Promise<Response>;
 export async function readLimitedBody(response: Response, limit: number, signal: AbortSignal) {
   if (!response.body) throw new Error('Пустой ответ.');
   const reader = response.body.getReader();
+  const abort = () => { void reader.cancel(signal.reason).catch(() => {}); };
+  signal.addEventListener('abort', abort, { once: true });
   try {
     if (Number(response.headers.get('Content-Length')) > limit) throw new Error('Слишком большой ответ.');
     const chunks: Uint8Array[] = [];
@@ -13,6 +15,7 @@ export async function readLimitedBody(response: Response, limit: number, signal:
     for (;;) {
       signal.throwIfAborted();
       const { done, value } = await reader.read();
+      signal.throwIfAborted();
       if (done) break;
       bytes += value.byteLength;
       if (bytes > limit) throw new Error('Слишком большой ответ.');
@@ -22,7 +25,7 @@ export async function readLimitedBody(response: Response, limit: number, signal:
     let offset = 0;
     for (const chunk of chunks) { output.set(chunk, offset); offset += chunk.byteLength; }
     return output.buffer;
-  } finally { void reader.cancel().catch(() => {}); }
+  } finally { signal.removeEventListener('abort', abort); void reader.cancel().catch(() => {}); }
 }
 
 async function jsonRequest(fetcher: MetadataFetch, url: string, signal: AbortSignal, post?: URLSearchParams) {

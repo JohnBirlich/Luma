@@ -17,6 +17,12 @@ import { isLyricEditionPage } from '../src/shared/lyric-editions.js';
 import { createLyricsService } from '../src/shared/lyrics-service.js';
 import { createLyricsOvhLookup } from '../src/shared/lyrics-ovh.js';
 import { DesktopLastFm, lastFmConfig } from './lastfm.js';
+import { DesktopMusicServices } from './music-services.js';
+import { bindProviderIpc } from './provider-ipc.js';
+import { isGeniusPage } from '../src/shared/genius.js';
+import { isOpenwhydSourceLink } from '../src/shared/openwhyd.js';
+import { isRadioBrowserPage } from '../src/shared/radio-browser.js';
+import { LISTENBRAINZ_ABOUT, MUSIC_SERVICE_GUIDES } from '../src/shared/music-services.js';
 import { createOnlineExporter } from './online-export.js';
 import { MAIN_MINIMUM, widgetController } from './desktop-widget.js';
 import { createMetadataService, validAcoustidClient } from '../src/shared/metadata-service.js';
@@ -29,14 +35,15 @@ import { isStationPage } from '../src/shared/radio.js';
 import { musicLaunchUrl, musicLinkArgument, readMusicLink } from '../src/shared/music-links.js';
 import { LATEST_RELEASE_API, readSignerSha256 } from '../src/shared/release-updates.js';
 import { readSharedPlaylist } from '../src/shared/playlist-share.js';
-import { LEGACY_VK_SESSION } from '../src/shared/vk.js';
+import { vkSiteEntry } from '../src/shared/vk-site.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { DesktopDiscord } from './discord-presence.js';
 import { DesktopFloatOutput } from './float-output.js';
 import { StreamCache } from './stream-cache.js';
 import { createProtocolHandler } from './protocol.js';
 import { verifyWindowsSigner, WINDOWS_VERIFIER_EXE, WindowsUpdates } from './windows-update.js';
-import { fetchAudius } from './audius-network.js';
+import { AUDIUS_MEDIA_PARTITION, createAudiusFetch } from './audius-network.js';
+import { VkSite } from './vk-site.js';
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'luma',
@@ -57,6 +64,7 @@ let changeFullscreen: ((fullscreen: boolean) => void) | undefined;
 const floatOutput = new DesktopFloatOutput(process.platform === 'win32' ? (app.isPackaged
   ? join(process.resourcesPath, 'audio', 'LumaFloat.exe') : join(app.getAppPath(), 'dist-native', 'LumaFloat.exe')) : undefined);
 const discord = new DesktopDiscord(process.platform === 'win32');
+const vkSite = new VkSite();
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -88,7 +96,8 @@ function appWindow(event: IpcMainInvokeEvent): BrowserWindow {
   return window;
 }
 
-function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo, lastfm: DesktopLastFm, cache: StreamCache) {
+function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInfo, lastfm: DesktopLastFm, cache: StreamCache, music: DesktopMusicServices) {
+  bindProviderIpc(appWindow, library, music, info.version);
   floatOutput.onLost = () => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('float:lost');
   };
@@ -101,6 +110,9 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('app:info', (event) => { appWindow(event); return info; });
   lastfm.onChange = (status) => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('lastfm:changed', status);
+  };
+  music.onChange = (service, status) => {
+    if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('music-service:changed', service, status);
   };
   discord.onChange = (status) => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('discord:changed', status);
@@ -135,6 +147,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('music-link:browser', (event, value: unknown) => {
     appWindow(event);
     const link = readMusicLink(value);
+    if (vkSiteEntry(value)) return shell.openExternal(value);
     if (!link || link.url !== value) throw new Error('Unsupported music link');
     return shell.openExternal(link.url);
   });
@@ -155,13 +168,15 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     await writeFile(filePath, JSON.stringify(playlist, null, 2), 'utf8');
     return true;
   });
-  ipcMain.handle('vk:reset', async (event) => {
-    appWindow(event);
-    // A 0.12 profile can still hold a VK login. Do not create a view or read any account data.
-    const legacy = session.fromPartition(LEGACY_VK_SESSION);
-    await legacy.clearStorageData();
-    await legacy.clearCache();
-  });
+  ipcMain.handle('vk-site:open', (event, id, url, bounds) => vkSite.open(appWindow(event), id, url, bounds));
+  ipcMain.handle('vk-site:layout', (event, id, bounds) => vkSite.layout(appWindow(event), id, bounds));
+  ipcMain.handle('vk-site:close', (event, id) => vkSite.close(appWindow(event), id));
+  ipcMain.handle('vk-site:command', (event, id, action) => vkSite.command(appWindow(event), id, action));
+  ipcMain.handle('vk-site:reset', (event) => vkSite.clear(appWindow(event), {
+    type: 'warning', title: t('Сессия VK'), message: t('Сбросить данные входа VK в Luma?'),
+    detail: t('Вход в обычном браузере и сохранённые плейлисты Luma останутся.'),
+    buttons: [t('Отмена'), t('Сбросить')], defaultId: 0, cancelId: 0,
+  }));
   const lookupLyrics = createLyricsService(net.fetch, true, info.version);
   const exportMp3 = createOnlineExporter(lookupLyrics, (...args) => t(...args));
   ipcMain.handle('lyrics:local', (event, id: unknown) => { appWindow(event); return library.lyrics(id); });
@@ -219,10 +234,14 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('online:cancel-search', (event, id: unknown) => {
     appWindow(event);
     community.cancel(id);
+    music.cancelJamendo(id);
   });
   ipcMain.handle('online:open-link', (event, url: unknown) => {
     appWindow(event);
-    if (!(isOnlineExternalUrl(url) || isStationPage(url))) throw new Error('Unsupported catalog link');
+    const allowed = (value: string) => isOnlineExternalUrl(value) || isStationPage(value) || isRadioBrowserPage(value) || isGeniusPage(value)
+      || isOpenwhydSourceLink(value) || value === LISTENBRAINZ_ABOUT
+      || Object.values(MUSIC_SERVICE_GUIDES).some((guide) => guide === value);
+    if (typeof url !== 'string' || !allowed(url)) throw new Error('Unsupported catalog link');
     return shell.openExternal(url);
   });
   ipcMain.handle('updates:check', (event) => { appWindow(event); return updates?.check() ?? { state: 'unavailable', mode: 'development' }; });
@@ -296,6 +315,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('window:widget', (event, enabled: unknown) => {
     appWindow(event);
     if (typeof enabled !== 'boolean') throw new TypeError('Expected widget state');
+    if (enabled) vkSite.close();
     return changeWidget?.(enabled) ?? false;
   });
   ipcMain.handle('window:close', (event) => appWindow(event).close());
@@ -314,7 +334,7 @@ async function createWindow() {
   owner.webContents.on('did-start-navigation', ({ isMainFrame, isSameDocument }) => {
     if (isMainFrame && !isSameDocument) { discord.stop(); void floatOutput.stop(); }
   });
-  owner.webContents.on('render-process-gone', () => { discord.stop(); void floatOutput.stop(); });
+  owner.webContents.on('render-process-gone', () => { vkSite.close(); discord.stop(); void floatOutput.stop(); });
   owner.once('closed', () => { discord.stop(); void floatOutput.stop(); });
   window = owner;
   changeWidget = widgetController(owner);
@@ -334,12 +354,11 @@ async function createWindow() {
       relaunchCommand: `"${launcher}"` });
   }
   owner.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  owner.webContents.on('will-frame-navigate', (event) => {
+  const guardNavigation = (event: Electron.Event<Electron.WebContentsWillFrameNavigateEventParams | Electron.WebContentsWillRedirectEventParams>) => {
     if (!event.isMainFrame || !isAppPage(event.url)) event.preventDefault();
-  });
-  owner.webContents.on('will-redirect', (event) => {
-    if (!event.isMainFrame || !isAppPage(event.url)) event.preventDefault();
-  });
+  };
+  owner.webContents.on('will-frame-navigate', guardNavigation);
+  owner.webContents.on('will-redirect', guardNavigation);
   owner.webContents.on('will-attach-webview', (event) => event.preventDefault());
   owner.webContents.on('did-fail-load', (_event, code, _description, _url, mainFrame) => {
     if (code === -3) return; // An intentional navigation, not a load failure.
@@ -419,11 +438,13 @@ if (!app.requestSingleInstanceLock()) {
       canRouteAudio(contents, permission, details.requestingUrl, details.isMainFrame));
     const library = await DesktopLibrary.open(app.getPath('userData'));
     const cache = await StreamCache.open(join(app.getPath('userData'), 'stream-cache'), net.fetch);
-    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache, fetchAudius));
+    const audiusFetch = createAudiusFetch(session.fromPartition(AUDIUS_MEDIA_PARTITION, { cache: false }));
+    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache, audiusFetch));
     journal.main('desktop.protocol');
     const lastfm = await DesktopLastFm.open(lastFmConfig(process.env.LUMA_LASTFM_API_KEY, process.env.LUMA_LASTFM_SECRET), net.fetch,
       join(app.getPath('userData'), 'lastfm-session.bin'), safeStorage);
-    bindIpc(library, journal, info, lastfm, cache);
+    const music = await DesktopMusicServices.open(join(app.getPath('userData'), 'music-services.bin'), safeStorage, net.fetch, info.version);
+    bindIpc(library, journal, info, lastfm, cache, music);
     powerMonitor.on('resume', () => {
       if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('player:resume');
     });

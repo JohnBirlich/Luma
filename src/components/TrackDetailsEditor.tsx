@@ -6,6 +6,7 @@ import type { TrackDetails } from '../data/track-details';
 import { cleanTrackText } from '../shared/russian';
 import type { Track } from '../shared/media';
 import { MetadataLookup } from './MetadataLookup';
+import { GeniusLookup } from './GeniusLookup';
 
 interface Props {
   track: Track;
@@ -60,6 +61,7 @@ export function TrackDetailsEditor({ track, edited, locale, save, close }: Props
           ...draft, title: candidate.title,
           ...(!titleOnly && { artist: candidate.artist, album: candidate.album ?? draft.album }),
         }))} />
+        <GeniusLookup title={draft.title} artist={draft.artist} />
         <footer className="dialog-footer cover-footer">
           <button type="button" className="button ghost-button" onClick={() => apply()} disabled={!edited}><RotateCcw size={15} />{" "}{t("Вернуть исходные")}</button>
           <button type="submit" className="button primary-button" disabled={!cleanTrackText(draft.title)}>{t("Сохранить")}</button>

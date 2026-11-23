@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { advanceColumns, advanceSpectrum, drawPrism, PRISM_TURN_SECONDS, pyramidProjection, spectrumColumns, spectrumFrames, spectrumSpan } from '../src/components/scene-art.js';
-import { CANVAS_EFFECTS, coastSpeed, isCanvasEffect } from '../src/shared/scene-motion.js';
+import { advanceColumns, advanceSpectrum, drawPrism, drawStars, PRISM_TURN_SECONDS, pyramidProjection, spectrumColumns, spectrumFrames, spectrumSpan } from '../src/components/scene-art.js';
+import { AMBIENT_EFFECTS, CANVAS_EFFECTS, coastSpeed, isCanvasEffect, sceneRuns } from '../src/shared/scene-motion.js';
 
 const peak = (band: Float32Array) => Math.max(...band);
 
@@ -103,4 +103,29 @@ test('prism rotates a square base beneath a single upright apex, independently o
   assert.notDeepEqual(geometry(1.5, 0), outline);
   assert.equal(isCanvasEffect('tunnel'), false);
   assert.equal(isCanvasEffect('mix-flow'), false, 'the mix banner uses CSS rather than a second canvas');
+});
+
+test('all requested scenes run at idle; transport visualizers do not', () => {
+  assert.equal(AMBIENT_EFFECTS.length, 15);
+  for (const effect of AMBIENT_EFFECTS) assert.ok(sceneRuns(effect, false), effect);
+  for (const effect of ['spectrum', 'columns', 'pulse'] as const) {
+    assert.equal(sceneRuns(effect, false), false, effect);
+    assert.equal(sceneRuns(effect, true), true, effect);
+  }
+  assert.equal(sceneRuns('off', true), false);
+});
+
+test('compact stars have bright visible cores and change position with the idle clock', () => {
+  const points = (time: number) => {
+    const visible: [number, number][] = [];
+    let radius = 0, x = 0, y = 0;
+    const canvas = { fillStyle: '', globalAlpha: 1, beginPath() {}, fillRect() {},
+      arc(a: number, b: number, r: number) { x = a; y = b; radius = r; },
+      fill() { if (radius >= 1 && this.globalAlpha >= .58) visible.push([x, y]); } };
+    drawStars(canvas as unknown as CanvasRenderingContext2D, 360, 188, time, 0);
+    return visible;
+  };
+  const a = points(0), b = points(3);
+  assert.ok(a.length >= 20 && b.length >= 20);
+  assert.notDeepEqual(a, b);
 });

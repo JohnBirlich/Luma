@@ -13,25 +13,33 @@ function dot(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
   ctx.beginPath(); ctx.arc(x, y, r, 0, tau); ctx.fill();
 }
 
-const starColors = ['#d9efff', '#a5b7fd', '#ffdcd1'];
-const stars = Array.from({ length: 224 }, (_, i) => {
+const starColors = ['#edf8ff', '#bbcaff', '#ffe3d4', '#c1feef'];
+const stars = Array.from({ length: 196 }, (_, i) => {
   const x = random(), depth = .15 + random() * .85;
   const y = i % 3 ? random() : .74 - .44 * x + (random() + random() - 1) * .33;
-  return { x, y, depth, phase: random() * tau, light: random(), color: starColors[i % 3] };
+  return { x, y, depth, phase: random() * tau, light: random(), color: starColors[i % starColors.length], beacon: i % 19 === 0 };
 });
 
 export function drawStars(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, energy: number) {
-  // Independent depth planes follow slightly different arcs. Bright points get round halos, not crosses.
+  // Pixel floors survive downsampling in compact panels; a sparse layer of bright beacons
+  // reveals the motion without making the entire sky sparkle at once.
   const scale = Math.min(w, h);
-  for (const { x, y, depth, phase, light, color } of stars) {
-    const px = w * fract(x + .024 * depth * Math.sin(t * .12 + phase * .1) + .0028 * t * depth);
-    const py = h * fract(y + .027 * depth * Math.cos(t * .11 + phase * .11) - .002 * t * depth);
-    const r = (.37 + depth * (light ** 4) * 1.36) * Math.max(.64, scale / 430);
-    const brightness = (.36 + light * .60) * (.83 + .17 * Math.sin(phase + t * (1 + depth)));
+  const density = scale < 96 ? 72 : scale < 155 ? 112 : scale < 240 ? 150 : stars.length;
+  for (let i = 0; i < density; i++) {
+    const { x, y, depth, phase, light, color, beacon } = stars[i];
+    const px = w * fract(x + .038 * depth * Math.sin(t * .18 + phase * .11) + .0062 * t * depth);
+    const py = h * fract(y + .032 * depth * Math.cos(t * .16 + phase * .13) - .0049 * t * depth);
+    const r = (.66 + depth * light ** 2 * 1.48 + Number(beacon) * .61) * Math.max(.94, Math.min(1.65, scale / 360));
+    const brightness = (.64 + light * .36) * (.83 + .17 * Math.sin(phase + t * (.76 + depth)));
     ctx.fillStyle = color;
-    if (r > 1.16) {
-      ctx.globalAlpha = brightness * (.12 + .1 * energy); dot(ctx, px, py, r * 3.2);
-      ctx.globalAlpha *= 1.9; dot(ctx, px, py, r * 1.72);
+    if (r > 1.28) {
+      ctx.globalAlpha = brightness * (.13 + .11 * energy); dot(ctx, px, py, 2.8 * r);
+      ctx.globalAlpha = brightness * .29; dot(ctx, px, py, 1.55 * r);
+    }
+    if (beacon) {
+      ctx.globalAlpha = brightness * .47;
+      ctx.fillRect(px - r * 2.25, py - .43, r * 4.5, .86);
+      ctx.fillRect(px - .43, py - r * 2.25, .86, r * 4.5);
     }
     ctx.globalAlpha = brightness; dot(ctx, px, py, r);
   }
@@ -66,7 +74,7 @@ export function drawAurora(ctx: CanvasRenderingContext2D, w: number, h: number, 
     }
     const rim = ctx.createLinearGradient(0, 0, w, 0);
     rim.addColorStop(0, `rgba(${light},0)`); rim.addColorStop(.46, `rgba(${light},.48)`); rim.addColorStop(1, `rgba(${light},.08)`);
-    ctx.strokeStyle = rim; ctx.lineWidth = Math.max(.8, h * .0035);
+    ctx.strokeStyle = rim; ctx.lineWidth = Math.max(1.1, h * .0039);
     ctx.beginPath();
     for (let i = 0; i <= count; i++) {
       const u = i / count;
@@ -212,7 +220,7 @@ export function drawOrbits(ctx: CanvasRenderingContext2D, w: number, h: number, 
       const rr = r * (1.18 + .042 * i + (i > 12 ? .11 : 0));
       ctx.beginPath(); ctx.ellipse(x, y, rr, rr * tilt, angle, front ? 0 : Math.PI, front ? Math.PI : tau);
       ctx.strokeStyle = i % 4 === 0 ? '#f7d6a3a0' : i > 13 ? '#96aef26c' : '#d2b7bc91';
-      ctx.lineWidth = Math.max(.85, r * (i % 4 === 0 ? .034 : .025)); ctx.stroke();
+      ctx.lineWidth = Math.max(1.02, r * (i % 4 === 0 ? .034 : .025)); ctx.stroke();
     }
   }
   function moons(front: boolean) {
@@ -304,7 +312,7 @@ export function drawPrism(ctx: CanvasRenderingContext2D, w: number, h: number, t
     ctx.strokeStyle = beam;
     ctx.beginPath(); ctx.moveTo(...from); ctx.lineTo(...to);
     ctx.lineWidth = Math.max(2.4, size * .056); ctx.globalAlpha = light * .26; ctx.stroke();
-    ctx.lineWidth = Math.max(.9, size * .013); ctx.globalAlpha = light * .89; ctx.stroke();
+    ctx.lineWidth = Math.max(1.14, size * .014); ctx.globalAlpha = light * .89; ctx.stroke();
   }
   const beamY = apex[1] + size * .96;
   const cuts = base.map(([x, y]) => apex[0] + (x - apex[0]) * ((beamY - apex[1]) / (y - apex[1])));
@@ -321,7 +329,7 @@ export function drawPrism(ctx: CanvasRenderingContext2D, w: number, h: number, t
   ctx.globalCompositeOperation = 'source-over';
 
   // A bright silhouette and ridges keep the shape readable throughout the turn.
-  ctx.lineWidth = Math.max(.8, size * .015);
+  ctx.lineWidth = Math.max(1.03, size * .016);
   ctx.strokeStyle = '#ddf4ffc0';
   for (const { a, b } of faces) { triangle(ctx, apex, a, b); ctx.stroke(); }
   ctx.fillStyle = '#effcff'; dot(ctx, ...apex, Math.max(.65, size * .017));
@@ -364,24 +372,24 @@ export function drawNotes(ctx: CanvasRenderingContext2D, w: number, h: number, t
   const gap = Math.max(3, Math.min(h * .034, w * .028));
   const noteSize = Math.min(unit * .109, w * .071);
   const paper = ctx.createLinearGradient(x(0), 0, x(1), 0);
-  paper.addColorStop(0, '#ad9df800'); paper.addColorStop(.32, '#ad9df875');
-  paper.addColorStop(.69, '#8bdafca0'); paper.addColorStop(1, '#eccbfa1a');
+  paper.addColorStop(0, '#ad9df800'); paper.addColorStop(.32, '#bcaefe9e');
+  paper.addColorStop(.69, '#a1e7fcd0'); paper.addColorStop(1, '#eccbfa1a');
   ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = paper;
   for (let line = -2; line <= 2; line++) {
     const dy = line * gap;
     ctx.beginPath(); ctx.moveTo(x(0), y(0) + dy);
     for (let i = 1; i <= 38; i++) { const p = i / 38; ctx.lineTo(x(p), y(p) + dy); }
-    ctx.globalAlpha = line === 0 ? .83 : .60; ctx.lineWidth = Math.max(.74, unit * .0032); ctx.stroke();
+    ctx.globalAlpha = line === 0 ? .83 : .60; ctx.lineWidth = Math.max(1, unit * .0034); ctx.stroke();
   }
 
   for (const note of notes) {
     const p = fract(note.start + t * note.speed);
     const px = x(p), py = y(p) + gap * (note.lane * .84 + .46 * Math.sin(note.phase + t * 1.12));
     const depth = .71 + .39 * Math.sin(p * Math.PI);
-    const scale = Math.max(3.4, noteSize * note.size * depth * (1 + energy * .11));
+    const scale = Math.max(5, noteSize * note.size * depth * (1 + energy * .11));
     const fade = Math.min(1, p * 7, (1 - p) * 7);
     ctx.save(); ctx.translate(px, py); ctx.rotate(Math.sin(note.phase + t * .54) * .13 - .095);
-    ctx.scale(scale, scale); ctx.globalAlpha = fade * (.58 + .29 * depth);
+    ctx.scale(scale, scale); ctx.globalAlpha = fade * (.69 + .27 * depth);
     ctx.fillStyle = ctx.strokeStyle = note.color;
     ctx.shadowColor = note.color; ctx.shadowBlur = Math.min(14, scale * (.37 + energy * .16));
     noteGlyph(ctx, note.type); ctx.restore();
