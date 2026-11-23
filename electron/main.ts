@@ -243,10 +243,23 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     if (typeof url !== 'string' || !allowed(url)) throw new Error('Unsupported catalog link');
     return shell.openExternal(url);
   });
+  const canUpdate = (owner: BrowserWindow) => window === owner && !owner.isDestroyed() && !owner.webContents.isDestroyed() && isAppPage(owner.webContents.getURL());
   ipcMain.handle('updates:check', (event) => { appWindow(event); return updates?.check() ?? { state: 'unavailable', mode: 'development' }; });
+  ipcMain.handle('updates:download-state', (event) => { appWindow(event); return updates?.getDownloadState() ?? { state: 'idle' }; });
+  ipcMain.handle('updates:download', (event, version: unknown) => {
+    const owner = appWindow(event);
+    return updates?.download(version, app.getPath('downloads'), () => canUpdate(owner)) ?? 'unavailable';
+  });
+  ipcMain.handle('updates:cancel-download', (event) => { appWindow(event); return updates?.cancelDownload() ?? false; });
+  ipcMain.handle('updates:reveal-download', (event) => {
+    const owner = appWindow(event);
+    return updates?.revealDownload((path) => { if (canUpdate(owner)) shell.showItemInFolder(path); }) ?? false;
+  });
+  if (updates) updates.onDownloadState = (state) => {
+    if (window && canUpdate(window)) window.webContents.send('updates:download-changed', state);
+  };
   ipcMain.handle('updates:install', async (event, version: unknown) => {
     const owner = appWindow(event);
-    const canLaunch = () => !owner.isDestroyed() && !owner.webContents.isDestroyed() && isAppPage(owner.webContents.getURL());
     const result = await updates?.install(version, async (release) => {
       const choice = await dialog.showMessageBox(owner, {
         type: 'question', title: t('Обновление Luma'), message: t('Установить Luma {0}?', release.version),
@@ -254,7 +267,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
         buttons: [t('Отмена'), t('Скачать и установить')], cancelId: 0, defaultId: 0, noLink: true,
       });
       return choice.response === 1;
-    }, canLaunch);
+    }, () => canUpdate(owner));
     if (result === 'started') setImmediate(() => app.quit());
     return result ?? 'unavailable';
   });
@@ -461,9 +474,9 @@ if (!app.requestSingleInstanceLock()) {
     if (!journal || flushing) return;
     event.preventDefault();
     flushing = true;
-    updates?.stop();
+    const updateCleanup = updates?.stop();
     journal.main('desktop.stopped');
-    void Promise.allSettled([journal.flush(), floatOutput.stop()]).finally(() => app.quit());
+    void Promise.allSettled([journal.flush(), floatOutput.stop(), updateCleanup]).finally(() => app.quit());
   });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }

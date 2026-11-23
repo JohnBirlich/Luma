@@ -1,4 +1,4 @@
-import type { InstallResult, UpdateReport } from './release-updates.js';
+import type { DownloadResult, InstallResult, UpdateDownloadState, UpdateReport } from './release-updates.js';
 import type { DiscordStatus, DiscordTrack } from './discord-presence.js';
 import type { SharedPlaylist } from './playlist-share.js';
 import type { FloatStart } from './float-output.js';
@@ -72,7 +72,15 @@ export interface DesktopBridge {
   setUiLanguage(value: UiLanguage): Promise<void>;
   getAppInfo(): Promise<AppInfo>;
   openReleases(): Promise<void>;
-  updates: { check(): Promise<UpdateReport>; install(version: string): Promise<InstallResult> };
+  updates: {
+    check(): Promise<UpdateReport>;
+    install(version: string): Promise<InstallResult>;
+    download(version: string): Promise<DownloadResult>;
+    downloadState(): Promise<UpdateDownloadState>;
+    cancelDownload(): Promise<boolean>;
+    revealDownload(): Promise<boolean>;
+    onDownloadState(callback: (state: UpdateDownloadState) => void): () => void;
+  };
   searchCommunity(id: number, query: string, source: DesktopCatalogSource): Promise<CatalogReply>;
   cancelCatalogSearch(id: number): Promise<void>;
   openOnlineLink(url: string): Promise<void>;
