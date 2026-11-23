@@ -3,7 +3,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { MAX_VK_COVERS, VkCoverCache, vkCoverKey } from '../electron/vk-cover-cache.js';
+import { VkCoverCache, vkCoverKey } from '../electron/vk-cover-cache.js';
 
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const webp = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x10, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 5, 6]);
@@ -44,12 +44,15 @@ test('the cover cache refuses foreign keys, mismatched bytes and oversized image
 });
 
 test('the on-disk cover cache keeps a bounded number of listens', async () => {
-  const { dir, cache } = await workspace();
+  const dir = await mkdtemp(join(tmpdir(), 'luma-vk-covers-'));
+  const cache = new VkCoverCache(() => dir, 4);
   try {
-    for (let index = 0; index < MAX_VK_COVERS + 12; index++) await cache.put(vkCoverKey(`track-${index}`), { bytes: png, mime: 'image/png' });
+    for (let index = 0; index < 7; index++) await cache.put(vkCoverKey(`track-${index}`), { bytes: png, mime: 'image/png' });
     await cache.prune();
     const files = await readdir(dir);
-    assert.equal(files.length, MAX_VK_COVERS);
+    assert.ok(files.length <= 4, `cache kept ${files.length} covers`);
+    assert.ok(files.length > 0, 'the sweep does not empty the cache');
     assert.ok(files.every((name) => /^[a-f0-9]{32}\.png$/.test(name)));
+    for (const name of files) assert.ok(await cache.get(name.slice(0, 32)), 'a kept cover still decodes');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

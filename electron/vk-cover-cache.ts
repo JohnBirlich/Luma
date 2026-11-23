@@ -26,9 +26,10 @@ export function vkCoverKey(url: string) {
 export class VkCoverCache {
   private ready?: Promise<void>;
   private pruning?: Promise<void>;
+  private writes = 0;
   private readonly root: () => string;
 
-  constructor(root: () => string) { this.root = root; }
+  constructor(root: () => string, private readonly limit = MAX_VK_COVERS) { this.root = root; }
 
   private open() {
     return this.ready ??= mkdir(this.root(), { recursive: true }).then(() => {}, () => {});
@@ -47,20 +48,28 @@ export class VkCoverCache {
   async put(key: string, image: VkArtwork) {
     if (!VK_COVER_KEY.test(key) || image.bytes.byteLength > MAX_VK_ARTWORK_BYTES || coverMime(image.bytes) !== image.mime) return;
     await this.open();
-    await writeFile(join(this.root(), key + TYPES[image.mime]), image.bytes).catch(() => {});
-    void this.prune();
+    const path = join(this.root(), key + TYPES[image.mime]);
+    // A scanner or the indexer can hold a fresh file for a moment on Windows.
+    await writeFile(path, image.bytes).catch(() => writeFile(path, image.bytes).catch(() => {}));
+    // A sweep is cheap but not free; every few writes is often enough to bound the folder.
+    if (++this.writes >= 32) { this.writes = 0; void this.prune(); }
   }
 
-  /** Keep the newest covers; failures never affect playback. */
+  /** Keep the newest covers; a queued sweep always sees the finished writes before it. */
   prune(): Promise<void> {
-    return this.pruning ??= (async () => {
-      try {
-        const names = (await readdir(this.root())).filter((name) => /^[a-f0-9]{32}\.(?:webp|png|jpg)$/.test(name));
-        if (names.length <= MAX_VK_COVERS) return;
-        const sized = await Promise.all(names.map(async (name) => ({ name, at: (await stat(join(this.root(), name)).catch(() => null))?.mtimeMs ?? 0 })));
-        sized.sort((a, b) => b.at - a.at);
-        await Promise.all(sized.slice(MAX_VK_COVERS).map(({ name }) => unlink(join(this.root(), name)).catch(() => {})));
-      } catch { /* a read-only cache only means the branded fallback stays */ }
-    })().finally(() => { this.pruning = undefined; });
+    const next = (this.pruning ?? Promise.resolve()).catch(() => {}).then(() => this.sweep());
+    this.pruning = next;
+    void next.finally(() => { if (this.pruning === next) this.pruning = undefined; });
+    return next;
+  }
+
+  private async sweep() {
+    try {
+      const names = (await readdir(this.root())).filter((name) => /^[a-f0-9]{32}\.(?:webp|png|jpg)$/.test(name));
+      if (names.length <= this.limit) return;
+      const sized = await Promise.all(names.map(async (name) => ({ name, at: (await stat(join(this.root(), name)).catch(() => null))?.mtimeMs ?? 0 })));
+      sized.sort((a, b) => b.at - a.at);
+      await Promise.all(sized.slice(this.limit).map(({ name }) => unlink(join(this.root(), name)).catch(() => {})));
+    } catch { /* a read-only cache only means the branded fallback stays */ }
   }
 }
