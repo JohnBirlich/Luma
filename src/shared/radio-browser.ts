@@ -90,7 +90,7 @@ export function radioBrowserServers(discovered: readonly string[]) {
 export function createRadioBrowser(fetcher: PublicApiFetch, version: string, discover: () => Promise<string[]> = async () => []) {
   const request = createPublicJsonRequest(fetcher, { spacing: 650, limit: 384 * 1024 });
   const receipt = createPublicJsonRequest(fetcher, { spacing: 1500, limit: 16 * 1024 });
-  const headers = { 'User-Agent': `Luma-Player/${version} (https://github.com/JohnBirlich/VKX-Modded)` };
+  const headers = { 'User-Agent': `Luma-Player/${version} (https://github.com/JohnBirlich/Luma)` };
   let active = false;
   let mirror = MIRROR;
   let lastResults = new Set<string>();

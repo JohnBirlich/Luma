@@ -55,10 +55,9 @@ const bridge: DesktopBridge = {
     copy: (url) => ipcRenderer.invoke('music-link:copy', url),
   },
   vkSite: {
-    open: (id, url, bounds, appearance) => ipcRenderer.invoke('vk-site:open', id, url, bounds, appearance),
+    open: (id, url, bounds) => ipcRenderer.invoke('vk-site:open', id, url, bounds),
     layout: (id, bounds, foreground) => ipcRenderer.invoke('vk-site:layout', id, bounds, foreground),
     close: (id) => ipcRenderer.invoke('vk-site:close', id),
-    setAppearance: (id, appearance) => ipcRenderer.invoke('vk-site:appearance', id, appearance),
     command: (id, action, fraction) => ipcRenderer.invoke('vk-site:command', id, action, fraction),
     reset: (id) => ipcRenderer.invoke('vk-site:reset', id),
     onState: (callback) => {

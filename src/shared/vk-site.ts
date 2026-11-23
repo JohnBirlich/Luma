@@ -11,17 +11,11 @@ export const VK_TRANSPORT = ['previous', 'toggle', 'next'] as const;
 export type VkTransport = typeof VK_TRANSPORT[number];
 export type VkPlaybackAction = VkTransport | 'pause' | 'shuffle' | 'repeat' | 'favorite' | 'volume' | 'mute';
 export type VkSiteAction = VkPlaybackAction | 'seek' | 'back' | 'reload' | 'music';
-export type VkSiteAppearance = 'standard' | 'profile' | 'minimal';
-
-export function readVkSiteAppearance(value: unknown): VkSiteAppearance | undefined {
-  return value === 'standard' || value === 'profile' || value === 'minimal' ? value : undefined;
-}
-
 export interface VkBounds { x: number; y: number; width: number; height: number }
 export interface VkPosition { position: number; duration: number; seek: boolean }
 export interface VkNowPlaying {
   title: string; artist: string; playing: boolean; previous: boolean; toggle: boolean; next: boolean; timeline?: VkPosition;
-  volume?: number; canMute?: boolean; shuffle?: boolean; repeat?: Repeat; favorite?: boolean;
+  link?: string; volume?: number; canMute?: boolean; shuffle?: boolean; repeat?: Repeat; favorite?: boolean;
 }
 export interface VkSiteState {
   host: string; phase: 'loading' | 'ready' | 'failed' | 'closed'; back: boolean; signIn: boolean; track?: VkNowPlaying;
@@ -37,17 +31,21 @@ function https(value: unknown) {
   if (url?.protocol === 'https:' && !url.username && !url.password && !url.port) return url;
 }
 
-const artworkQuery = new Set(['as', 'ava', 'c_uniq_tag', 'crop', 'cs', 'keep_aspect_ratio', 'quality', 'sign', 'size', 'stp', 'type', 'u']);
+export const VK_ARTWORK_HOST = /^sun[0-9]{1,3}(?:-[0-9]{1,4})?\.(?:userapi\.com|vkuserphoto\.ru)$/;
+const artworkQuery = new Set(['as', 'ava', 'c_uniq_tag', 'crop', 'cs', 'from', 'keep_aspect_ratio', 'quality', 'sign', 'size', 'stp', 'type', 'u']);
 
 /** Only VK's numbered image CDN and raster image routes; never arbitrary guest URLs. */
 export function vkArtworkUrl(value: unknown) {
   if (typeof value !== 'string' || value.length > 2_048 || /[^\x21-\x7e]/u.test(value)) return;
   const url = https(value);
-  if (!url || url.hash || !/^sun[0-9]{1,3}(?:-[0-9]{1,4})?\.userapi\.com$/.test(url.hostname)
+  if (!url || url.hash || !VK_ARTWORK_HOST.test(url.hostname)
     || !/^\/(?:[\w-]+\/)*[\w.-]+$/u.test(url.pathname)
-    || !(url.pathname.startsWith('/impg/') || /\.(?:jpe?g|png|webp)$/i.test(url.pathname))
     || [...url.searchParams.keys()].some(key => !artworkQuery.has(key))) return;
-  return url.href;
+  const cdnPath = url.pathname.startsWith('/impg/') || /^\/s\/v[12]\/(?:[\w-]+\/)+[\w-]+(?:\.(?:jpe?g|png|webp))?$/iu.test(url.pathname);
+  const raster = /\.(?:jpe?g|png|webp)$/i.test(url.pathname);
+  // The newer vkuserphoto.ru host is used for rendered VK thumbnails. Limit it
+  // to observed raster delivery routes instead of trusting every path on it.
+  if (url.hostname.endsWith('.vkuserphoto.ru') ? cdnPath && raster : cdnPath || raster) return url.href;
 }
 
 export function vkSiteUrl(value: unknown) {
@@ -105,6 +103,13 @@ export function readVkPosition(value: unknown): VkPosition | undefined {
   return { position: Math.max(0, Math.min(position, duration)), duration, seek: seek === true };
 }
 
+export function vkHistoryLink(value: unknown) {
+  const url = https(value);
+  if (!url || !['vk.ru', 'vk.com'].includes(url.hostname)) return;
+  const link = readMusicLink(url.href);
+  return link?.provider === 'vk' && link.kind === 'track' ? link.url : undefined;
+}
+
 export function readVkNowPlaying(value: unknown): VkNowPlaying | undefined {
   if (!value || typeof value !== 'object') return;
   const row = value as Partial<VkNowPlaying>;
@@ -115,7 +120,8 @@ export function readVkNowPlaying(value: unknown): VkNowPlaying | undefined {
   if (!(title || artist || previous || toggle || next || timeline)) return;
   const volume = vkSeekRatio(row.volume);
   const repeat = row.repeat === 'off' || row.repeat === 'one' || row.repeat === 'all' ? row.repeat : undefined;
-  return { title, artist, playing: row.playing === true, previous, toggle, next, ...(timeline && { timeline }),
+  const link = title ? vkHistoryLink(row.link) : undefined;
+  return { title, artist, ...(link && { link }), playing: row.playing === true, previous, toggle, next, ...(timeline && { timeline }),
     ...(volume !== undefined && { volume, canMute: row.canMute === true }), ...(typeof row.shuffle === 'boolean' && { shuffle: row.shuffle }),
     ...(repeat && { repeat }), ...(typeof row.favorite === 'boolean' && { favorite: row.favorite }) };
 }

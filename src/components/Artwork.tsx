@@ -7,9 +7,10 @@ interface ArtworkProps {
   imageUrl?: string;
   className?: string;
   lazy?: boolean;
+  reveal?: boolean;
 }
 
-export function Artwork({ track, imageUrl, className = '', lazy }: ArtworkProps) {
+export function Artwork({ track, imageUrl, className = '', lazy, reveal }: ArtworkProps) {
   const sources = [imageUrl, track?.artworkUrl, track?.fallbackArtworkUrl];
   const [failure, setFailure] = useState<{ group: string; urls: string[] }>();
   const group = sources.join('\n');
@@ -18,8 +19,13 @@ export function Artwork({ track, imageUrl, className = '', lazy }: ArtworkProps)
   const fallback = src === DEFAULT_ARTWORK_URL;
   const contain = track?.artworkFit === 'contain' && src === track.artworkUrl;
   return (
-    <div className={`artwork${contain ? ' artwork-logo' : ''}${fallback ? ' artwork-fallback' : ''} ${className}`} aria-hidden="true">
+    <div className={`artwork${contain ? ' artwork-logo' : ''}${fallback ? ' artwork-fallback' : ''} ${className}`} data-reveal={reveal || undefined} aria-hidden="true">
       <img key={src} src={src} alt="" draggable={false} loading={lazy ? 'lazy' : undefined} decoding="async"
+        onLoad={(event) => {
+          const image = event.currentTarget;
+          if (reveal) void image.decode().then(() => { image.dataset.loaded = ''; }, () => { image.dataset.loaded = ''; });
+          else image.dataset.loaded = '';
+        }}
         onError={() => { if (!fallback) setFailure({ group, urls: [...failed, src] }); }} />
     </div>
   );

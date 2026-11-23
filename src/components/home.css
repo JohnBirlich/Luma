@@ -263,3 +263,14 @@
 .catalog-vk-handoff p { flex: 1 1 250px; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .catalog-vk-handoff .button { min-height: 34px; }
 .catalog-sources > li[data-state='partial'] { border-color: var(--accent-border); border-style: dashed; }
+
+/* Animate the display, not the audio/table controls. A newly loaded image
+   appears over the current tint; no cover remains under another track's name. */
+@property --hero-track-tone { syntax: '<color>'; inherits: true; initial-value: #222235; }
+@keyframes current-track-appear { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+  .home-now .hero[data-track-motion] { transition: --hero-track-tone 300ms ease-out; }
+  .home-now .hero[data-track-motion] .hero-content > :is(h2, .hero-meta) { animation: current-track-appear 205ms ease-out; }
+  .home-now .artwork[data-reveal] > img:not([data-loaded]) { opacity: 0; }
+  .home-now .artwork[data-reveal] > img[data-loaded] { animation: current-track-appear 280ms ease-out; }
+}

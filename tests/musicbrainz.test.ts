@@ -38,7 +38,7 @@ test('MusicBrainz searches a fixed host without keys, guards queries, and only s
     assert.equal(target.searchParams.get('fmt'), 'json');
     assert.equal(target.searchParams.get('query'), String.raw`(isrc:RUA1B9800001 OR (recording:"A \"quoted\" \\song" AND artist:"Руки Вверх")) AND NOT video:true`);
     const headers = new Headers(init.headers);
-    assert.equal(headers.get('User-Agent'), 'LumaPlayer/1.0.0 (https://github.com/JohnBirlich/VKX-Modded)');
+    assert.equal(headers.get('User-Agent'), 'LumaPlayer/1.0.0 (https://github.com/JohnBirlich/Luma)');
     assert.equal(headers.has('Authorization'), false);
     assert.equal(init.credentials, 'omit');
     assert.equal(init.redirect, 'error');

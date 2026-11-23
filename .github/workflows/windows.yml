@@ -64,7 +64,7 @@ jobs:
         if: ${{ !inputs.live_radio && !inputs.live_catalog && !inputs.live_services }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download v1.4.0 --repo JohnBirlich/VKX-Modded --pattern Luma-Player-Setup-1.4.0-x64.exe --dir "$env:RUNNER_TEMP"
+        run: gh release download v1.4.0 --repo ${{ github.repository }} --pattern Luma-Player-Setup-1.4.0-x64.exe --dir "$env:RUNNER_TEMP"
       - run: npm run test:installed
         if: ${{ !inputs.live_radio && !inputs.live_catalog && !inputs.live_services }}
         env:

@@ -73,20 +73,20 @@ test('Luma adopts the same cosmetic CSS without running the extension or styling
   const original = new Sheet();
   const document = { adoptedStyleSheets: [original] };
   const context = { window, location, document, CSSStyleSheet: Sheet };
-  const apply = (mode: 'minimal' | 'standard', href = location.href) => runInNewContext(vkAppearanceScript(mode, href)!, context);
+  const apply = (signIn = false, href = location.href) => runInNewContext(vkAppearanceScript(href, signIn)!, context);
 
-  apply('minimal');
+  apply();
   assert.equal(document.adoptedStyleSheets.length, 2);
   assert.equal(document.adoptedStyleSheets[1].css, read('styles.css').replace('html[data-vk-music-only]', 'html'));
-  apply('standard');
+  apply(true);
   assert.deepEqual(document.adoptedStyleSheets, [original]);
-  apply('minimal');
+  apply();
   location.pathname = '/id42';
-  apply('minimal');
+  apply();
   assert.deepEqual(document.adoptedStyleSheets, [original]);
-  apply('minimal', 'https://vk.ru/audio');
+  apply(false, 'https://vk.ru/audio');
   assert.equal(document.adoptedStyleSheets.length, 1, 'a stale music injection cannot affect the profile');
   location.href = 'https://id.vk.ru/audio';
-  apply('minimal');
+  apply();
   assert.equal(document.adoptedStyleSheets.length, 1, 'VK ID is never styled');
 });

@@ -2,6 +2,8 @@ import { readDiscordPreferences } from '../shared/discord-presence';
 import type { DiscordPreferences } from '../shared/discord-presence';
 import { readSearchHistory } from '../shared/search-history';
 import { readStationIds, STATION_IDS } from '../shared/radio';
+import { readVkHistory } from '../shared/vk-history';
+import type { VkHistoryEntry } from '../shared/vk-history';
 import { readLumaPlaylists } from '../shared/luma-playlists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
 import { readUiLanguage } from '../shared/ui-language';
@@ -15,8 +17,6 @@ import { defaultAppearance, defaultPlayback, readAppearance, readPlayback } from
 import type { Appearance, PlaybackPreferences } from '../shared/customization';
 import { defaultKaraokeStyle, readKaraokeStyle } from '../shared/karaoke-style';
 import type { KaraokeStyle } from '../shared/karaoke-style';
-import { readVkSiteAppearance } from '../shared/vk-site';
-import type { VkSiteAppearance } from '../shared/vk-site';
 
 import { defaultAudioQuality, readAudioQuality } from '../shared/audio-quality';
 import type { AudioQuality } from '../shared/audio-quality';
@@ -34,7 +34,6 @@ export interface Preferences {
   autoLyrics: boolean;
   karaokeStyle: KaraokeStyle;
   autoCatalogSearch: boolean;
-  vkSiteAppearance: VkSiteAppearance;
   searchHistory: string[];
   localFallback: boolean;
   discord: DiscordPreferences;
@@ -45,6 +44,7 @@ export interface Preferences {
   favorites: string[];
   disliked: string[];
   recent: string[];
+  vkRecent: VkHistoryEntry[];
   stationIds: string[];
   playlists: LumaPlaylist[];
   onlineTracks: OnlineTrack[];
@@ -56,7 +56,7 @@ export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
   playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: '', enabled: false }, exportLyrics: false,
-  vkSiteAppearance: 'standard', resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
+  resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
 };
 const persistentIds = (ids: readonly string[]) => ids.filter((id) => !sessionCatalogId(id));
 const persistentShelf = (tracks: unknown) => readOnlineShelf(tracks).filter(({ id }) => !sessionCatalogId(id));
@@ -91,6 +91,7 @@ export function decodePreferences(value: string | null): Preferences {
       appearance: readAppearance(data.appearance),
       favorites: readFavorites(data.favorites).filter((id) => !excluded.has(id)), disliked,
       recent: readFavorites(data.recent).slice(0, RECENT_LIMIT),
+      vkRecent: readVkHistory(data.vkRecent),
       stationIds: readStationIds(data.stationIds),
       playlists: readLumaPlaylists(data.playlists),
       onlineTracks: persistentShelf(data.onlineTracks),
@@ -100,7 +101,6 @@ export function decodePreferences(value: string | null): Preferences {
       autoLyrics: data.autoLyrics === true,
       karaokeStyle: readKaraokeStyle(data.karaokeStyle),
       autoCatalogSearch: data.autoCatalogSearch !== false,
-      vkSiteAppearance: readVkSiteAppearance(data.vkSiteAppearance) ?? defaults.vkSiteAppearance,
       searchHistory: readSearchHistory(data.searchHistory),
       localFallback: data.localFallback === true,
       discord: readDiscordPreferences(data.discord),
@@ -139,7 +139,7 @@ export function encodePreferences(preferences: Preferences, current: QueueState)
   const stored = { ...preferences, resumeRepeat, resumeShuffle, queue };
   // Session-only streams never enter the persisted queue, links, history or playlists.
   return JSON.stringify({ ...stored,
-    favorites: persistentIds(stored.favorites), disliked: persistentIds(stored.disliked), recent: persistentIds(stored.recent),
+    favorites: persistentIds(stored.favorites), disliked: persistentIds(stored.disliked), recent: persistentIds(stored.recent), vkRecent: readVkHistory(stored.vkRecent),
     playlists: readLumaPlaylists(stored.playlists), onlineTracks: stored.onlineTracks.filter(({ id }) => !sessionCatalogId(id)),
     onlineRefs: activeOnlineRefs(stored).filter(({ id }) => !sessionCatalogId(id)),
   });

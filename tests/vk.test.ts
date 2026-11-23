@@ -2,20 +2,17 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseVkShareLink, vkPlaylistUrl, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { readMusicLink, musicLinkArgument } from '../src/shared/music-links.js';
-import { readVkNowPlaying, readVkPosition, readVkSiteAppearance, vkMusicPage, vkMusicSearchUrl, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
+import { readVkNowPlaying, readVkPosition, vkMusicPage, vkMusicSearchUrl, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
 
 import { decodePreferences, encodePreferences } from '../src/player/preferences.js';
 import { startQueue } from '../src/shared/queue.js';
 
-test('VK appearance is opt-in and only recognized options survive preference decoding', () => {
-  for (const option of [undefined, null, 1, {}, 'constructor', 'display: none']) {
-    assert.equal(readVkSiteAppearance(option), undefined);
-    assert.equal(decodePreferences(JSON.stringify({ vkSiteAppearance: option })).vkSiteAppearance, 'standard');
-  }
-  for (const option of ['standard', 'profile', 'minimal']) {
-    const preferences = decodePreferences(JSON.stringify({ vkSiteAppearance: option }));
-    assert.equal(readVkSiteAppearance(option), option);
-    assert.equal(decodePreferences(encodePreferences(preferences, startQueue([]))).vkSiteAppearance, option);
+test('old VK layout preferences are ignored without losing the rest of the profile', () => {
+  for (const vkSiteAppearance of ['standard', 'profile', 'minimal', { css: 'display: none' }]) {
+    const preferences = decodePreferences(JSON.stringify({ vkSiteAppearance, volume: .42 }));
+    assert.equal(preferences.volume, .42);
+    assert.ok(!('vkSiteAppearance' in preferences));
+    assert.doesNotMatch(encodePreferences(preferences, startQueue([])), /vkSiteAppearance/);
   }
 });
 

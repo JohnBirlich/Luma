@@ -18,6 +18,8 @@ import type { PlayingTrack, Track } from '../shared/media';
 import type { Appearance, LibraryLayout } from '../shared/customization';
 import { musicSearchKey, searchWords } from '../shared/russian';
 import { Artwork } from './Artwork';
+import { VkHistoryRows } from './VkHistory';
+import type { VkHistoryEntry } from '../shared/vk-history';
 import { DislikeButton, FavoriteButton } from './FavoriteButton';
 import { Signal } from './QueuePanel';
 import { SceneBackground } from './SceneBackground';
@@ -25,6 +27,7 @@ import { VinylRecord } from './VinylRecord';
 import { SeekTimeline, TransportControls, VkFavoriteControl, VolumeControl } from './PlaybackControls';
 import type { PlaybackProps } from './PlaybackControls';
 import type { ReadSpectrum } from '../player/useAudio';
+import { useVisualMotion } from '../player/useVisualMotion';
 
 interface TrackCardProps {
   track: Track;
@@ -105,6 +108,8 @@ export function NowPlayingCard(props: NowPlayingProps) {
   const t = useText();
   const { track, tint, playing, appearance } = props;
   const { hero, effect, effectStrength, motion } = appearance;
+  const reveal = useVisualMotion(motion && props.sceneVisible);
+  const trackKey = track && ('source' in track ? JSON.stringify([track.source, track.title, track.artist]) : track.id);
   const vk = !!track && 'source' in track;
   const native = vk ? null : track;
   const radio = track?.online?.source === 'broadcast';
@@ -131,16 +136,16 @@ export function NowPlayingCard(props: NowPlayingProps) {
 
         </div>
       </header>
-      <section aria-label={t("Текущий трек")} data-effect={effect} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}${featured ? ' hero-featured-art' : ''}`} style={{ '--hero-tone': tint, '--scene-tone': tint } as CSSProperties}>
-        <SceneBackground effect={effect} tone={track ? tint : undefined} strength={effectStrength} tempo={appearance.effectTempo} animate={playing} visible={motion && props.sceneVisible} sample={!vk && playing && appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
-        {showPicture && !featured && <Artwork className="hero-image" track={track} imageUrl={track?.backdropUrl} />}
-        {hero === 'vinyl' && <VinylRecord className="hero-disc" track={track} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
+      <section aria-label={t("Текущий трек")} data-effect={effect} data-track-motion={reveal || undefined} className={`hero hero-style-${hero}${effect !== 'off' ? ' hero-with-effect' : ''}${track?.backdropUrl ? ' hero-wide' : ''}${!track ? ' hero-empty' : ''}${featured ? ' hero-featured-art' : ''}`} style={{ '--hero-track-tone': tint, '--hero-tone': 'var(--hero-track-tone)' } as CSSProperties}>
+        <SceneBackground effect={effect} tone={track ? 'var(--hero-track-tone)' : undefined} strength={effectStrength} tempo={appearance.effectTempo} animate={playing} visible={motion && props.sceneVisible} sample={!vk && playing && appearance.audioReactive && !track?.online ? props.readSpectrum : undefined} />
+        {showPicture && !featured && <Artwork className="hero-image" track={track} imageUrl={track?.backdropUrl} reveal={reveal} />}
+        {hero === 'vinyl' && <VinylRecord className="hero-disc" track={track} reveal={reveal} animate={hero === 'vinyl' && motion && playing && props.sceneVisible} />}
         <div className="hero-scrim" aria-hidden="true" />
-        {centered && <Artwork track={track} className="hero-center-art" />}
+        {centered && <Artwork track={track} className="hero-center-art" reveal={reveal} />}
         <div className="hero-content">
           <div className="hero-label"><Signal playing={playing} /> {vk ? t('VK Музыка') : radio ? t("Прямой эфир") : track?.demo ? t("Демо-трек") : track?.online ? t("Онлайн-трек") : track ? t("Воспроизведение") : t("Ваша коллекция")}</div>
-          <h2 title={track?.title}>{track?.title ?? t("Время для музыки")}</h2>
-          <div className="hero-meta">
+          <h2 key={trackKey} title={track?.title}>{track?.title ?? t("Время для музыки")}</h2>
+          <div className="hero-meta" key={trackKey && `${trackKey}-meta`}>
             {track ? <>{track.artist && <span>{track.artist}</span>}{(track.online || track.album) && <>
               {track.artist && <span className="hero-dot" />}{track.online ? <OnlineCredit track={{ online: track.online }} /> : <span>{track.album}</span>}</>}</> : <span>{t("Добавьте аудиофайлы, чтобы начать.")}</span>}
           </div>
@@ -161,7 +166,7 @@ export function NowPlayingCard(props: NowPlayingProps) {
             {props.vkControls && <VolumeControl {...props.vkControls} />}
           </div>
         </div>
-        {featured && <Artwork track={track} className="hero-featured-cover" />}
+        {featured && <Artwork track={track} className="hero-featured-cover" reveal={reveal} />}
         {native && <span className="hero-index" title={t("Позиция в очереди")}><span>{formatCount(props.position, appearance.fullNumbers, t.language).padStart(2, '0')}</span><b>/</b>{formatCount(props.count, appearance.fullNumbers, t.language).padStart(2, '0')}</span>}
       </section>
     </section>
@@ -176,6 +181,8 @@ interface LibraryPageProps extends CatalogSearchPreferences, SearchHistoryProps 
   showDemos: boolean;
   busy: boolean;
   mode: 'library' | 'search' | 'favorites' | 'recent';
+  vkRecent: readonly VkHistoryEntry[];
+  openVkRecent?(url: string): void;
   initialScope?: 'all' | 'offline';
   fullNumbers: boolean;
   favorites: ReadonlySet<string>;
@@ -229,9 +236,18 @@ export function LibraryPage(props: LibraryPageProps) {
     const words = searchWords(term);
     return words.length ? indexed.filter(({ text }) => words.every((word) => text.includes(word))).map(({ track }) => track) : [];
   }, [scope, indexed, term, isSearch]);
+  const vkResults = useMemo(() => {
+    if (!isRecent) return [];
+    if (!term) return props.vkRecent;
+    const words = searchWords(term);
+    return words.length ? props.vkRecent.filter(({ title, artist }) => {
+      const key = musicSearchKey(`${title} ${artist}`);
+      return words.every((word) => key.includes(word));
+    }) : [];
+  }, [isRecent, props.vkRecent, term]);
   const isList = props.layout === 'list';
   const libraryResults = (items: Track[]) => <>
-      {(!isSearch || items.length > 0) && <div className="library-caption">
+      {(!isSearch || items.length > 0) && (items.length > 0 || !vkResults.length) && <div className="library-caption">
         <div><Disc3 size={16} />{trackCount(items.length, props.fullNumbers, t.language)}</div>
         <div className="library-actions">
           <button className="text-button library-play-all" onClick={() => { if (isSearch) props.rememberSearch(search); props.playAll(items); }} type="button" aria-label={t("Воспроизвести все")} title={t("Воспроизвести все")} disabled={!items.length}>
@@ -246,7 +262,7 @@ export function LibraryPage(props: LibraryPageProps) {
       {items.length ? <div className={isList ? 'track-list' : 'track-grid library-grid'}>
         {items.map((track) => <TrackCard key={track.id} track={track} active={track.id === props.currentId} playing={props.playing} row={isList}
           play={(id) => { if (isSearch) props.rememberSearch(search); props.play(id); }} add={props.add} editCover={props.editCover} editDetails={props.editDetails} remove={props.remove} favorite={props.favorites.has(track.id)} toggleFavorite={props.toggleFavorite} disliked={props.disliked.has(track.id)} toggleDislike={props.toggleDislike} />)}
-      </div> : isSearch && term && !results.length ? <p className="search-local-empty">{t("В медиатеке нет совпадений.")}</p> : !isSearch && <div className="empty-library">
+      </div> : isSearch && term && !results.length ? <p className="search-local-empty">{t("В медиатеке нет совпадений.")}</p> : !isSearch && !vkResults.length && <div className="empty-library">
         <div>{isRecent ? <History size={27} /> : isFavorites ? <Heart size={27} /> : scopeId === 'online' ? <Cloud size={27} /> : <Music2 size={27} />}</div><h2>{term ? t("Ничего не нашлось") : isRecent ? t("История пока пуста") : isFavorites ? t("Сохраните любимые треки") : scopeId === 'online' ? t("Нет сохранённых онлайн-треков") : t("Здесь будет ваша музыка")}</h2>
         <p>{term ? t("Попробуйте поискать по части названия или имени исполнителя.") : isRecent ? t("Прослушанные треки появятся здесь, если в настройках включена история.") : isFavorites ? t("Нажмите на сердце рядом с треком или на экране «Сейчас играет».") : scopeId === 'online' ? t("Найдите запись в онлайн-поиске или вставьте ссылку Openverse выше.") : t("Перетащите аудиофайлы в окно или выберите их на компьютере.")}</p>
         {!term && (isFavorites || isRecent ? <button type="button" className="button outline-button" onClick={props.goToLibrary}>{t("Открыть медиатеку")}{" "}<ArrowRight size={16} /></button>
@@ -260,7 +276,7 @@ export function LibraryPage(props: LibraryPageProps) {
         <div><p className="overline page-kicker"><span />{isSearch ? t("Найти трек") : t("Коллекция Luma")}</p><h1>{isRecent ? t("Недавно слушали") : isFavorites ? t("Избранное") : isSearch ? t("Поиск") : t("Медиатека")}</h1></div>
         {isLibrary && <button type="button" className="button primary-button" onClick={props.addMusic} disabled={props.busy}><Plus size={18} />{" "}{t("Добавить музыку")}</button>}
       </header>
-      {isRecent && <p className="recent-intro">{t("Локальные и онлайн-треки, которые играли в Luma. История хранится на устройстве.")}</p>}
+      {isRecent && <p className="recent-intro">{t("Локальные, онлайн-треки и записи из VK. История хранится на устройстве.")}</p>}
       {isLibrary && <div className="collection-tabs" role="group" aria-label={t("Разделы медиатеки")}>
         <button type="button" aria-pressed={scopeId === 'all'} onClick={() => { setScope('all'); setGroupKind(undefined); setGroupId(''); }}>{t("Все треки")}{" "}<small>{formatCount(props.tracks.length, props.fullNumbers, t.language)}</small></button>
         <button type="button" aria-pressed={scopeId === 'offline'} onClick={() => setScope('offline')}>{t("Без сети")}{" "}<small>{formatCount(files.length, props.fullNumbers, t.language)}</small></button>
@@ -303,6 +319,10 @@ export function LibraryPage(props: LibraryPageProps) {
           library={results} playLibrary={props.play} remember={props.rememberSearch} renderLibrary={libraryResults}
           autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} />
       </> : libraryResults(results)}
+      {vkResults.length > 0 && <section className="vk-history-section" aria-labelledby="vk-history-title">
+        <h2 id="vk-history-title">{t('История VK Музыки')}</h2>
+        <VkHistoryRows entries={vkResults} open={props.openVkRecent} />
+      </section>}
     </div>
   );
 }

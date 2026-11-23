@@ -7,9 +7,6 @@
 .vk-site { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; border: 1px solid var(--accent-border); border-radius: 13px 13px 0 0; background: var(--panel-bg); }
 .vk-site-bar { display: flex; align-items: center; gap: 4px; min-width: 0; flex: none; padding: 4px 6px; border-bottom: 1px solid var(--accent-border); }
 .vk-site-bar .icon-button { width: clamp(24px, 4vw, 32px); height: 31px; flex: none; }
-.vk-site-appearance { flex: none; max-width: 41%; height: 31px; padding: 0 5px; border: 1px solid var(--accent-border);
-  border-radius: 7px; background: var(--raised-bg); color: var(--text); font-size: 12px; text-overflow: ellipsis; }
-.vk-site-appearance:disabled { opacity: .55; }
 .vk-site-origin { display: flex; gap: 6px; align-items: center; flex: 1; min-width: 0; font-size: 12px; }
 .vk-site-origin svg { color: var(--accent-light); flex: none; }
 .vk-site-origin strong, .vk-site-origin small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

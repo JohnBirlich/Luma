@@ -33,7 +33,8 @@ import { connectionState, recordDiagnostic, subscribeConnection } from './data/d
 import { saveSharedPlaylist } from './data/playlist-share';
 import { musicLaunchUrl, readMusicLink } from './shared/music-links';
 import { vkMusicSearchUrl, vkSiteEntry } from './shared/vk-site';
-import type { VkSiteAction, VkSiteAppearance } from './shared/vk-site';
+import { rememberVkListen } from './shared/vk-history';
+import type { VkSiteAction } from './shared/vk-site';
 import { VK_MUSIC_URL } from './shared/vk';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
@@ -104,7 +105,7 @@ export default function App() {
   const [homeTab, setHomeTab] = useState<HomeTab>('home');
   const [homeQuery, setHomeQuery] = useState('');
   const leaveVkTab = useCallback(() => setHomeTab((tab) => tab === 'vk' ? 'home' : tab), []);
-  const vkSite = useVkSite(preferences.vkSiteAppearance, leaveVkTab);
+  const vkSite = useVkSite(leaveVkTab);
   const { close: stopVk, open: openVkSite, hasSession: hasVkSession, command: commandVk, pause: pauseVk } = vkSite;
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>();
   const settingsFrom = useRef<{ page: Exclude<Page, 'settings'>; top: number }>({ page: 'player', top: 0 });
@@ -190,6 +191,15 @@ export default function App() {
     && !(queueOpen && window.matchMedia('(max-width: 1079px)').matches);
   const vkEngaged = vkSite.view?.state.engaged === true;
   const vkTrack = vkEngaged ? vkSite.view?.state.track : undefined;
+  const listenedTitle = vkTrack?.title, listenedArtist = vkTrack?.artist, listenedLink = vkTrack?.link;
+  const listeningToVk = vkTrack?.playing === true;
+  useEffect(() => {
+    if (!listeningToVk || !listenedTitle || !playback.rememberRecent) return;
+    setPreferences((data) => {
+      const vkRecent = rememberVkListen(data.vkRecent, { title: listenedTitle, artist: listenedArtist, link: listenedLink });
+      return vkRecent === data.vkRecent ? data : { ...data, vkRecent };
+    });
+  }, [listeningToVk, listenedTitle, listenedArtist, listenedLink, playback.rememberRecent]);
   const vkTitle = vkTrack?.title || t('VK Музыка'), vkArtist = vkTrack?.artist ?? '';
   const vkCover = vkEngaged ? vkSite.view?.state.cover : undefined;
   const vkDisplay = useMemo<PlayingTrack>(() => ({ source: 'vk', id: 'vk-now-playing', title: vkTitle, artist: vkArtist,
@@ -375,7 +385,7 @@ export default function App() {
   }, [expireSleep, hasVkSession, next, playback]);
   const cancelTransitions = player.cancelTransitions;
   useEffect(() => {
-    if (!playback.autoNext || !playback.crossfade) {
+    if (!playback.crossfade) {
       transition.current = noTransition;
       cancelTransitions();
       return;
@@ -384,7 +394,7 @@ export default function App() {
       seconds: playback.crossfade,
       next(track) {
         const state = queueRef.current;
-        if (state.currentId !== track.id || hasVkSession() || expireSleep()) return;
+        if (!playback.autoNext || state.currentId !== track.id || hasVkSession() || expireSleep()) return;
         return byId.get(adjacentId(state, 1, true) ?? '');
       },
       advance(id) { commit({ ...queueRef.current, currentId: id }); },
@@ -801,8 +811,6 @@ export default function App() {
     navigate('player');
     selectHomeTab('radio');
   }, [navigate, selectHomeTab]);
-  const changeVkAppearance = useCallback((vkSiteAppearance: VkSiteAppearance) =>
-    setPreferences((data) => ({ ...data, vkSiteAppearance })), []);
   const searchVk = useCallback((query: string) => {
     const url = vkMusicSearchUrl(query);
     if (url) openVk(url);
@@ -885,13 +893,13 @@ export default function App() {
       <main className={`main-pane${vkVisible ? ' vk-pane' : ''}`} ref={scrollArea}>
         <div key={basePage} className="page-body" hidden={widget || page === 'settings'}>
         {basePage === 'player' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
-          <HomePage tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
+          <HomePage tracks={collection} recent={recent} vkRecent={preferences.vkRecent} openRecent={() => navigate('recent')}
+            openVkRecent={window.luma?.vkSite && connected ? openVk : undefined} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
             tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={homeVisible}
             vkSite={vkVisible ? vkSite : undefined} closeVk={closeVk} searchVk={window.luma?.vkSite ? searchVk : undefined}
-            vkAppearance={preferences.vkSiteAppearance} changeVkAppearance={changeVkAppearance}
             busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} tuneDiscoveredStation={tuneDiscoveredStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
             openLibrary={goToLibrary} addMusic={choose} openMusicLink={() => setMusicDialog({})}
@@ -914,6 +922,7 @@ export default function App() {
             visible={page === basePage && !widget && !modalOpen && !presentationOpen}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
+            vkRecent={preferences.vkRecent} openVkRecent={window.luma?.vkSite && connected ? openVk : undefined}
             mode={basePage === 'favorites' || basePage === 'search' || basePage === 'recent' ? basePage : 'library'} favorites={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
             chooseOnline={chooseOnline} searchVk={window.luma?.vkSite ? searchVk : undefined} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openHome={() => navigate('player')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
         </div>
@@ -926,9 +935,9 @@ export default function App() {
             discord={preferences.discord} changeDiscord={(discord) => setPreferences((data) => ({ ...data, discord }))}
             sleepDeadline={sleepDeadline} changeSleepTimer={changeSleepTimer} localFallback={preferences.localFallback}
             toggleLocalFallback={() => setPreferences((data) => ({ ...data, localFallback: !data.localFallback }))}
-            previewTrack={current} tint={appearance.coverColors ? localTone : theme['--accent']} localCount={localTracks.length} recentCount={preferences.recent.length}
+            previewTrack={current} tint={appearance.coverColors ? localTone : theme['--accent']} localCount={localTracks.length} recentCount={preferences.recent.length + preferences.vkRecent.length}
             volumeControls={localControls} eqEnabled={preferences.equalizer.enabled} openEqualizer={openEqualizer} openRecent={() => navigate('recent')}
-            clearRecent={() => setPreferences((data) => ({ ...data, recent: [] }))} openDiagnostics={() => navigate('diagnostics')} changeAppearance={changeAppearance}
+            clearRecent={() => setPreferences((data) => ({ ...data, recent: [], vkRecent: [] }))} openDiagnostics={() => navigate('diagnostics')} changeAppearance={changeAppearance}
             changePlayback={(playback) => setPreferences((data) => ({ ...data, playback }))} toggleDemos={toggleDemos}
             changeQuality={(audioQuality) => setPreferences((data) => ({ ...data, audioQuality }))}
             toggleLyrics={(option) => setPreferences((data) => ({ ...data, [option]: !data[option] }))}
@@ -955,6 +964,7 @@ export default function App() {
       <audio ref={player.ref} crossOrigin="anonymous" preload="metadata" />
       <audio ref={player.blendRef} data-blend-audio crossOrigin="anonymous" preload="none" />
       <audio ref={player.streamRef} data-online-audio preload="none" />
+      <audio ref={player.streamBlendRef} data-online-blend-audio preload="none" />
       <input type="file" ref={fileInput} hidden accept={AUDIO_ACCEPT} multiple onChange={(event) => {
         handleFiles(Array.from(event.currentTarget.files ?? []));
         event.currentTarget.value = '';

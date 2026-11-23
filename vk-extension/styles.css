@@ -9,6 +9,8 @@
     :is(#page_header_cont, #page_header, #top_nav) a:is([href="/join"], [href^="/join?"], [href="https://vk.ru/join"], [href="https://vk.com/join"])
   ))) {
     :scope { --vk-music-only-gutter: clamp(6px, 1vw, 16px); }
+    /* Do not anchor the scroll position to the compact bar as it appears. */
+    :scope:where(html:not([data-vk-music-only]) body) { overflow-anchor: none; }
     :scope, #layout_wrapper_root {
       --spa-layout-with-scrollbar-width: 100% !important;
       --spa-layout-width: 100% !important;
@@ -37,16 +39,16 @@
        Only style the outermost shell. Keep hidden controls measurable for Luma's
        transport fallback; don't keep any of the general header interactive. */
     :is(#page_header_cont, #page_header, #top_nav):not(:is(#page_header_cont, #page_header, #top_nav) *, #page_body *) {
-      &:not(:has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"]))),
+      &:not(:has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player"]))),
       body:is(
-        html[data-luma-vk-inline-player] body,
+        html:not([data-vk-music-only]):is([data-luma-vk-inline-player], :not([data-luma-vk-compact-player])) body,
         html[data-vk-music-only] body:has(#page_body :is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"]):not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *))
       ) & {
         position: fixed !important; opacity: 0 !important; interactivity: inert !important;
         & * { interactivity: inert !important; }
       }
-      &:has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"])):not(body:is(
-        html[data-luma-vk-inline-player] body,
+      &:has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player"])):not(body:is(
+        html:not([data-vk-music-only]):is([data-luma-vk-inline-player], :not([data-luma-vk-compact-player])) body,
         html[data-vk-music-only] body:has(#page_body :is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"]):not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *))
       ) *) {
         position: relative !important; inset: auto !important; width: auto !important; height: auto !important;
@@ -61,15 +63,15 @@
           height: auto !important; margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;
         }
         & :is(#page_header, #top_nav) { display: flex !important; align-items: center !important; background: transparent !important; }
-        & :has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"])),
-        & :is(#top_audio_player, [class*="TopNavigation__player--"]) {
+        & :has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player"])),
+        & :is(#top_audio_player, [class*="TopNavigation__player"]) {
           flex: 1 1 auto !important; min-width: 0 !important; max-width: 100% !important;
         }
         /* Keep just the music subtree and its ancestors, even with extra wrappers. */
         & :not(
-          :is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"]),
-          :is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"]) *,
-          :has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"]))
+          :is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player"]),
+          :is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player"]) *,
+          :has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player"]))
         ) { display: none !important; }
       }
     }
