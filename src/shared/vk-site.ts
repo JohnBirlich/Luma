@@ -21,7 +21,7 @@ export interface VkNowPlaying {
 }
 export interface VkSiteState {
   host: string; phase: 'loading' | 'ready' | 'failed' | 'closed'; back: boolean; signIn: boolean; track?: VkNowPlaying;
-  /** Ephemeral Luma image URL; no VK URL or authentication data crosses IPC. */
+  /** Ephemeral Luma image URL; no page URL or authentication data crosses IPC. */
   cover?: string;
   /** Playback has started in this signed-in music document. It stays selected when paused. */
   engaged?: boolean;
