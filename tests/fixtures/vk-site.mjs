@@ -3,8 +3,13 @@ export const vkFixtureAuth = `https://id.vk.ru/auth?state=${vkFixturePrivate}`;
 export const vkFixtureTracks = ['Туманная гавань', 'Северный свет'];
 export const vkFixtureArtist = 'VK · Тестовый исполнитель';
 
+export const vkPublicPage = `<!doctype html><meta charset="utf-8"><header id="page_header"><a href="/join">Регистрация</a></header>
+  <main>Публичный каталог до входа</main>`;
+export const vkQrPage = `<!doctype html><meta charset="utf-8"><h1 id="fixture-qr">Вход ВКонтакте по QR-коду</h1>
+  <a id="fixture-auth" href="${vkFixtureAuth}">Войти другим способом</a>`;
+export const vkFixtureReturn = 'https://vk.ru/feed?fixture=signed-in';
 export const vkSignInPage = `<!doctype html><meta charset="utf-8"><label>Тестовая форма входа <input id="fixture-password" type="password" value="${vkFixturePrivate}"></label>
-  <a id="fixture-sign-in" href="https://vk.ru/audio?fixture=signed-in">Продолжить</a>`;
+  <a id="fixture-sign-in" href="${vkFixtureReturn}">Продолжить</a>`;
 
 export function vkPlayerPage(audioPath) {
   return `<!doctype html><meta charset="utf-8"><title>VK Music fixture</title>
@@ -36,5 +41,36 @@ export function vkPlayerPage(audioPath) {
       document.querySelector('#fixture-previous').onclick = () => { index = 0; update(); };
       media.onplay = media.onpause = update;
       update();
+    </script>`;
+}
+
+// Native media-session controls only, or just a detached Audio (no global player DOM).
+// Real MP3 bytes arrive through the isolated fixture protocol; no remote audio is used.
+export function vkHeadlessPlayerPage(audioPath, handlers) {
+  return `<!doctype html><meta charset="utf-8"><h1>Каталог VK</h1>
+    <button id="fixture-start-song">Запустить запись</button>
+    <script>
+      const audio = window.fixtureAudio = new Audio(${JSON.stringify(audioPath)});
+      audio.preload = 'metadata';
+      const media = navigator.mediaSession;
+      const tracks = ${JSON.stringify(vkFixtureTracks)};
+      let index = 0;
+      function select() { media.metadata = new MediaMetadata({ title: tracks[index], artist: ${JSON.stringify(vkFixtureArtist)} }); }
+      function time() {
+        media.playbackState = audio.paused ? 'paused' : 'playing';
+        if (Number.isFinite(audio.duration)) media.setPositionState({ duration: audio.duration, position: audio.currentTime });
+      }
+      select();
+      if (${handlers}) {
+        media.setPositionState({ duration: 90, position: 1 });
+        media.playbackState = 'paused';
+        for (const event of ['loadedmetadata', 'playing', 'pause', 'seeked']) audio.addEventListener(event, time);
+        media.setActionHandler('play', ({ action }) => { window.fixtureAction = action; void audio.play().catch(() => {}); });
+        media.setActionHandler('pause', ({ action }) => { window.fixtureAction = action; audio.pause(); });
+        media.setActionHandler('previoustrack', ({ action }) => { window.fixtureAction = action; index = 0; select(); time(); });
+        media.setActionHandler('nexttrack', ({ action }) => { window.fixtureAction = action; index = 1; select(); time(); });
+        media.setActionHandler('seekto', ({ action, seekTime }) => { window.fixtureAction = action; audio.currentTime = seekTime; });
+      }
+      document.querySelector('#fixture-start-song').onclick = () => void audio.play().catch(() => {});
     </script>`;
 }

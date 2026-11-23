@@ -1,3 +1,4 @@
+import { APP_NAME } from '../shared/app-info';
 import { useText } from '../i18n/context';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -48,14 +49,14 @@ export function MenuPage(props: MenuPageProps) {
   return (
     <div className="page menu-page">
       <header className="page-header">
-        <div><p className="overline page-kicker"><span />Luma Player</p><h1>{about ? t("О приложении") : t("Меню")}</h1></div>
+        <div><p className="overline page-kicker"><span />{APP_NAME}</p><h1>{about ? t("О приложении") : t("Меню")}</h1></div>
         {about && <button type="button" className="button outline-button" onClick={() => setAbout(false)}><ArrowLeft size={16} />{" "}{t("В меню")}</button>}
       </header>
       <div className="menu-body">
         {about ? <About /> : <>
           <section className="menu-profile" aria-label={t("Профиль Luma")}>
             <div className="menu-profile-logo"><AudioLines size={27} strokeWidth={1.85} /></div>
-            <div><h2>Luma Player</h2><p>{trackCount(props.localCount, props.fullNumbers, t.language)}{" "}{t("с устройства")}</p></div>
+            <div><h2>{APP_NAME}</h2><p>{trackCount(props.localCount, props.fullNumbers, t.language)}{" "}{t("с устройства")}</p></div>
             <span className="menu-profile-status"><i />{" "}{t("Локальный профиль")}</span>
           </section>
           <MenuGroup label={t("Коллекция")}>

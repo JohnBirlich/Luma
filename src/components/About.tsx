@@ -2,7 +2,7 @@ import { useText } from '../i18n/context';
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, AudioLines, FolderClosed, ShieldCheck } from 'lucide-react';
 import { getAppInfo } from '../data/app-info';
-import { RELEASES_URL, runtimeMode } from '../shared/app-info';
+import { APP_NAME, RELEASES_URL, runtimeMode } from '../shared/app-info';
 import type { AppInfo } from '../shared/app-info';
 
 export function useInstalledBuild() {
@@ -34,14 +34,14 @@ export function About() {
   const info = useInstalledBuild();
 
   return <>
-    <section className="menu-profile about-identity" aria-label={t("Версия и сведения о Luma Player")}>
+    <section className="menu-profile about-identity" aria-label={t("Версия и сведения о Luma")}>
       <div className="menu-profile-logo"><AudioLines size={29} strokeWidth={1.8} /></div>
-      <div><h2>Luma Player</h2><p>{t("Музыкальный плеер для Windows с локальной медиатекой.")}</p></div>
+      <div><h2>{APP_NAME}</h2><p>{t("Музыкальный плеер для Windows с локальной медиатекой.")}</p></div>
       <div className="about-build"><strong>{info ? t("Версия {0}", info.version) : info === null ? t("Версия недоступна") : t("Читаем версию…")}</strong>{info && <span>{t(runtimeMode[info.mode])}</span>}</div>
     </section>
     <section className="menu-about about-description">
       <div><FolderClosed size={18} /><div><h2>{t("Своя музыка, даже без сети")}</h2><p>{t("Слушайте файлы с устройства, собирайте очередь и избранное, настраивайте эквалайзер и экран «Сейчас играет».")}</p></div></div>
-      <div><ShieldCheck size={18} /><div><h2>{t("Ваши данные остаются у вас")}</h2><p>{t("Медиатека и миксы остаются на устройстве. Поиск в каталогах, тексты и Last.fm используют сеть только по запросу или после включения. Ссылки на сторонние сайты открываются в обычном браузере.")}</p></div></div>
+      <div><ShieldCheck size={18} /><div><h2>{t("Ваши данные остаются у вас")}</h2><p>{t("Медиатека и миксы остаются на устройстве. Поиск в каталогах, тексты и Last.fm используют сеть только по запросу или после включения. Для входа в VK используется официальный сайт внутри Luma.")}</p></div></div>
       <footer><span>{t("Открытый исходный код · GPL‑3.0")}</span>
         <ReleaseLink />
       </footer>

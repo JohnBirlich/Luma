@@ -34,7 +34,7 @@ test('local journal keeps only recent entries and tolerates damaged or stale rec
 test('diagnostic report includes version, system and connection, without raw user payloads', () => {
   const entries = [logEntry('library.opened', { tracks: 42, ms: 120, location: '/secret.mp3' }, 'renderer', 0)!];
   const text = diagnosticsReport({ entries, storage: 'file', environment: { version: '0.6.0', mode: 'desktop', runtime: 'Electron 45', system: 'Windows 11', online: false } });
-  assert.match(text, /Luma Player 0\.6\.0/);
+  assert.match(text, /Luma 0\.6\.0/);
   assert.match(text, /Система: Windows 11/);
   assert.match(text, /устройство вне сети/);
   assert.match(text, /1970-01-01T00:00:00\.000Z.*library\.opened.*Время: 120 мс.*Треков: 42/);

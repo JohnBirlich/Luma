@@ -34,6 +34,11 @@ function visibleMusicPlayer(action: VkTransport | null) {
       }
     }
   };
+  // Signed-out VK Music can render at /audio without redirecting. Look only at the
+  // public global navigation, not at profiles, form fields, or authentication storage.
+  const signedOut = [...document.querySelectorAll(
+    ':is(header,#page_header,[class*="TopNavigation__"]) a[href="/join"], :is(header,#page_header,[class*="TopNavigation__"]) a[href="https://vk.ru/join"], :is(header,#page_header,[class*="TopNavigation__"]) a[href="https://vk.com/join"]',
+  )].some(shown);
   const controls = {
     previous: pick('.top_audio_player_prev, .audio_page_player_prev, .audio_player_btn_prev', (node) => previousLabel.test(label(node)),
       'svg:is([class*="vkuiIcon--skip_previous_"],[class*="vkuiIcon--skip_back_"])'),
@@ -71,7 +76,7 @@ function visibleMusicPlayer(action: VkTransport | null) {
     pauseLabel.test(label(controls.toggle)) || !!controls.toggle?.querySelector(pauseIcon)
     || roots.some((root) => root.matches('.top_audio_player_playing, .audio_page_player_playing, ._audio_page_player_playing')
       || !!root.querySelector('.audio_page_player_play.playing, .audio_player_btn_play.playing, .audio_player_btn_playing'))));
-  return { title, artist, playing, previous: !!controls.previous, toggle: !!controls.toggle, next: !!controls.next };
+  return { signedOut, title, artist, playing, previous: !!controls.previous, toggle: !!controls.toggle, next: !!controls.next };
 }
 
 export const inspectVkPlayer = (action: VkTransport | null = null) => `(${visibleMusicPlayer.toString()})(${JSON.stringify(action)})`;

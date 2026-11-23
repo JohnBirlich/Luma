@@ -45,8 +45,8 @@ const bridge: DesktopBridge = {
     open: (id, url, bounds) => ipcRenderer.invoke('vk-site:open', id, url, bounds),
     layout: (id, bounds) => ipcRenderer.invoke('vk-site:layout', id, bounds),
     close: (id) => ipcRenderer.invoke('vk-site:close', id),
-    command: (id, action) => ipcRenderer.invoke('vk-site:command', id, action),
-    reset: () => ipcRenderer.invoke('vk-site:reset'),
+    command: (id, action, fraction) => ipcRenderer.invoke('vk-site:command', id, action, fraction),
+    reset: (id) => ipcRenderer.invoke('vk-site:reset', id),
     onState: (callback) => {
       const listener = (_event: IpcRendererEvent, id: number, state: VkSiteState) => callback(id, state);
       ipcRenderer.on('vk-site:state', listener);

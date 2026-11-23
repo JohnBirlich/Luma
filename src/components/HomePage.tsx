@@ -1,6 +1,7 @@
+import { APP_NAME } from '../shared/app-info';
 import { memo, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AudioLines, ChevronRight, Headphones, Link2, ListEnd, ListMusic, Play, Plus, Search, Settings2, X } from 'lucide-react';
+import { AudioLines, ChevronRight, Headphones, Link2, ListEnd, Play, Plus, Search, Settings2, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { Track } from '../shared/media';
 import { makeMix } from '../shared/mix';
@@ -60,8 +61,6 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   openPlaylistImport(): void;
   openMusicLink(): void;
   vkUrl?: string;
-  vkAvailable: boolean;
-  openVk(url: string): void;
   searchVk?(query: string): void;
   closeVk(): void;
   sharePlaylist(title: string, tracks: readonly Track[]): void;
@@ -69,7 +68,6 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   openFavorites(): void;
   chooseOnline(track: OnlineTrack, action: OnlineAction): void;
   openLibrary(): void;
-  openMixes(): void;
   addMusic(): void;
 }
 
@@ -79,7 +77,7 @@ function Updates({ tracks, play, currentId, playing }: Pick<HomeProps, 'tracks' 
   const latest = useMemo(() => tracks.filter(({ demo, online }) => !demo && !online).slice(-9).reverse(), [tracks]);
   return <>
     <section className="hub-shelf hub-version"><div className="hub-version-mark"><AudioLines size={27} /></div>
-      <div><p className="overline">LUMA PLAYER</p><h2>{info ? t('Версия {0}', info.version) : info === null ? t('Версия недоступна') : t('Читаем версию…')}</h2>
+      <div><p className="overline">{APP_NAME}</p><h2>{info ? t('Версия {0}', info.version) : info === null ? t('Версия недоступна') : t('Читаем версию…')}</h2>
         <UpdatesPanel /></div>
     </section>
     {latest.length > 0 && <Shelf title={t('Недавно добавлено')}><TrackRows tracks={latest} play={play} currentId={currentId} playing={playing} strip /></Shelf>}
@@ -89,7 +87,7 @@ function Updates({ tracks, play, currentId, playing }: Pick<HomeProps, 'tracks' 
 export const HomePage = memo(function HomePage(props: HomeProps) {
   const t = useText();
   const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary } = props;
-  const { tab, query, setQuery, selectTab, vkUrl, vkAvailable, openVk, closeVk } = props;
+  const { tab, query, setQuery, selectTab, vkUrl, closeVk } = props;
   const vkTab = tab === 'vk';
   const [composing, setComposing] = useState(false);
   const [tune, setTune] = useState(false);
@@ -141,7 +139,6 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
           aria-label={t('Импорт из сервисов')} title={t('Импорт из сервисов')}><ListEnd size={18} aria-hidden="true" /></button>
         <button type="button" className="icon-button" data-open-music-link aria-haspopup="dialog" onClick={props.openMusicLink}
           aria-label={t('Открыть музыкальную ссылку')} title={t('Открыть музыкальную ссылку')}><Link2 size={17} /></button>
-        <button type="button" className="icon-button" onClick={props.openMixes} title={t('Миксы Luma')} aria-label={t('Миксы Luma')}><ListMusic size={18} /></button>
       </div></div>
     </header>
     {!vkTab && <SearchHistory history={props.searchHistory} select={(value) => { setQuery(value); props.rememberSearch(value); formInput.current?.focus(); }} clear={props.clearSearchHistory} />}
@@ -197,7 +194,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       </>}
       {tab === 'radio' && <RadioStations saved={props.stationIds} activeId={currentId} loading={props.loading} playing={playing} busy={props.busy}
         connected={connected} toggleSave={props.saveStation} play={play} tuneDiscovered={props.tuneDiscoveredStation} />}
-      {tab === 'vk' && <VkSitePanel url={vkUrl} connected={connected} available={vkAvailable} open={openVk} close={closeVk} />}
+      {tab === 'vk' && <VkSitePanel url={vkUrl} connected={connected} close={closeVk} />}
       {tab === 'updates' && <Updates tracks={tracks} {...rows} />}
     </>}
     {!vkTab && <footer className="hub-footer"><Headphones size={14} />{t('Для миксов Luma не нужен аккаунт.')}</footer>}

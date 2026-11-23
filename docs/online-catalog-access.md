@@ -19,11 +19,11 @@
 
 ## Текст запроса на английском
 
-**Subject:** Luma Player — API access for full-track playback without a listener subscription
+**Subject:** Luma — API access for full-track playback without a listener subscription
 
 Hello,
 
-I’m working on [Luma Player](https://github.com/JohnBirlich/VKX-Modded), an open-source Windows desktop player. Can we use your official API to search eligible recordings and play them in full, on demand, in Luma without requiring a paid subscription for the listener?
+I’m working on [Luma](https://github.com/JohnBirlich/VKX-Modded), an open-source Windows desktop player. Can we use your official API to search eligible recordings and play them in full, on demand, in Luma without requiring a paid subscription for the listener?
 
 The proposed integration would clearly credit your service and link to the source. Audio would play in Luma’s player, including when the window is minimized. The same queue can contain the user’s own files and tracks from other authorized sources, played one at a time without mixing. We are not requesting downloads, offline copies, or use of any restricted tracks.
 

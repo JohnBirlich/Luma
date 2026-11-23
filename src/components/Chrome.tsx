@@ -2,6 +2,7 @@ import { useText } from '../i18n/context';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AudioLines, Bug, Copy, Heart, House, ListMusic, Menu, Minus, Music2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Search, Settings2, SlidersHorizontal, Square, X } from 'lucide-react';
 
+import { APP_NAME } from '../shared/app-info';
 import { formatCount } from '../shared/customization';
 import { connectionState, subscribeConnection } from '../data/diagnostics';
 
@@ -47,9 +48,9 @@ export function TitleBar({ openSettings, settingsActive, glass, addMusic, busy, 
   return (
     <header className={`title-bar${api ? ' native-title-bar' : ''}`}>
       {glass && (windowButtons ?? <span className="mac-lights" aria-hidden="true"><i /><i /><i /></span>)}
-      <div className="wordmark" aria-label="Luma Player">
+      <div className="wordmark" aria-label={APP_NAME}>
         <div className="brand-mark" aria-hidden="true"><AudioLines size={20} strokeWidth={2.05} /></div>
-        <strong>Luma<span> Player</span></strong>
+        <strong>{APP_NAME}</strong>
       </div>
       <div className="title-actions">
         {!glass && <RadioShortcut place="title" openRadio={openRadio} radioActive={radioActive} />}

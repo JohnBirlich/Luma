@@ -1,3 +1,4 @@
+import { APP_NAME } from '../shared/app-info';
 import { useText } from '../i18n/context';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, RefObject } from 'react';
@@ -82,7 +83,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
           <button type="button" className="icon-button immersive-queue-toggle" onClick={karaoke ? () => setKaraokeQueue(!karaokeQueue) : props.toggleQueue}
             aria-expanded={queueVisible} aria-controls={queueVisible ? 'immersive-upcoming' : undefined} aria-label={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}
             title={queueVisible ? t("Скрыть следующие треки") : t("Показать следующие треки")}><ListMusic size={20} /></button>
-          {karaoke ? <div ref={setKaraokeTools} /> : <div className="immersive-brand" aria-hidden="true"><AudioLines size={19} /><span>Luma Player</span></div>}
+          {karaoke ? <div ref={setKaraokeTools} /> : <div className="immersive-brand" aria-hidden="true"><AudioLines size={19} /><span>{APP_NAME}</span></div>}
         </div>
       </header>
       <div className="immersive-scroll">{karaoke ? <div className={`karaoke-grid${queueVisible ? ' karaoke-with-queue' : ''}`}>

@@ -1,27 +1,25 @@
-.vk-site, .vk-site-intro { border: 1px solid var(--accent-border); border-radius: 15px; background: var(--panel-bg); overflow: hidden; }
-.vk-site-intro { padding: clamp(16px, 3vw, 28px); display: grid; gap: 16px; background: radial-gradient(ellipse at 90% 0%, var(--accent-fill), transparent 68%), var(--panel-bg); }
-.vk-site-intro > header { display: flex; gap: 13px; align-items: center; }
-.vk-site-intro h2 { font: 800 25px/1.14 var(--display); }
-.vk-site-intro .overline { color: var(--accent-light); margin-bottom: 4px; }
-.vk-site-intro p, .vk-site-error p { color: var(--muted); max-width: 60ch; font-size: 13px; line-height: 1.55; }
-.vk-site-mark { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 10px; color: var(--accent-light); background: var(--accent-fill); }
-.vk-site-actions, .vk-site-link { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
-.vk-site-link { border-top: 1px solid var(--accent-border); padding-top: 13px; }
-.vk-site-link label { flex: 1 1 220px; display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
-.vk-site-link input { width: 100%; min-width: 0; height: 38px; border: 1px solid var(--accent-border); border-radius: 8px; background: var(--stage-bg); color: var(--text); padding: 0 10px; font: inherit; }
+.vk-site { border: 1px solid var(--accent-border); border-radius: 15px; background: var(--panel-bg); overflow: hidden; }
 .vk-site-bar, .vk-site-transport { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 5px 8px; border-bottom: 1px solid var(--accent-border); }
 .vk-site-bar .icon-button, .vk-site-transport .icon-button { width: 32px; height: 31px; flex: none; }
 .vk-site-origin { display: flex; gap: 6px; align-items: center; flex: 1; min-width: 0; font-size: 12px; }
 .vk-site-origin svg { color: var(--accent-light); flex: none; }
 .vk-site-origin strong, .vk-site-origin small, .vk-site-track > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vk-site-origin small, .vk-site-track small { color: var(--muted); }
+.vk-site-mark { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 9px; color: var(--accent-light); background: var(--accent-fill); }
 .vk-site-track { display: grid; flex: 1; min-width: 0; margin-inline: 4px 8px; font-size: 13px; line-height: 1.25; }
-.vk-site-transport .vk-site-mark { width: 32px; height: 32px; }
 .vk-site-transport [data-vk-action='toggle']:not(:disabled) { color: var(--accent-light); background: var(--accent-fill); }
-.vk-site-slot { height: clamp(190px, calc(100dvh - 300px), 700px); background: var(--stage-bg); }
+.vk-site-login { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-bottom: 1px solid var(--accent-border); font-size: 13px; }
+.vk-site-login strong { color: var(--text); }
+.vk-site-login p { margin: 2px 0 0; max-width: 73ch; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.vk-site-timeline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 4px 12px; border-bottom: 1px solid var(--accent-border); color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.vk-site-timeline .range { width: 100%; min-width: 0; }
+.vk-site-notice, .vk-site-placeholder { margin: 0; padding: 8px 12px; color: var(--muted); font-size: 12px; }
+.vk-site-slot { height: clamp(236px, calc(100dvh - 239px), 776px); background: var(--stage-bg); }
+.vk-site-loading { display: flex; align-items: center; justify-content: center; gap: 8px; height: 100%; margin: 0; color: var(--muted); font-size: 13px; }
 .vk-site-error { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 8px; height: 100%; padding: 14px; text-align: center; }
 .vk-site-error :is(h3, p) { flex-basis: 100%; }
+.vk-site-error p { color: var(--muted); font-size: 13px; }
 @media (max-width: 740px) {
   .vk-site-origin small { display: none; }
-  .vk-site-slot { height: clamp(174px, calc(100dvh - 312px), 500px); }
+  .vk-site-slot { height: clamp(218px, calc(100dvh - 265px), 600px); }
 }

@@ -49,11 +49,18 @@ jobs:
         if: ${{ !inputs.live_radio && !inputs.live_catalog && !inputs.live_services }}
       - run: npm run test:package
         if: ${{ !inputs.live_radio && !inputs.live_catalog && !inputs.live_services }}
+      - name: Fetch the published v1.4.0 upgrade fixture
+        if: ${{ !inputs.live_radio && !inputs.live_catalog && !inputs.live_services }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v1.4.0 --repo JohnBirlich/VKX-Modded --pattern Luma-Player-Setup-1.4.0-x64.exe --dir "$env:RUNNER_TEMP"
       - run: npm run test:installed
         if: ${{ !inputs.live_radio && !inputs.live_catalog && !inputs.live_services }}
+        env:
+          LUMA_SMOKE_LEGACY_SETUP: ${{ runner.temp }}/Luma-Player-Setup-1.4.0-x64.exe
       - uses: actions/upload-artifact@v4
         if: ${{ !inputs.live_radio && !inputs.live_catalog && !inputs.live_services }}
         with:
-          name: Luma-Player-Windows-x64
+          name: Luma-Windows-x64
           path: release/*.exe
           if-no-files-found: error

@@ -86,7 +86,7 @@ test('desktop protocol streams only indexed media and returns range metadata to 
   t.after(() => rm(dir, { recursive: true, force: true }));
   const bundled = join(dir, 'app');
   await mkdir(bundled);
-  await writeFile(join(bundled, 'index.html'), '<h1>Luma Player</h1>');
+  await writeFile(join(bundled, 'index.html'), '<h1>Luma</h1>');
   const library = await DesktopLibrary.open(join(dir, 'data'));
   const { tracks: [track] } = await library.importPaths([sample]);
   const dev = 'http://127.0.0.1:5174';
@@ -109,7 +109,7 @@ test('desktop protocol streams only indexed media and returns range metadata to 
     "frame-src 'none'");
   assert.match(page.headers.get('Content-Security-Policy') ?? '', /frame-ancestors 'none';/);
   assert.equal(page.headers.get('Referrer-Policy'), 'no-referrer');
-  assert.equal(await page.text(), '<h1>Luma Player</h1>');
+  assert.equal(await page.text(), '<h1>Luma</h1>');
 });
 
 test('embedded front cover is cached, served, and cleaned up with its entry', async (t) => {

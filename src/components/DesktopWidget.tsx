@@ -1,3 +1,4 @@
+import { APP_NAME } from '../shared/app-info';
 import { useText } from '../i18n/context';
 import type { CSSProperties, ReactNode } from 'react';
 import { AudioLines, Maximize2, Minus, Play, Radio, Repeat, Shuffle, SkipBack, SkipForward, Volume2, X } from 'lucide-react';
@@ -29,7 +30,7 @@ function WidgetSurface({ track, tint, appearance, macos, label, preview = false,
 
 function WidgetChrome({ children, preview = false }: { children: ReactNode; preview?: boolean }) {
   return <header className={`widget-chrome${preview ? '' : ' native-title-bar'}`} aria-hidden={preview || undefined}>
-    <span><AudioLines size={16} aria-hidden="true" /> Luma Player</span>
+    <span><AudioLines size={16} aria-hidden="true" /> {APP_NAME}</span>
     <div className="widget-window-buttons">{children}</div>
   </header>;
 }

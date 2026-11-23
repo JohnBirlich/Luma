@@ -1,12 +1,15 @@
 // This smoke modifies the current user's protocol registration. Only run on a clean, GitHub-hosted Windows runner.
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { APP_NAME, APP_USER_MODEL_ID } from '../dist-electron/src/shared/app-info.js';
+import { APP_NAME, APP_PROFILE_DIR, APP_USER_MODEL_ID } from '../dist-electron/src/shared/app-info.js';
+import { installerName, portableName } from '../dist-electron/src/shared/release-updates.js';
 import { MUSIC_LINK_SCHEME, musicLaunchUrl, readMusicLink } from '../dist-electron/src/shared/music-links.js';
 
 assert.ok(process.platform === 'win32' && process.arch === 'x64' && process.env.GITHUB_ACTIONS === 'true'
@@ -19,14 +22,18 @@ const config = await readFile(join(root, 'electron-builder.yml'), 'utf8');
 const guid = /^  guid: ([\da-f-]{36})\r?$/m.exec(config)?.[1];
 assert.ok(guid, 'installer GUID is required');
 const artifacts = join(root, 'release');
-const setup = join(artifacts, `Luma-Player-Setup-${version}-x64.exe`);
-const portable = join(artifacts, `Luma-Player-Portable-${version}-x64.exe`);
+const setup = join(artifacts, installerName(version));
+const portable = join(artifacts, portableName(version));
+const legacySetup = process.env.LUMA_SMOKE_LEGACY_SETUP;
+const legacyExe = 'LumaPlayer.exe';
+const legacyDigest = 'c7d1fcb494eb697850315b7192a083548597b1788d2a7279d9ce30b311eafb15';
 const folder = await mkdtemp(join(process.env.RUNNER_TEMP, 'Luma installed smoke '));
 const temp = join(folder, 'temp');
 const installed = join(folder, 'Luma installed app');
 const exe = join(installed, APP_USER_MODEL_ID);
 // NSIS uses the configured executable filename, not the display name.
 const uninstaller = join(installed, `Uninstall ${APP_USER_MODEL_ID}`);
+const legacyUninstaller = join(installed, `Uninstall ${legacyExe}`);
 const expectedCommand = `"${exe}" -- "%1"`;
 const foreignCommand = 'Luma CI ownership sentinel (never invoked)';
 const powershell = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
@@ -57,7 +64,11 @@ function Read-Registration($root) {
     $command = $scheme.OpenSubKey('shell\open\command')
     if ($null -ne $command) { $entry.command = $command.GetValue('') }
   }
-  if ($entry.uninstallKey) { $entry.version = $uninstall.GetValue('DisplayVersion') }
+  if ($entry.installKey) { $entry.installPath = $install.GetValue('InstallLocation') }
+  if ($entry.uninstallKey) {
+    $entry.version = $uninstall.GetValue('DisplayVersion')
+    $entry.displayName = $uninstall.GetValue('DisplayName')
+  }
   $entry
 }
 @{ user = Read-Registration ([Microsoft.Win32.Registry]::CurrentUser)
@@ -69,25 +80,43 @@ function Read-Registration($root) {
   return result;
 }
 
+async function shortcutTargets(name) {
+  return JSON.parse(await ps(String.raw`
+$shell = New-Object -ComObject WScript.Shell
+$targets = @{}
+foreach ($folder in @('DesktopDirectory', 'Programs')) {
+  $path = Join-Path ([Environment]::GetFolderPath($folder)) ($env:LUMA_SMOKE_LINK_NAME + '.lnk')
+  $targets[$folder] = if (Test-Path -LiteralPath $path) { $shell.CreateShortcut($path).TargetPath } else { $null }
+}
+$targets | ConvertTo-Json -Compress`, { LUMA_SMOKE_LINK_NAME: name }));
+}
+
 const noInstall = (entry) => !entry.installKey && !entry.uninstallKey;
 const exists = (path) => stat(path).then(() => true, (error) => { if (error.code === 'ENOENT') return false; throw error; });
 
-async function install() {
+async function runSetup(file, useSelectedFolder) {
   // NSIS requires /D= last and unquoted, including when the path contains spaces.
-  await ps(`$p = Start-Process -FilePath $env:LUMA_SMOKE_EXE -ArgumentList ('/S /currentuser /D=' + $env:LUMA_SMOKE_INSTALL) -Wait -PassThru
-if ($p.ExitCode -ne 0) { throw ('Setup exit: ' + $p.ExitCode) }`, { LUMA_SMOKE_EXE: setup }, 150_000);
+  const args = '/S /currentuser' + (useSelectedFolder ? ` /D=${installed}` : '');
+  await ps(`$p = Start-Process -FilePath $env:LUMA_SMOKE_EXE -ArgumentList $env:LUMA_SMOKE_SETUP_ARGS -Wait -PassThru
+if ($p.ExitCode -ne 0) { throw ('Setup exit: ' + $p.ExitCode) }`, { LUMA_SMOKE_EXE: file, LUMA_SMOKE_SETUP_ARGS: args }, 150_000);
+}
+
+async function install(useSelectedFolder = true) {
+  await runSetup(setup, useSelectedFolder);
   assert.ok(await exists(exe), 'Setup placed the application in the selected path');
   assert.ok(await exists(uninstaller), 'Setup created its own uninstaller');
   const { user, machine } = await state();
   assert.equal(user.version, version, 'installed version');
+  assert.equal(user.installPath, installed, 'the install location stays in the same folder');
+  assert.ok(user.displayName === APP_NAME || user.displayName === `${APP_NAME} ${version}`, 'Windows Apps uses the Luma display name');
   assert.equal(user.protocol, true, 'URL Protocol marker');
   assert.equal(user.command, expectedCommand, 'Setup owns the per-user protocol and quotes the application path');
   assert.ok(noInstall(machine) && !machine.scheme, 'per-user Setup did not register for all users');
 }
 
-async function uninstall() {
+async function uninstall(file = uninstaller) {
   await ps(`$p = Start-Process -FilePath $env:LUMA_SMOKE_EXE -ArgumentList '/S /currentuser' -Wait -PassThru
-if ($p.ExitCode -ne 0) { throw ('Uninstall exit: ' + $p.ExitCode) }`, { LUMA_SMOKE_EXE: uninstaller }, 90_000);
+if ($p.ExitCode -ne 0) { throw ('Uninstall exit: ' + $p.ExitCode) }`, { LUMA_SMOKE_EXE: file }, 90_000);
   assert.equal(await exists(exe), false, 'uninstall removed the application');
   assert.ok(noInstall((await state()).user), 'uninstall removed the per-user app registration');
 }
@@ -137,7 +166,7 @@ let profile, clean = false, portableProcess;
 let stage = 'isolation';
 try {
   await mkdir(temp);
-  profile = join(await ps("[Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)"), APP_NAME);
+  profile = join(await ps("[Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)"), APP_PROFILE_DIR);
   assert.ok(isAbsolute(profile) && !await exists(profile), 'requires a fresh Windows user profile without existing Luma data');
   const before = await state();
   const registry = JSON.stringify({ user: installedFixture(before.user), machine: installedFixture(before.machine) });
@@ -148,8 +177,31 @@ try {
   else {
     clean = true;
 
-    stage = 'install and real ShellExecute handoff';
-    await install();
+    const sentinel = join(profile, 'installed-smoke-profile.txt');
+    if (legacySetup) {
+      stage = 'verified v1.4.0 to Luma upgrade';
+      assert.ok(isAbsolute(legacySetup) && basename(legacySetup) === installerName('1.4.0'), 'expected the pinned v1.4.0 installer');
+      const hash = createHash('sha256');
+      for await (const bytes of createReadStream(legacySetup)) hash.update(bytes);
+      assert.equal(hash.digest('hex'), legacyDigest, 'pinned published v1.4.0 installer SHA-256');
+      await runSetup(legacySetup, true);
+      const oldExe = join(installed, legacyExe);
+      const { user } = await state();
+      assert.equal(user.version, '1.4.0');
+      assert.equal(user.command, `"${oldExe}" -- "%1"`);
+      assert.deepEqual(await shortcutTargets(APP_PROFILE_DIR), { DesktopDirectory: oldExe, Programs: oldExe });
+      await mkdir(profile, { recursive: true });
+      await writeFile(sentinel, 'Profile preserved', { flag: 'wx' });
+      await install(false); // Exercise NSIS's upgrade lookup rather than supplying /D= again.
+      assert.equal(await exists(oldExe), false, 'upgrade removed the old executable');
+      assert.equal(await exists(legacyUninstaller), false, 'upgrade left one uninstaller');
+      assert.deepEqual(await shortcutTargets(APP_PROFILE_DIR), { DesktopDirectory: null, Programs: null });
+      assert.deepEqual(await shortcutTargets(APP_NAME), { DesktopDirectory: exe, Programs: exe });
+      assert.equal(await readFile(sentinel, 'utf8'), 'Profile preserved');
+      console.log('::notice title=Windows v1.4 upgrade::Existing install location, profile and URL scheme preserved. Both shortcuts and the app registration now show Luma.');
+    } else await install();
+
+    stage = 'real ShellExecute handoff';
     await openLink(456);
     await journal(profile, 'cold launch through Windows', (events) => count(events, 'desktop.ready') === 1 && count(events, delivered) === 1);
     await openLink(457);
@@ -160,8 +212,7 @@ try {
     await stopApps();
 
     stage = 'reinstall and uninstall';
-    const sentinel = join(profile, 'installed-smoke-profile.txt');
-    await writeFile(sentinel, 'Profile preserved', { flag: 'wx' });
+    if (!legacySetup) await writeFile(sentinel, 'Profile preserved', { flag: 'wx' });
     await install();
     assert.equal(await readFile(sentinel, 'utf8'), 'Profile preserved');
     await uninstall();
@@ -193,6 +244,7 @@ try {
     await stopApps().catch(() => {});
     if (portableProcess?.exitCode === null) portableProcess.kill();
     if (await exists(uninstaller)) await uninstall().catch(() => {});
+    else if (legacySetup && await exists(legacyUninstaller)) await uninstall(legacyUninstaller).catch(() => {});
     const { user } = await state().catch(() => ({}));
     if (user?.command === foreignCommand || user?.command === expectedCommand) {
       await ps('[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($env:LUMA_SMOKE_CLASS, $false)').catch(() => {});

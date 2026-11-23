@@ -1,7 +1,9 @@
 export const RELEASE_REPO = 'JohnBirlich/VKX-Modded';
 export const LATEST_RELEASE_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
 export const MAX_INSTALLER_BYTES = 256 * 1024 * 1024;
+// Preserve the exact release asset path understood by installed versions.
 export const installerName = (version: string) => `Luma-Player-Setup-${version}-x64.exe`;
+export const portableName = (version: string) => `Luma-Portable-${version}-x64.exe`;
 export type UpdateMode = 'signed' | 'manual' | 'portable' | 'development';
 export type UpdateReport = { state: 'current' | 'unavailable'; mode: UpdateMode }
   | { state: 'available'; mode: UpdateMode; version: string; bytes: number };
