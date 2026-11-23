@@ -52,7 +52,7 @@ export class VkCoverCache {
   }
 
   /** Keep the newest covers; failures never affect playback. */
-  private prune() {
+  prune(): Promise<void> {
     return this.pruning ??= (async () => {
       try {
         const names = (await readdir(this.root())).filter((name) => /^[a-f0-9]{32}\.(?:webp|png|jpg)$/.test(name));
