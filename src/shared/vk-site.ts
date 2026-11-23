@@ -21,7 +21,7 @@ export interface VkBounds { x: number; y: number; width: number; height: number 
 export interface VkPosition { position: number; duration: number; seek: boolean }
 export interface VkNowPlaying {
   title: string; artist: string; playing: boolean; previous: boolean; toggle: boolean; next: boolean; timeline?: VkPosition;
-  volume?: number; shuffle?: boolean; repeat?: Repeat; favorite?: boolean;
+  volume?: number; canMute?: boolean; shuffle?: boolean; repeat?: Repeat; favorite?: boolean;
 }
 export interface VkSiteState {
   host: string; phase: 'loading' | 'ready' | 'failed' | 'closed'; back: boolean; signIn: boolean; track?: VkNowPlaying;
@@ -116,6 +116,6 @@ export function readVkNowPlaying(value: unknown): VkNowPlaying | undefined {
   const volume = vkSeekRatio(row.volume);
   const repeat = row.repeat === 'off' || row.repeat === 'one' || row.repeat === 'all' ? row.repeat : undefined;
   return { title, artist, playing: row.playing === true, previous, toggle, next, ...(timeline && { timeline }),
-    ...(volume !== undefined && { volume }), ...(typeof row.shuffle === 'boolean' && { shuffle: row.shuffle }),
+    ...(volume !== undefined && { volume, canMute: row.canMute === true }), ...(typeof row.shuffle === 'boolean' && { shuffle: row.shuffle }),
     ...(repeat && { repeat }), ...(typeof row.favorite === 'boolean' && { favorite: row.favorite }) };
 }

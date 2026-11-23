@@ -23,7 +23,7 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
   const inPage = [...document.querySelectorAll(inline)].filter(el => !el.closest(`${header}, ${top}`) && visible(el));
   const roots = [...inPage, ...[...document.querySelectorAll(`${top}, ${inline}`)].filter(el => !inPage.includes(el) && readable(el))];
   const actionable = (el: Element): el is HTMLElement => el instanceof HTMLElement
-    && !el.matches('a, input, button[type="submit"], :disabled, [aria-disabled="true"]') && !el.closest('form') && readable(el);
+    && !el.matches('a, input, button[type="submit"], :disabled') && !el.closest('form, [aria-disabled="true"]') && readable(el);
   const label = (node?: Element) => (node?.getAttribute('aria-label') || node?.getAttribute('title') || '').trim();
   const pauseLabel = /^(?:пауза|приостановить(?: воспроизведение)?|pause(?: playback)?)$/i;
   const playLabel = /^(?:воспроизвести(?: трек| аудиозапись)?|продолжить|play(?: track)?|resume)$/i;
@@ -165,8 +165,8 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
   }
   return { title, artist, playing, previous: !!controls.previous, toggle: !!controls.toggle, next: !!controls.next, timeline,
     shuffle: controls.shuffle && (active(controls.shuffle) || /^(?:выключить |disable )/i.test(label(controls.shuffle))), repeat: repeatMode(),
-    favorite: controls.favorite && (active(controls.favorite) || /^(?:удалить|remove)\b|^удалить /i.test(label(controls.favorite))),
-    volume: volume && (volume.input.valueAsNumber - volume.min) / (volume.max - volume.min), artwork: artwork.slice(0, 6) };
+    favorite: controls.favorite && (active(controls.favorite) || /^(?:удалить|remove) /i.test(label(controls.favorite))),
+    volume: volume && (volume.input.valueAsNumber - volume.min) / (volume.max - volume.min), canMute: !!controls.mute, artwork: artwork.slice(0, 6) };
 }
 
 export const inspectVkPlayer = (action: VkPlaybackAction | 'seek' | null = null, ratio?: number) =>

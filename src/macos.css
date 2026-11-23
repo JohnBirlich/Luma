@@ -220,6 +220,9 @@
   color: var(--accent-light); background: var(--glass-lens); border: 1px solid var(--glass-edge); border-radius: 50%; box-shadow: var(--glass-shadow);
 }
 [data-layout='glass'] .immersive-header .overline { color: var(--accent-light); }
+[data-layout='glass'] .immersive-stage:not([data-effect='off']) .immersive-header :is(.overline, strong, .immersive-brand) {
+  color: #f7f7ff; text-shadow: 0 1px 5px #101628;
+}
 [data-layout='glass'] .immersive-content:not(.karaoke-controls) { padding: clamp(15px,3vw,32px); border-radius: 30px; border: 1px solid var(--glass-edge); background: var(--glass-lens);
   box-shadow: var(--glass-shadow); backdrop-filter: blur(21px) saturate(1.35); }
 [data-layout='glass'] .immersive-upcoming { border-color: var(--glass-edge); border-radius: 27px; background: var(--glass-lens); box-shadow: var(--glass-shadow); }

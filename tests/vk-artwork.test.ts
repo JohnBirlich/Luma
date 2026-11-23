@@ -42,11 +42,13 @@ test('VK art is a bounded, no-cookie, no-referrer raster fetch with redirects di
 
 test('VK player options exist only when backed by a recognized capability', () => {
   const playable = { title: 'Трек', artist: 'VK', toggle: true };
-  const track = readVkNowPlaying({ ...playable, shuffle: false, favorite: false, repeat: 'one', volume: 0 });
+  const track = readVkNowPlaying({ ...playable, shuffle: false, favorite: false, repeat: 'one', volume: 0, canMute: true });
   assert.equal(track?.shuffle, false);
   assert.equal(track?.favorite, false);
   assert.equal(track?.repeat, 'one');
   assert.equal(track?.volume, 0);
+  assert.equal(track?.canMute, true);
+  assert.equal(readVkNowPlaying({ ...playable, volume: 1 })?.canMute, false);
   for (const volume of [-1, 1.5, '0.4', Infinity]) {
     const omitted = readVkNowPlaying({ ...playable, volume, repeat: true, favorite: 'false', shuffle: 1 });
     assert.equal(omitted?.volume, undefined);

@@ -332,7 +332,8 @@ export class VkSite {
         previous: media?.previous === true || visible?.previous, toggle: media?.toggle === true || visible?.toggle,
         next: media?.next === true || visible?.next,
         timeline: media?.timeline?.seek || !visible?.timeline ? media?.timeline : visible.timeline,
-        volume: visible?.volume ?? media?.volume,
+        volume: media?.muted === true ? 0 : visible?.volume ?? media?.volume,
+        canMute: snapshot.canMute === true || media?.canMute === true,
       });
       const engaged = track?.playing ? true : active.state.engaged;
       if (!active.foreground && !engaged) { this.dispose(active); return; }
@@ -372,7 +373,7 @@ export class VkSite {
       }
       if (action === 'volume' || action === 'mute') {
         const ratio = vkSeekRatio(fraction);
-        if (track?.volume === undefined || (action === 'volume' && ratio === undefined)) return false;
+        if (track?.volume === undefined || (action === 'volume' ? ratio === undefined : !track.canMute)) return false;
         return await fromDom(action, ratio) || (stillHere() && (await fromMedia(action, ratio)) === true);
       }
       if (action === 'shuffle' || action === 'repeat' || action === 'favorite') {

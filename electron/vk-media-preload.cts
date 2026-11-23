@@ -80,7 +80,7 @@ function installVkPlayback() {
     if (!action) return {
       ...(media.playbackState !== 'none' || audio ? { playing } : {}),
       previous: supports('previoustrack'), toggle: supports(toggle) || canUseAudio, next: supports('nexttrack'),
-      volume,
+      volume, canMute: canUseAudio, muted: canUseAudio && audio.muted,
       timeline: timing && { ...timing, seek: supports('seekto') || canSeekAudio },
     };
     if (action === 'volume' || action === 'mute') {

@@ -36,9 +36,20 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Run npm test
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP luma-unit.log
+          npm test | Tee-Object -FilePath $log
+          $result = $LASTEXITCODE
+          if ($result -ne 0) {
+            Select-String -Path $log -Pattern '^not ok ' | ForEach-Object {
+              Write-Output ("::error title=Unit test::" + $_.Line.Replace('%', '%25'))
+            }
+          }
+          exit $result
       - run: npm run build
       - run: npm run test:desktop
+        timeout-minutes: 8
         env:
           LUMA_LIVE_CATALOG: ${{ inputs.live_catalog && '1' || '0' }}
           LUMA_LIVE_RADIO: ${{ inputs.live_radio && '1' || '0' }}

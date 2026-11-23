@@ -529,14 +529,14 @@ export default function App() {
         } else seek(forward ? playback.seekStep : -playback.seekStep, true);
       } else if (event.code === 'KeyM' && !event.repeat) {
         if (!vkEngaged && !vkVisible) mute();
-        else if (vkTrack?.volume !== undefined) vkAction('mute');
+        else if (vkTrack?.canMute) vkAction('mute');
       }
       else if (!presentationOpen && event.code === 'KeyQ' && !event.repeat) setQueueOpen((open) => !open);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [choose, mute, seek, seekVk, togglePlayback, next, previous, live, modalOpen, presentationOpen, presentationKind, showPresentation, showKaraoke,
-    closePresentation, canUseLyrics, displayTrack, queueOpen, widget, changeWidget, openSettings, playback.seekStep, vkVisible, vkEngaged, vkTrack?.volume, vkAction]);
+    closePresentation, canUseLyrics, displayTrack, queueOpen, widget, changeWidget, openSettings, playback.seekStep, vkVisible, vkEngaged, vkTrack?.canMute, vkAction]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -850,6 +850,7 @@ export default function App() {
     shuffle: vkTrack?.shuffle ?? false, canShuffle: vkControllable && vkTrack.shuffle !== undefined,
     repeat: vkTrack?.repeat ?? 'off', canRepeat: vkControllable && vkTrack.repeat !== undefined,
     volume: vkTrack?.volume ?? 0, canVolume: vkControllable && vkTrack.volume !== undefined,
+    canMute: vkControllable && vkTrack.canMute === true,
     vkFavorite: vkControllable && vkTrack.favorite !== undefined ? { selected: vkTrack.favorite, toggle: () => vkAction('favorite') } : undefined,
     hasPrevious: vkControllable && vkTrack.previous, hasNext: vkControllable && vkTrack.next,
     togglePlay: togglePlayback, previous: () => vkAction('previous'), next: () => vkAction('next'), seek: seekVk,

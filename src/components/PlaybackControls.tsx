@@ -24,7 +24,7 @@ export interface TransportProps {
 }
 
 export interface TimelineProps { live?: boolean; elapsed: number; duration: number; seekable?: boolean; seek(seconds: number): void }
-export interface VolumeProps { source?: 'vk'; volume: number; canVolume?: boolean; toggleMute(): void; setVolume(volume: number): void }
+export interface VolumeProps { source?: 'vk'; volume: number; canVolume?: boolean; canMute?: boolean; toggleMute(): void; setVolume(volume: number): void }
 export interface VkFavoriteProps { selected: boolean; toggle(): void }
 export type PlaybackProps = TransportProps & TimelineProps & VolumeProps & { vkFavorite?: VkFavoriteProps };
 
@@ -62,14 +62,14 @@ export function SeekTimeline({ elapsed, duration, seek, live, seekable }: Timeli
   </div>;
 }
 
-export function VolumeControl({ source, volume, canVolume, setVolume, toggleMute }: VolumeProps) {
+export function VolumeControl({ source, volume, canVolume, canMute, setVolume, toggleMute }: VolumeProps) {
   const t = useText();
   if (source === 'vk' && !canVolume) return null;
   const percent = Math.round(volume * 100);
   const label = volume ? t("Выключить звук") : t("Включить звук");
   const Volume = volume === 0 ? VolumeX : volume <= 0.45 ? Volume1 : Volume2;
   return <div className="volume">
-    <button type="button" className="icon-button" onClick={toggleMute} title={`${label} (M)`} aria-label={label}><Volume size={19} /></button>
+    {(source !== 'vk' || canMute) && <button type="button" className="icon-button" onClick={toggleMute} title={`${label} (M)`} aria-label={label}><Volume size={19} /></button>}
     <input type="range" className="range" min={0} max={100} value={percent} aria-label={t("Громкость")} aria-valuetext={`${percent}%`}
       onChange={(event) => setVolume(event.currentTarget.valueAsNumber / 100)} style={{ '--filled': `${percent}%` } as CSSProperties} />
   </div>;
