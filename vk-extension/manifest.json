@@ -1,1 +1,26 @@
-{"manifest_version":3,"name":"VK Music Only","version":"1.8.0","description":"Only VK Music: hide menu and ads, download tracks","icons":{"16":"icon16.png","48":"icon48.png","128":"icon128.png"},"permissions":["storage","downloads","webRequest"],"host_permissions":["https://vk.com/*","https://*.vk.com/*","https://vk.ru/*","https://*.vk.ru/*","https://*.vk.me/*","https://*.vk-cdn.net/*","https://*.userapi.com/*","https://*.mycdn.me/*"],"background":{"service_worker":"background.js"},"action":{"default_popup":"popup.html","default_title":"VK Music Only","default_icon":{"16":"icon16.png","48":"icon48.png","128":"icon128.png"}},"content_scripts":[{"matches":["https://vk.com/*","https://*.vk.com/*","https://vk.ru/*","https://*.vk.ru/*"],"js":["content.js"],"css":["styles.css"],"run_at":"document_start"}],"web_accessible_resources":[{"resources":["inject.js"],"matches":["https://vk.com/*","https://*.vk.com/*","https://vk.ru/*","https://*.vk.ru/*"]}]}
+{
+  "manifest_version": 3,
+  "name": "VK Music Only",
+  "version": "1.9.0",
+  "description": "Полноширинный вид VK Музыки без общих панелей ВКонтакте",
+  "minimum_chrome_version": "136",
+  "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "VK Music Only",
+    "default_icon": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" }
+  },
+  "content_scripts": [{
+    "matches": ["https://vk.com/*", "https://vk.ru/*"],
+    "exclude_matches": [
+      "https://vk.ru/login*", "https://vk.ru/signin*", "https://vk.ru/join*",
+      "https://vk.ru/authcheck*", "https://vk.ru/challenge*", "https://vk.ru/captcha*",
+      "https://vk.com/login*", "https://vk.com/signin*", "https://vk.com/join*",
+      "https://vk.com/authcheck*", "https://vk.com/challenge*", "https://vk.com/captcha*"
+    ],
+    "js": ["content.js"],
+    "css": ["styles.css"],
+    "run_at": "document_end"
+  }]
+}

@@ -1,1 +1,8 @@
-document.addEventListener('DOMContentLoaded',function(){var k=['hideMenu','hideAds','downloads'];chrome.storage.sync.get({hideMenu:true,hideAds:true,downloads:true},function(d){k.forEach(function(x){var e=document.getElementById(x);if(e)e.checked=!!d[x];});});k.forEach(function(x){var e=document.getElementById(x);if(e)e.addEventListener('change',function(){var o={};o[x]=e.checked;chrome.storage.sync.set(o);});});});
+const toggle = document.getElementById('hideMenu');
+void chrome.storage.sync.get({ hideMenu: true }).then(({ hideMenu }) => {
+  toggle.checked = hideMenu !== false;
+  toggle.disabled = false;
+  toggle.addEventListener('change', () => {
+    void chrome.storage.sync.set({ hideMenu: toggle.checked });
+  });
+});
