@@ -1,8 +1,8 @@
 import { musicSearchKey } from './russian.js';
-import { vkArtworkUrl, vkHistoryLink, vkMusicSearchUrl } from './vk-site.js';
+import { VK_COVER_KEY, vkHistoryLink, vkMusicSearchUrl } from './vk-site.js';
 
 export const VK_HISTORY_LIMIT = 60;
-/** A saved VK listen keeps only its labels, its official track link and one public cover address. */
+/** A saved VK listen keeps only its labels, its official track link and an app-local cover key. */
 export interface VkHistoryEntry { title: string; artist: string; link?: string; artwork?: string }
 
 const text = (value: unknown) => typeof value === 'string'
@@ -14,7 +14,7 @@ export function readVkHistoryEntry(value: unknown): VkHistoryEntry | undefined {
   const title = text(row.title), artist = text(row.artist);
   if (!title || !musicSearchKey(title) || (!artist && /^(?:vk music|vk музыка|вк музыка)$/i.test(title))) return;
   const link = vkHistoryLink(row.link);
-  const artwork = vkArtworkUrl(row.artwork);
+  const artwork = typeof row.artwork === 'string' && VK_COVER_KEY.test(row.artwork) ? row.artwork : undefined;
   return { title, artist, ...(link && { link }), ...(artwork && { artwork }) };
 }
 

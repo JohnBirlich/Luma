@@ -19,7 +19,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg', '.gif': 'image/gif', '.avif': 'image/avif', '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8', '.wasm': 'application/wasm',
 };
-const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://*.userapi.com https://*.vkuserphoto.ru ${ONLINE_ORIGINS.images} ${RADIO_ORIGINS.images} ${THEAUDIODB_ART_ORIGIN}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media} ${RADIO_ORIGINS.media}; worker-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
+const CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: ${ONLINE_ORIGINS.images} ${RADIO_ORIGINS.images} ${THEAUDIODB_ART_ORIGIN}; connect-src 'self' ${ONLINE_ORIGINS.connect}; media-src 'self' blob: ${ONLINE_ORIGINS.media} ${RADIO_ORIGINS.media}; worker-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
 
 export function parseByteRange(header: string, size: number): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
@@ -66,7 +66,8 @@ async function streamFile(path: string, request: Request, headers: Headers) {
   return new Response(body, { status: range ? 206 : 200, headers });
 }
 
-export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache, audiusFetch?: AudiusFetch, vkArtwork?: (id: string) => VkArtwork | undefined) {
+export function createProtocolHandler(root: string, library: DesktopLibrary, devOrigin?: string, cache?: StreamCache, audiusFetch?: AudiusFetch,
+  vkArtwork?: (id: string) => VkArtwork | undefined, vkListen?: (key: string) => Promise<VkArtwork | undefined>) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.protocol !== 'luma:' || url.hostname !== 'app' || url.port || url.username || url.password) return new Response(null, { status: 404 });
@@ -94,6 +95,15 @@ export function createProtocolHandler(root: string, library: DesktopLibrary, dev
     const vk = /^\/media\/vk-cover\/([a-f0-9-]{36})$/.exec(url.pathname);
     if (vk) {
       const image = !url.search && !url.hash ? vkArtwork?.(vk[1]) : undefined;
+      if (!image) return new Response(null, { status: 404, headers });
+      headers.set('Content-Type', image.mime);
+      headers.set('Content-Length', String(image.bytes.byteLength));
+      return new Response(request.method === 'HEAD' ? null : image.bytes, { headers });
+    }
+    // A saved VK listen keeps its cover by opaque key, without a VK URL in the renderer.
+    const listen = /^\/media\/vk-listen\/([a-f0-9]{32})$/.exec(url.pathname);
+    if (listen) {
+      const image = !url.search && !url.hash && vkListen ? await vkListen(listen[1]) : undefined;
       if (!image) return new Response(null, { status: 404, headers });
       headers.set('Content-Type', image.mime);
       headers.set('Content-Length', String(image.bytes.byteLength));

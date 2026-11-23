@@ -43,6 +43,7 @@ import { createProtocolHandler } from './protocol.js';
 import { verifyWindowsSigner, WINDOWS_VERIFIER_EXE, WindowsUpdates } from './windows-update.js';
 import { AUDIUS_MEDIA_PARTITION, createAudiusFetch } from './audius-network.js';
 import { VkSite } from './vk-site.js';
+import { VkCoverCache } from './vk-cover-cache.js';
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'luma',
@@ -63,7 +64,8 @@ let changeFullscreen: ((fullscreen: boolean) => void) | undefined;
 const floatOutput = new DesktopFloatOutput(process.platform === 'win32' ? (app.isPackaged
   ? join(process.resourcesPath, 'audio', 'LumaFloat.exe') : join(app.getAppPath(), 'dist-native', 'LumaFloat.exe')) : undefined);
 const discord = new DesktopDiscord(process.platform === 'win32');
-const vkSite = new VkSite();
+const vkCovers = new VkCoverCache(() => join(app.getPath('userData'), 'vk-listen-covers'));
+const vkSite = new VkSite(vkCovers);
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -449,7 +451,8 @@ if (!app.requestSingleInstanceLock()) {
     const library = await DesktopLibrary.open(app.getPath('userData'));
     const cache = await StreamCache.open(join(app.getPath('userData'), 'stream-cache'), net.fetch);
     const audiusFetch = createAudiusFetch(session.fromPartition(AUDIUS_MEDIA_PARTITION, { cache: false }));
-    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache, audiusFetch, (id) => vkSite.artwork(id)));
+    protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache, audiusFetch,
+      (id) => vkSite.artwork(id), (key) => vkCovers.get(key)));
     journal.main('desktop.protocol');
     const lastfm = await DesktopLastFm.open(lastFmConfig(process.env.LUMA_LASTFM_API_KEY, process.env.LUMA_LASTFM_SECRET), net.fetch,
       join(app.getPath('userData'), 'lastfm-session.bin'), safeStorage);

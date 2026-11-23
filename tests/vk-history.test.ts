@@ -6,7 +6,7 @@ import { decodePreferences, encodePreferences } from '../src/player/preferences.
 import { startQueue } from '../src/shared/queue.js';
 
 const sample = { title: 'Запись', artist: 'Артист' };
-const cover = 'https://sun9-51.userapi.com/impg/luma-history-cover.webp?size=300x300&sign=fixture';
+const cover = 'c0ffee00c0ffee00c0ffee00c0ffee00';
 const withCover = { ...sample, artwork: cover };
 const noLink = { ...sample, link: 'https://vk.ru/away.php?target=https://other.invalid/track' };
 const direct = { ...sample, link: 'https://vk.com/music/track/123_456?tracking=fixture#discard' };
@@ -26,16 +26,17 @@ test('VK history contains only titles, artists and validated official track link
   assert.deepEqual(readVkHistory([{ title: 'VK Музыка' }, { title: '\u202e\n', artist: 'a' }]), []);
 });
 
-test('a saved VK listen keeps one public cover and never a foreign or local image address', () => {
+test('a saved VK listen keeps only an opaque app-local cover key, never a VK address', () => {
   assert.deepEqual(readVkHistory([withCover]), [withCover]);
-  for (const artwork of ['https://example.test/cover.webp', 'luma://app/media/vk-cover/00000000-0000-0000-0000-000000000000',
-    'https://sun9-51.userapi.com/art.svg', 'http://sun9-51.userapi.com/impg/cover.webp']) {
+  for (const artwork of ['https://sun9-51.userapi.com/impg/cover.webp', 'luma://app/media/vk-cover/00000000-0000-0000-0000-000000000000',
+    '00000000-0000-0000-0000-000000000000', cover.toUpperCase(), `${cover}00`, 'Москва']) {
     assert.deepEqual(readVkHistory([{ ...sample, artwork }]), [sample], artwork);
   }
-  // A replay without a cover address keeps the artwork that already worked.
+  // A replay without a cover key keeps the artwork that already worked.
   const played = rememberVkListen([], withCover);
   assert.deepEqual(rememberVkListen(played, sample), [withCover]);
-  assert.deepEqual(rememberVkListen(played, { ...sample, artwork: 'https://example.test/x.webp' }), [withCover]);
+  assert.deepEqual(rememberVkListen(played, { ...sample, artwork: 'deadbeefdeadbeefdeadbeefdeadbeef' }),
+    [{ ...sample, artwork: 'deadbeefdeadbeefdeadbeefdeadbeef' }]);
   assert.equal(rememberVkListen([], withCover)[0].artwork, cover);
 });
 

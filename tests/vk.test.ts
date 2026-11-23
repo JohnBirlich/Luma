@@ -75,9 +75,12 @@ test('only current title/artist and boolean playback capabilities are received f
   assert.deepEqual(readVkNowPlaying({ title: ' Трек\n\u202e 1 ', artist: ' Автор  ', playing: true, toggle: true, next: true, previous: 'yes',
     url: 'https://example.test/secret', password: 'fixture', audio: 'https://example.test/audio.mp3', artwork: [] }),
   { title: 'Трек 1', artist: 'Автор', playing: true, toggle: true, next: true, previous: false });
-  assert.equal(readVkNowPlaying({ title: 'Трек', artwork: 'https://sun9-9.userapi.com/impg/a.webp?size=600x600&sign=x' })?.artwork,
-    'https://sun9-9.userapi.com/impg/a.webp?size=600x600&sign=x');
-  assert.equal(readVkNowPlaying({ title: 'Трек', artwork: 'https://files.example.test/a.webp' })?.artwork, undefined);
+  const coverKey = '0123456789abcdef0123456789abcdef';
+  assert.equal(readVkNowPlaying({ title: 'Трек', artwork: coverKey })?.artwork, coverKey);
+  for (const artwork of ['https://sun9-9.userapi.com/impg/a.webp?size=600x600&sign=x',
+    'luma://app/media/vk-cover/4fe67647-14f7-4fa2-9249-1385ab2f240a', '', '0123456789ABCDEF0123456789ABCDEF']) {
+    assert.equal(readVkNowPlaying({ title: 'Трек', artwork })?.artwork, undefined, artwork);
+  }
   assert.equal(readVkNowPlaying({ playing: true }), undefined);
   assert.equal(readVkNowPlaying({ title: 'a'.repeat(1000) })?.title.length, 160);
 });

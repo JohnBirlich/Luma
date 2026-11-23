@@ -15,7 +15,7 @@ export interface VkBounds { x: number; y: number; width: number; height: number 
 export interface VkPosition { position: number; duration: number; seek: boolean }
 export interface VkNowPlaying {
   title: string; artist: string; playing: boolean; previous: boolean; toggle: boolean; next: boolean; timeline?: VkPosition;
-  /** Public cover address, validated below, so a saved listen can show the same artwork later. */
+  /** Opaque cover key from the app's own cache, so a saved listen keeps its artwork without a VK URL. */
   artwork?: string;
   link?: string; volume?: number; canMute?: boolean; shuffle?: boolean; repeat?: Repeat; favorite?: boolean;
 }
@@ -33,6 +33,7 @@ function https(value: unknown) {
   if (url?.protocol === 'https:' && !url.username && !url.password && !url.port) return url;
 }
 
+export const VK_COVER_KEY = /^[a-f0-9]{32}$/;
 export const VK_ARTWORK_HOST = /^sun[0-9]{1,3}(?:-[0-9]{1,4})?\.(?:userapi\.com|vkuserphoto\.ru)$/;
 const artworkQuery = new Set(['as', 'ava', 'c_uniq_tag', 'crop', 'cs', 'from', 'keep_aspect_ratio', 'quality', 'sign', 'size', 'stp', 'type', 'u']);
 
@@ -123,7 +124,7 @@ export function readVkNowPlaying(value: unknown): VkNowPlaying | undefined {
   const volume = vkSeekRatio(row.volume);
   const repeat = row.repeat === 'off' || row.repeat === 'one' || row.repeat === 'all' ? row.repeat : undefined;
   const link = title ? vkHistoryLink(row.link) : undefined;
-  const artwork = title ? vkArtworkUrl(row.artwork) : undefined;
+  const artwork = title && typeof row.artwork === 'string' && VK_COVER_KEY.test(row.artwork) ? row.artwork : undefined;
   return { title, artist, ...(link && { link }), ...(artwork && { artwork }), playing: row.playing === true, previous, toggle, next, ...(timeline && { timeline }),
     ...(volume !== undefined && { volume, canMute: row.canMute === true }), ...(typeof row.shuffle === 'boolean' && { shuffle: row.shuffle }),
     ...(repeat && { repeat }), ...(typeof row.favorite === 'boolean' && { favorite: row.favorite }) };

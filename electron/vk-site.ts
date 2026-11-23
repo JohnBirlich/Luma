@@ -9,6 +9,8 @@ import { vkAppearanceScript } from './vk-appearance.js';
 import { inspectVkPlayer } from './vk-player.js';
 import { fetchVkArtwork } from './vk-artwork.js';
 import type { VkArtwork } from './vk-artwork.js';
+import { vkCoverKey } from './vk-cover-cache.js';
+import type { VkCoverCache } from './vk-cover-cache.js';
 
 interface CurrentCover { key: string; id: string; cancel: AbortController; image?: VkArtwork }
 
@@ -29,6 +31,8 @@ export class VkSite {
   private active?: VkView;
   private isolated?: Electron.Session;
   private resetting = false;
+
+  constructor(private readonly covers?: VkCoverCache) {}
 
   artwork(id: string) {
     const active = this.active;
@@ -62,6 +66,8 @@ export class VkSite {
       if (signal.aborted || active.cover !== cover || !this.musicPageReady(active)) return;
       if (!image) continue;
       cover.image = image;
+      // History rows keep only this key; the renderer never sees the VK address.
+      void this.covers?.put(vkCoverKey(src), image);
       this.publish(active, { cover: `luma://app/media/vk-cover/${cover.id}` });
       return;
     }
@@ -317,9 +323,10 @@ export class VkSite {
         this.startQr(active);
         return;
       }
-      // The renderer keeps one public cover address for a saved listen; the
-      // image itself still arrives over the private protocol.
-      const cover = Array.isArray(snapshot?.artwork) ? snapshot.artwork.map(vkArtworkUrl).find(Boolean) : undefined;
+      // A saved listen keeps an opaque key into the bounded cover cache, so no
+      // VK address ever leaves this process.
+      const source = Array.isArray(snapshot?.artwork) ? snapshot.artwork.map(vkArtworkUrl).find(Boolean) : undefined;
+      const cover = source && vkCoverKey(source);
       const visible = readVkNowPlaying({ ...snapshot, artwork: cover });
       const track = snapshot && readVkNowPlaying({ ...visible,
         playing: typeof media?.playing === 'boolean' ? media.playing : visible?.playing,

@@ -14,7 +14,7 @@ export function VkHistoryRows({ entries, open }: { entries: readonly VkHistoryEn
       return <li key={vkHistoryKey(entry)}>
         <button className="vk-history-track" type="button" aria-label={t('Открыть {0} в VK', entry.title)} disabled={!url || !open}
           onClick={() => { if (url) open?.(url); }}>
-          <Artwork imageUrl={entry.artwork ?? VK_ARTWORK_URL} />
+          <Artwork imageUrl={entry.artwork && window.luma ? `luma://app/media/vk-listen/${entry.artwork}` : VK_ARTWORK_URL} />
           <span className="vk-history-text"><strong title={entry.title}>{entry.title}</strong>{entry.artist && <small title={entry.artist}>{entry.artist}</small>}</span>
           <span className="vk-history-badge">VK</span><ExternalLink size={15} aria-hidden="true" />
         </button>
