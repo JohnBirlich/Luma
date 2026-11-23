@@ -1383,10 +1383,12 @@ async function smoke() {
       await waitFor('the same signed-in guest is hidden but retained on Now Playing', async () => vkView() === nativeView
         && !nativeView.getVisible() && !guest.isAudioMuted() && await mirrored('.home-now[data-playback-source="vk"] .hero h2', 0)
         && await run(`document.querySelector('.home-now .hero-meta').textContent === ${JSON.stringify(vkFixtureArtist)}`));
-      await waitFor('Now Playing offers the same like and dislike pair as a local track', async () => await run(`(() => {
-        const like = document.querySelector('.home-now .vk-like'), dislike = document.querySelector('.home-now .vk-dislike');
-        return like?.getAttribute('aria-pressed') === 'true' && dislike?.getAttribute('aria-pressed') === 'true';
-      })()`));
+      const feedback = () => run(`JSON.stringify({
+        like: document.querySelector('.home-now .vk-like')?.getAttribute('aria-pressed') ?? null,
+        dislike: document.querySelector('.home-now .vk-dislike')?.getAttribute('aria-pressed') ?? null,
+        track: window.vkFixtureStates.at(-1)?.state?.track ?? null })`);
+      const shown = (value) => { const state = JSON.parse(value); return state.like === 'true' && state.dislike === 'true'; };
+      await waitFor(`Now Playing offers the same like and dislike pair as a local track (${await feedback()})`, async () => shown(await feedback()));
       assert.equal(await run(`!navigator.mediaSession.metadata && [...document.querySelectorAll('audio')].every(audio => audio.paused)
         && !document.querySelector('.home-now :is(.favorite-toggle,.hero-index,.track-cover-button,.hero-karaoke)')`), true);
       const beforeBackground = await guestRun('fixtureAudio.currentTime');

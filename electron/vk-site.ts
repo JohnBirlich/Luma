@@ -351,6 +351,18 @@ export class VkSite {
         volume: media?.muted === true ? 0 : visible?.volume ?? media?.volume,
         canMute: snapshot.canMute === true || media?.canMute === true,
       });
+      // A guest that is hidden behind Luma can still be read for its transport but
+      // not always for every switch, so a known mode or feedback state stays
+      // published for the same track instead of flickering away between polls.
+      const previous = active.state.track;
+      if (track && previous && previous.title === track.title && previous.artist === track.artist) {
+        track.shuffle ??= previous.shuffle;
+        track.repeat ??= previous.repeat;
+        track.favorite ??= previous.favorite;
+        track.liked ??= previous.liked;
+        track.disliked ??= previous.disliked;
+        track.canMute ||= previous.canMute;
+      }
       const engaged = track?.playing ? true : active.state.engaged;
       if (!active.foreground && !engaged) { this.dispose(active); return; }
       const started = engaged !== active.state.engaged;
