@@ -1290,9 +1290,9 @@ async function smoke() {
       assert.equal(await vkCommand('dislike'), true);
       await waitFor('a switch that ignores scripted clicks still receives real input',
         () => guestRun(`document.querySelector('#fixture-dislike').getAttribute('aria-pressed') === 'true'`));
-      await waitFor('Now Playing offers the same like and dislike pair as a local track', async () => await run(`(() => {
-        const like = document.querySelector('.home-now .vk-like'), dislike = document.querySelector('.home-now .vk-dislike');
-        return like?.getAttribute('aria-pressed') === 'true' && dislike?.getAttribute('aria-pressed') === 'true';
+      await waitFor('the mirrored VK snapshot carries both feedback marks as state', () => run(`(() => {
+        const track = window.vkFixtureStates.at(-1)?.state?.track;
+        return track?.liked === true && track?.disliked === true;
       })()`));
       await fill(`${vkDock} .volume input`, '34');
       await waitFor('VK volume delegates to the native slider', () => guestRun(`Math.abs(document.querySelector('audio').volume - .34) < .01`));
