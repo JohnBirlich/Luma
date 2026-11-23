@@ -5,45 +5,63 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { WindowsUpdates } from '../electron/windows-update.js';
-import { installerName, LATEST_RELEASE_API, newerStableVersion, portableName, readWindowsRelease, RELEASE_REPO } from '../src/shared/release-updates.js';
+import { installerName, LATEST_RELEASE_API, newerStableVersion, portableName, readWindowsRelease } from '../src/shared/release-updates.js';
 import type { UpdateDownloadState } from '../src/shared/release-updates.js';
 
 const version = '0.20.0', installed = '0.19.0', signer = 'a'.repeat(64);
-const name = installerName(version), asset = `https://github.com/${RELEASE_REPO}/releases/download/v${version}/${name}`;
+const repoApi = 'https://api.github.com/repositories/1463134723/releases';
+const asset = `${repoApi}/assets/42`, portableAsset = `${repoApi}/assets/43`;
+const name = installerName(version);
 const storage = 'https://objects.githubusercontent.com/github-production-release-asset-2e65be/1463134723/f644c51d-d353-4dc3-8b47-8310467fa712?some=signed-value';
 const payload = Buffer.from('fake test executable, never launched');
-const installer = { name, browser_download_url: asset, state: 'uploaded', size: payload.length, digest: `sha256:${createHash('sha256').update(payload).digest('hex')}` };
+const installer = { id: 42, name, state: 'uploaded', size: payload.length, digest: `sha256:${createHash('sha256').update(payload).digest('hex')}` };
 const portablePayload = Buffer.from('fake portable payload. Do not execute test fixtures.');
-const portableFile = { ...installer, name: portableName(version), size: portablePayload.length,
-  browser_download_url: asset.replace(name, portableName(version)), digest: `sha256:${createHash('sha256').update(portablePayload).digest('hex')}` };
+const portableFile = { ...installer, id: 43, name: portableName(version), size: portablePayload.length,
+  digest: `sha256:${createHash('sha256').update(portablePayload).digest('hex')}` };
 const release = { tag_name: `v${version}`, draft: false, prerelease: false, assets: [installer, portableFile] };
 const releaseFor = (url: string) => new Response(null, { status: 302, headers: { Location: url } });
 
-test('stable releases and setup assets are compared numerically and scoped to the exact repository path', () => {
+test('a repository rename does not change the lookup or download endpoints', () => {
+  assert.equal(LATEST_RELEASE_API, `${repoApi}/latest`);
+  for (const repo of ['JohnBirlich/VKX-Modded', 'JohnBirlich/Luma', 'JohnBirlich/Luma-Renamed']) {
+    const payload = { ...release, url: `https://api.github.com/repos/${repo}/releases/41`, assets: release.assets.map(file => ({
+      ...file,
+      url: `https://api.github.com/repos/${repo}/releases/assets/${file.id}`,
+      browser_download_url: `https://github.com/${repo}/releases/download/v${version}/${file.name}`,
+    })) };
+    assert.equal(readWindowsRelease(payload)?.asset, asset);
+    assert.equal(readWindowsRelease(payload, 'portable')?.asset, portableAsset);
+  }
+  const unrelated = 'https://example.invalid/setup.exe';
+  assert.equal(readWindowsRelease({ ...release, assets: [{ ...installer, url: unrelated, browser_download_url: unrelated }] })?.asset, asset,
+    'untrusted links never become download requests');
+});
+
+test('stable versions and unique, uploaded assets require valid numeric IDs', () => {
   assert.equal(newerStableVersion('1.10.0', '1.9.99'), true);
   assert.equal(newerStableVersion('1.1.0', '1.1.0-rc.2'), true);
   assert.equal(newerStableVersion('1.1.0', '1.1.0+git-hash'), false);
   assert.equal(newerStableVersion('1.0.0', '0.20.0'), true);
   assert.equal(newerStableVersion('1.0.0', '2.0.0'), false);
   assert.equal(newerStableVersion('1.0.0-rc.1', '0.19.0'), false);
-  assert.equal(LATEST_RELEASE_API, 'https://api.github.com/repos/JohnBirlich/Luma/releases/latest');
-  assert.equal(readWindowsRelease(release)?.asset, `https://github.com/JohnBirlich/Luma/releases/download/v${version}/${name}`);
-  assert.equal(readWindowsRelease(release, 'portable')?.asset, portableFile.browser_download_url);
-  const legacyAsset = asset.replace('/JohnBirlich/Luma/', '/JohnBirlich/VKX-Modded/');
-  assert.equal(readWindowsRelease({ ...release, assets: [{ ...installer, browser_download_url: legacyAsset }] }), undefined);
   assert.equal(readWindowsRelease({ ...release, assets: [installer] }, 'portable'), undefined, 'Portable never falls back to Setup');
   assert.equal(readWindowsRelease({ ...release, assets: [portableFile, portableFile] }, 'portable'), undefined, 'ambiguous assets are rejected');
   assert.equal(readWindowsRelease({ ...release, draft: true }), undefined);
   assert.equal(readWindowsRelease({ ...release, prerelease: true }), undefined);
-  assert.equal(readWindowsRelease({ ...release, assets: [{ ...installer, browser_download_url: 'https://example.net/setup.exe' }] }), undefined);
+  assert.equal(readWindowsRelease({ ...release, assets: [{ ...installer, state: 'new' }] }), undefined);
+  for (const id of [undefined, null, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '42', '../42']) {
+    assert.equal(readWindowsRelease({ ...release, assets: [{ ...installer, id }] }), undefined);
+  }
   assert.equal(readWindowsRelease({ ...release, assets: [{ ...installer, name: name.replace('Setup', 'Portable') }] }), undefined);
   assert.equal(readWindowsRelease({ ...release, assets: [{ ...installer, digest: 'sha256:truncated' }] })?.digest, undefined);
 });
 
 test('only checks release metadata until asked to save, and only signed Setup can install', async () => {
   let requests = 0;
-  const fetcher: typeof fetch = async (url) => {
+  const fetcher: typeof fetch = async (url, init) => {
     assert.equal(url, LATEST_RELEASE_API);
+    assert.equal(init?.redirect, 'error');
+    assert.equal(new Headers(init?.headers).get('Accept'), 'application/vnd.github+json');
     requests++;
     return Response.json(release);
   };
@@ -69,6 +87,7 @@ test('prepared update checks the request, bytes and both signatures before one e
     if (url === LATEST_RELEASE_API) return Response.json(release);
     if (url === asset) {
       assert.equal(init?.redirect, 'manual');
+      assert.equal(new Headers(init?.headers).get('Accept'), 'application/octet-stream');
       return new Response(null, { status: 302, headers: { Location: variant === 'redirect' ? 'https://evil.invalid/installer.exe' : storage } });
     }
     assert.equal(url, storage);
@@ -110,18 +129,25 @@ test('explicit Portable/Setup download streams the right asset and saves only ve
   try {
     for (const mode of ['portable', 'manual'] as const) {
       const kind = mode === 'portable' ? portableFile : installer;
+      const endpoint = mode === 'portable' ? portableAsset : asset;
       const bytes = mode === 'portable' ? portablePayload : payload;
       const requests: unknown[] = [], states: UpdateDownloadState[] = [];
       const fetcher: typeof fetch = async (url, init) => {
         requests.push(url);
         assert.equal(init?.credentials, 'omit');
         if (url === LATEST_RELEASE_API) return Response.json(release);
-        if (url === kind.browser_download_url) {
+        if (url === endpoint) {
           assert.equal(init?.redirect, 'manual');
-          return releaseFor(storage);
+          const headers = new Headers(init?.headers);
+          assert.equal(headers.get('Accept'), 'application/octet-stream');
+          assert.equal(headers.get('X-GitHub-Api-Version'), '2022-11-28');
+          assert.equal(headers.get('Authorization'), null);
+          if (mode === 'manual') return releaseFor(storage);
+        } else {
+          assert.equal(url, storage);
+          assert.equal(init?.redirect, 'error');
+          assert.equal(init?.headers, undefined);
         }
-        assert.equal(url, storage);
-        assert.equal(init?.redirect, 'error');
         return new Response(new ReadableStream({ start(stream) {
           stream.enqueue(Uint8Array.from(bytes.subarray(0, 10)));
           stream.enqueue(Uint8Array.from(bytes.subarray(10)));
@@ -132,13 +158,13 @@ test('explicit Portable/Setup download streams the right asset and saves only ve
         async () => assert.fail('Saving must not attempt installation'), async () => assert.fail('Downloads are not executable actions'), original);
       updates.onDownloadState = (state) => states.push(state);
       assert.equal(await updates.revealDownload(() => assert.fail('Nothing saved yet')), false);
-      for (const invalid of [installed, '0.13.0', `${version}-beta.2`, kind.browser_download_url, { version }]) {
+      for (const invalid of [installed, '0.13.0', `${version}-beta.2`, endpoint, { version }]) {
         assert.equal(await updates.download(invalid, downloads, () => true), 'unavailable');
       }
       assert.equal(await updates.download(version, downloads, () => false), 'unavailable');
       assert.deepEqual(requests, []);
       assert.equal(await updates.download(version, downloads, () => true), 'saved');
-      assert.deepEqual(requests, [LATEST_RELEASE_API, kind.browser_download_url, storage]);
+      assert.deepEqual(requests, mode === 'portable' ? [LATEST_RELEASE_API, endpoint] : [LATEST_RELEASE_API, endpoint, storage]);
       assert.deepEqual(states[0], { state: 'preparing', version });
       assert.deepEqual(states[1], { state: 'downloading', version, received: 0, bytes: bytes.length });
       assert.deepEqual(states.slice(-3), [
@@ -153,7 +179,7 @@ test('explicit Portable/Setup download streams the right asset and saves only ve
       assert.deepEqual(await readFile(saved), bytes);
       if (process.platform === 'win32') {
         const zone = await readFile(`${saved}:Zone.Identifier`, 'utf8');
-        assert.equal(zone, `[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=${kind.browser_download_url}\r\n`);
+        assert.equal(zone, `[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=${endpoint}\r\n`);
       }
       await rm(saved);
       assert.equal(await updates.revealDownload(() => assert.fail('The file was moved')), false);
@@ -166,15 +192,16 @@ test('explicit Portable/Setup download streams the right asset and saves only ve
 test('rejects stale releases, missing hashes, foreign redirects, bad sizes and bad checksums without exposing an exe', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'luma-download-reject-'));
   try {
-    for (const fault of ['stale', 'missing', 'redirect', 'repo', 'digest', 'length', 'truncated', 'oversize', 'offline', 'owner'] as const) {
+    for (const fault of ['stale', 'missing', 'redirect', 'repo', 'digest', 'length', 'truncated', 'oversize', 'metadata', 'offline', 'owner'] as const) {
       const selected = fault === 'missing' ? { ...portableFile, digest: undefined } : portableFile;
       const checkOnly = fault === 'stale' || fault === 'missing';
       let open = true;
       const fetcher: typeof fetch = async (url) => {
         if (url === LATEST_RELEASE_API) return Response.json({ ...release, assets: [selected] });
         assert.ok(!checkOnly, 'do not fetch an asset that cannot be saved');
-        if (url === portableFile.browser_download_url) {
+        if (url === portableAsset) {
           if (fault === 'offline') throw new Error('network disconnected');
+          if (fault === 'metadata') return Response.json(selected);
           if (fault === 'redirect') return releaseFor('https://unexpected.invalid/file.exe');
           if (fault === 'repo') return releaseFor(storage.replace('1463134723', '1463134724'));
           return releaseFor(storage);
@@ -205,7 +232,7 @@ test('single download across panels; cancelling or quitting aborts the stream an
       const fetching = Promise.withResolvers<void>();
       const fetcher: typeof fetch = async (url, init) => {
         if (url === LATEST_RELEASE_API) return Response.json(release);
-        assert.equal(url, portableFile.browser_download_url);
+        assert.equal(url, portableAsset);
         const signal = init?.signal;
         assert.ok(signal);
         return new Response(new ReadableStream({ start(reader) {

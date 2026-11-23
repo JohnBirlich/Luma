@@ -6,18 +6,22 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import { readLimitedBody } from '../src/shared/metadata-service.js';
-import { installerName, LATEST_RELEASE_API, newerStableVersion, readWindowsRelease, windowsArtifactName } from '../src/shared/release-updates.js';
+import { installerName, LATEST_RELEASE_API, newerStableVersion, readWindowsRelease, RELEASE_REPO_ID, windowsArtifactName } from '../src/shared/release-updates.js';
 import type { DownloadResult, InstallResult, UpdateDownloadState, UpdateMode, UpdateReport, WindowsRelease } from '../src/shared/release-updates.js';
 
 const fetchOptions = { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', redirect: 'error' } as const;
 const UPDATE_RECHECK_MS = 5 * 60_000;
 const RELEASE_ASSET_ORIGINS = new Set(['https://objects.githubusercontent.com', 'https://release-assets.githubusercontent.com']);
+const RELEASE_ASSET_PATH = /^\/github-production-release-asset(?:-[\da-f]+)?\/(\d+)\/[\da-f-]{36}$/;
+const githubApiHeaders = (accept: string) => ({
+  Accept: accept, 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Luma-Player',
+});
 
 function releaseAssetRedirect(value: string | null) {
   if (!value || value.length > 8192) return;
   const url = URL.parse(value);
   if (url && RELEASE_ASSET_ORIGINS.has(url.origin) && !url.username && !url.password && !url.hash
-    && /^\/github-production-release-asset(?:-[\da-f]+)?\/1463134723\/[\da-f-]{36}$/.test(url.pathname)) return url.href;
+    && RELEASE_ASSET_PATH.exec(url.pathname)?.[1] === String(RELEASE_REPO_ID)) return url.href;
 }
 
 const exec = promisify(execFile);
@@ -40,7 +44,8 @@ export async function verifyWindowsSigner(helper: string, path: string, expected
 async function downloadWindowsAsset(release: WindowsRelease, path: string, signal: AbortSignal, fetcher: typeof fetch,
   onBytes?: (bytes: number) => void, onVerifying?: () => void) {
   if (!release.digest) throw new Error('Release digest is missing');
-  const response = await fetcher(release.asset, { ...fetchOptions, redirect: 'manual', signal });
+  const response = await fetcher(release.asset, { ...fetchOptions, redirect: 'manual', signal,
+    headers: githubApiHeaders('application/octet-stream') });
   const url = response.status === 302 || response.status === 307 ? releaseAssetRedirect(response.headers.get('Location')) : undefined;
   let asset = response;
   if (url) {
@@ -116,7 +121,7 @@ export class WindowsUpdates {
     this.pending = (async () => {
       const signal = AbortSignal.any([this.stopped.signal, AbortSignal.timeout(12_000)]);
       const response = await this.fetcher(LATEST_RELEASE_API, { ...fetchOptions, signal,
-        headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Luma-Player' } });
+        headers: githubApiHeaders('application/vnd.github+json') });
       if (!response.ok) { await response.body?.cancel().catch(() => {}); throw new Error('Release lookup failed'); }
       const body = await readLimitedBody(response, 512 * 1024, signal);
       const release = readWindowsRelease(JSON.parse(new TextDecoder().decode(body)), this.artifact);

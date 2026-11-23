@@ -1,7 +1,10 @@
-export const RELEASE_REPO = 'JohnBirlich/Luma';
-export const LATEST_RELEASE_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
+export const RELEASE_REPO = 'JohnBirlich/Luma'; // Browser links and service identification only.
+export const RELEASE_REPO_ID = 1463134723;
+// GitHub redirects old slugs to this endpoint; the numeric ID survives a rename.
+const RELEASE_API = `https://api.github.com/repositories/${RELEASE_REPO_ID}/releases`;
+export const LATEST_RELEASE_API = `${RELEASE_API}/latest`;
 export const MAX_WINDOWS_ASSET_BYTES = 256 * 1024 * 1024;
-// Preserve the exact release asset path understood by installed versions.
+// Keep the release filenames consistent with the publisher and installed clients.
 export const installerName = (version: string) => `Luma-Player-Setup-${version}-x64.exe`;
 export const portableName = (version: string) => `Luma-Portable-${version}-x64.exe`;
 export type WindowsArtifact = 'setup' | 'portable';
@@ -32,11 +35,13 @@ export function readWindowsRelease(value: unknown, artifact: WindowsArtifact = '
   const version = row.tag_name.slice(1);
   if (!versionParts(version)) return;
   const name = windowsArtifactName(version, artifact);
-  const asset = `https://github.com/${RELEASE_REPO}/releases/download/v${version}/${name}`;
   const matches = row.assets.filter((file) => file?.name === name);
   if (matches.length !== 1) return;
   const [file] = matches;
-  if (file.state !== 'uploaded' || file.browser_download_url !== asset || !Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_WINDOWS_ASSET_BYTES) return;
+  if (file.state !== 'uploaded' || !Number.isSafeInteger(file.id) || file.id < 1
+    || !Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_WINDOWS_ASSET_BYTES) return;
+  // Construct the download in the same repository; don't follow mutable links in the payload.
+  const asset = `${RELEASE_API}/assets/${file.id}`;
   const digest = typeof file.digest === 'string' && file.digest.startsWith('sha256:') ? readSignerSha256(file.digest.slice(7)) : undefined;
   return { version, asset, bytes: file.size, digest };
 }

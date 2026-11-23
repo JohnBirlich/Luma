@@ -449,8 +449,8 @@ async function smoke() {
   session.defaultSession.protocol.handle('https', (request) => {
     if (request.url !== LATEST_RELEASE_API) return new Response(null, { status: 404 });
     updateLookups++;
-    return Response.json({ tag_name: `v${nextVersion}`, draft: false, prerelease: false, assets: [{ name: setupName, state: 'uploaded', size: 1234,
-      browser_download_url: `https://github.com/${RELEASE_REPO}/releases/download/v${nextVersion}/${setupName}`, digest: `sha256:${'b'.repeat(64)}` }] });
+    return Response.json({ tag_name: `v${nextVersion}`, draft: false, prerelease: false, assets: [{ id: 31415, name: setupName, state: 'uploaded', size: 1234,
+      browser_download_url: `https://github.com/JohnBirlich/Luma-Renamed/releases/download/v${nextVersion}/${setupName}`, digest: `sha256:${'b'.repeat(64)}` }] });
   });
   try {
     await run(`document.querySelector('.title-settings').click()`);
