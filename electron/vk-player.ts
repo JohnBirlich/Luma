@@ -49,15 +49,20 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
   const next = ['.top_audio_player_next, .audio_page_player_next, .audio_page_player2_next, .audio_player_btn_next',
     /^(?:следующ(?:ая аудиозапись|ий трек)|next(?: track)?)$/i, 'svg:is([class*="vkuiIcon--skip_next_"],[class*="vkuiIcon--skip_forward_"])'] as const;
   const buttons = 'button, [role="button"]';
-  const pick = (scope: readonly Element[], selector: string, pattern: RegExp, icon?: string) => {
+  const pick = (scope: readonly Element[], selector: string, pattern: RegExp, icon?: string, onScreen = false) => {
+    const usable = (el: Element): el is HTMLElement => actionable(el) && (!onScreen || visible(el));
     for (const root of scope) {
-      const known = selector && [...root.querySelectorAll(selector)].find(actionable);
+      const known = selector && [...root.querySelectorAll(selector)].find(usable);
       if (known) return known;
       for (const el of root.querySelectorAll(buttons)) {
-        if (actionable(el) && (pattern.test(label(el)) || !!(icon && el.querySelector(icon)))) return el;
+        if (usable(el) && (pattern.test(label(el)) || !!(icon && el.querySelector(icon)))) return el;
       }
     }
   };
+  // Mode switches are offered by the rendered player; the retained compact bar can
+  // still be inert behind Luma, so an on-screen control always wins.
+  const mode = (selector: string, pattern: RegExp, icon: string) =>
+    pick(roots, selector, pattern, icon, true) ?? pick(roots, selector, pattern, icon);
 
   const inPage = [...document.querySelectorAll(inline)]
     .filter(el => !el.closest(`${header}, ${top}`) && visible(el) && pick([el], ...toggle))
@@ -116,10 +121,10 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
   }
   const controls = {
     previous: pick(roots, ...previous), toggle: pick(roots, ...toggle), next: pick(roots, ...next),
-    shuffle: pick(roots, '.top_audio_player_shuffle, .audio_page_player_shuffle, .audio_page_player2_shuffle',
+    shuffle: mode('.top_audio_player_shuffle, .audio_page_player_shuffle, .audio_page_player2_shuffle',
       /^(?:(?:включить |выключить )?(?:перемешивание|случайный порядок|случайное воспроизведение)|перемешать(?: треки| очередь)?|в случайном порядке|(?:enable |disable )?shuffle)$/i,
       'svg:is([class*="vkuiIcon--shuffle_"],[class*="vkuiIcon--shuffle_outline_"])'),
-    repeat: pick(roots, '.top_audio_player_repeat, .audio_page_player_repeat, .audio_page_player2_repeat',
+    repeat: mode('.top_audio_player_repeat, .audio_page_player_repeat, .audio_page_player2_repeat',
       /^(?:(?:(?:включить |выключить )?повтор|повторять)(?:(?:[: ]+)(?:всё|все|один трек|трек|очередь|плейлист|выключен))?|repeat(?: (?:all|one|off))?)$/i,
       'svg:is([class*="vkuiIcon--repeat_"],[class*="vkuiIcon--repeat_one_"])'),
     favorite: pick(roots, '.audio_page_player2_add, [data-testid="audio-player-library"]',

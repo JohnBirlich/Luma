@@ -77,7 +77,10 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   addMusic(): void;
 }
 
-function Updates({ tracks, play, currentId, playing }: Pick<HomeProps, 'tracks' | 'play' | 'currentId' | 'playing'>) {
+function Updates({ tracks, play, playAll, currentId, playing }: {
+  tracks: Track[]; play(id: string, toggleCurrent?: boolean): void; playAll(tracks: Track[], start?: string): void;
+  currentId: string | null; playing: boolean;
+}) {
   const t = useText();
   const info = useInstalledBuild();
   const latest = useMemo(() => tracks.filter(({ demo, online }) => !demo && !online).slice(-9).reverse(), [tracks]);
@@ -86,13 +89,13 @@ function Updates({ tracks, play, currentId, playing }: Pick<HomeProps, 'tracks' 
       <div><p className="overline">{APP_NAME}</p><h2>{info ? t('Версия {0}', info.version) : info === null ? t('Версия недоступна') : t('Читаем версию…')}</h2>
         <UpdatesPanel /></div>
     </section>
-    {latest.length > 0 && <Shelf title={t('Недавно добавлено')}><TrackRows tracks={latest} play={play} currentId={currentId} playing={playing} strip /></Shelf>}
+    {latest.length > 0 && <Shelf title={t('Недавно добавлено')}><TrackRows tracks={latest} play={play} playAll={playAll} currentId={currentId} playing={playing} strip /></Shelf>}
   </>;
 }
 
 export const HomePage = memo(function HomePage(props: HomeProps) {
   const t = useText();
-  const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary } = props;
+  const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary, playCatalog } = props;
   const { tab, query, setQuery, selectTab, vkSite, closeVk } = props;
   const vkTab = tab === 'vk';
   const [composing, setComposing] = useState(false);
@@ -121,7 +124,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
   }, [term, searchIndex]);
   const favoriteOptions = sources.some(({ id }) => favorites.has(id));
   const mixReady = mixType === 'favorites' ? favoriteOptions : mixType === 'recent' ? !!data.history.length : !!sources.length;
-  const rows = { play, currentId, playing };
+  const rows = { play, playAll: playCatalog, currentId, playing };
 
   function mix(type: MixType) {
     playMix(makeMix(sources, { type, favorites, recent: data.history, offline: !connected || justFiles, disliked,
@@ -151,7 +154,8 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
     {term ? <OnlineSearch key={catalogTerm} query={query} visible={visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
       library={found} playLibrary={(id) => play(id, true)} remember={props.rememberSearch} searchVk={props.searchVk}
       renderLibrary={(items) => items.length > 0 || !found.length ? <Shelf title={t('В вашей медиатеке')}>
-        {items.length ? <TrackRows {...rows} play={(id) => { props.rememberSearch(query); play(id, true); }} tracks={items} /> : <p className="hub-note">{t('В медиатеке нет совпадений.')}</p>}
+        {items.length ? <TrackRows {...rows} playAll={undefined} play={(id) => { props.rememberSearch(query); play(id, true); }} tracks={items} />
+          : <p className="hub-note">{t('В медиатеке нет совпадений.')}</p>}
       </Shelf> : null}
       autoCatalogSearch={props.autoCatalogSearch} changeAutoCatalogSearch={props.changeAutoCatalogSearch} /> : <>
       {tab === 'home' && <>

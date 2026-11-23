@@ -23,14 +23,18 @@ export function Tile({ title, description, color, onClick, disabled, symbol, ima
     <span className="hub-tile-play" aria-hidden="true">{open ? <ChevronRight size={15} /> : <Play size={13} fill="currentColor" />}</span>
   </button>;
 }
-export const TrackRows = memo(function TrackRows({ tracks, play, currentId, playing, strip = false, credits = false, disabled = false }: {
-  tracks: readonly Track[]; play(id: string, toggleCurrent?: boolean): void; currentId: string | null; playing: boolean; strip?: boolean; credits?: boolean; disabled?: boolean;
+export const TrackRows = memo(function TrackRows({ tracks, play, playAll, currentId, playing, strip = false, credits = false, disabled = false }: {
+  tracks: readonly Track[]; play(id: string, toggleCurrent?: boolean): void; playAll?(tracks: readonly Track[], start: string): void;
+  currentId: string | null; playing: boolean; strip?: boolean; credits?: boolean; disabled?: boolean;
 }) {
   const t = useText();
   return <ul className={`hub-tracks${strip ? ' hub-tracks-strip' : ''}`}>{tracks.map((track) => {
     const active = track.id === currentId, live = active && playing;
+    // A row starts the whole shelf it belongs to, so the next track is not a
+    // one-item queue that repeats itself. Clicking the current row still toggles.
+    const listen = () => active || !playAll ? play(track.id, true) : playAll(tracks, track.id);
     return <li key={track.id} className={credits ? "hub-credit-row" : undefined}><button type="button" disabled={disabled} aria-current={active ? 'true' : undefined} aria-label={t(live ? 'Приостановить: {0}' : 'Слушать: {0}', track.title)}
-      className="hub-track" onClick={() => play(track.id, true)}>
+      className="hub-track" onClick={listen}>
       <span className="hub-track-art"><Artwork track={track} lazy /><i>{live ? <CirclePause size={22} /> : <Play size={16} fill="currentColor" />}</i></span>
       <span className="hub-track-copy"><strong title={track.title}>{track.title}</strong><small title={track.artist}>{track.artist}</small></span>
       <time>{formatTime(track.duration)}</time>

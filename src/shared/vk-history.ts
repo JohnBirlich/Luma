@@ -1,8 +1,9 @@
 import { musicSearchKey } from './russian.js';
-import { vkHistoryLink, vkMusicSearchUrl } from './vk-site.js';
+import { VK_COVER_KEY, vkHistoryLink, vkMusicSearchUrl } from './vk-site.js';
 
 export const VK_HISTORY_LIMIT = 60;
-export interface VkHistoryEntry { title: string; artist: string; link?: string }
+/** A saved VK listen keeps only its labels, its official track link and an app-local cover key. */
+export interface VkHistoryEntry { title: string; artist: string; link?: string; artwork?: string }
 
 const text = (value: unknown) => typeof value === 'string'
   ? value.slice(0, 256).replace(/[\p{Cc}\p{Cf}\s]+/gu, ' ').trim().slice(0, 160) : '';
@@ -13,7 +14,8 @@ export function readVkHistoryEntry(value: unknown): VkHistoryEntry | undefined {
   const title = text(row.title), artist = text(row.artist);
   if (!title || !musicSearchKey(title) || (!artist && /^(?:vk music|vk музыка|вк музыка)$/i.test(title))) return;
   const link = vkHistoryLink(row.link);
-  return { title, artist, ...(link && { link }) };
+  const artwork = typeof row.artwork === 'string' && VK_COVER_KEY.test(row.artwork) ? row.artwork : undefined;
+  return { title, artist, ...(link && { link }), ...(artwork && { artwork }) };
 }
 
 const identity = (entry: VkHistoryEntry) => `${musicSearchKey(entry.title)}\n${musicSearchKey(entry.artist)}`;
@@ -38,10 +40,14 @@ export function rememberVkListen(items: VkHistoryEntry[], value: unknown): VkHis
   const label = identity(entry);
   const exact = items.filter(other => other.link && identity(other) === label);
   const link = entry.link ?? (exact.length === 1 ? exact[0].link : undefined);
+  // A later listen without a cover address keeps the artwork that already worked.
+  const known = entry.artwork ?? (link ? items.find(other => other.link === link)?.artwork : undefined)
+    ?? items.find(other => identity(other) === label)?.artwork;
   const matches = (other: VkHistoryEntry) => other.link ? other.link === link : identity(other) === label;
   const first = items[0];
-  if (first?.title === entry.title && first.artist === entry.artist && first.link === link) return items;
-  return [{ title: entry.title, artist: entry.artist, ...(link && { link }) }, ...items.filter(other => !matches(other))].slice(0, VK_HISTORY_LIMIT);
+  if (first?.title === entry.title && first.artist === entry.artist && first.link === link && first.artwork === known) return items;
+  return [{ title: entry.title, artist: entry.artist, ...(link && { link }), ...(known && { artwork: known }) },
+    ...items.filter(other => !matches(other))].slice(0, VK_HISTORY_LIMIT);
 }
 
 export function vkHistoryDestination(entry: VkHistoryEntry) {

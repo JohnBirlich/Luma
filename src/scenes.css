@@ -41,51 +41,81 @@
 .scene-liquid-light { position: absolute; inset: -12%; background: radial-gradient(ellipse at 71% 33%,#f9fdffca,transparent 52%),radial-gradient(ellipse at 27% 72%,#bfedffa7,transparent 55%); }
 .scene-moving .scene-liquid-light { animation: scene-swell calc(16s * var(--scene-tempo)) ease-in-out infinite alternate; }
 
-/* Soft light from the original Luma scene. The stationary wash always fills the
-   surface. Every moving color fades to transparent, with overscan at both axes;
-   there is no conic-gradient join or hard-edged, rotated ribbon. */
+/* «Переливы Luma»: a slow mesh of cover colours with two iridescent passes.
+   The colour field re-mixes on one transform loop, a blurred conic layer slides
+   the hue across it, and a soft sheen crosses once in a while. Every colour fades
+   to transparent and every moving layer is transform/opacity only, so the surface
+   shimmers without a seam, a hard ribbon or a repaint on each frame. */
 .scene-mix-flow {
-  --mix-rose: #ab4c91;
-  --mix-lilac: #7e6bd1;
-  --mix-blue: #327cca;
-  --mix-aqua: #37b7ae;
-  --mix-ink: #121022;
-  --mix-base: #222c52;
-  background: radial-gradient(ellipse at 74% 80%, color-mix(in oklab, var(--mix-blue) 33%, transparent), transparent 75%),
-    radial-gradient(ellipse at 26% 33%, color-mix(in oklab, var(--mix-rose) 27%, transparent), transparent 64%),
-    linear-gradient(137deg, var(--mix-ink) 16%, var(--mix-base) 100%);
+  --mix-rose: #b25aa2;
+  --mix-lilac: #8b7ae4;
+  --mix-blue: #3f87db;
+  --mix-aqua: #45c6bd;
+  --mix-ink: #0d0b1c;
+  --mix-base: #26305a;
+  background:
+    radial-gradient(ellipse 76% 90% at 80% 92%, color-mix(in oklab, var(--mix-blue) 42%, transparent), transparent 71%),
+    radial-gradient(ellipse 64% 76% at 14% 18%, color-mix(in oklab, var(--mix-rose) 34%, transparent), transparent 68%),
+    radial-gradient(ellipse 92% 74% at 48% 52%, color-mix(in oklab, var(--mix-lilac) 17%, transparent), transparent 79%),
+    linear-gradient(142deg, var(--mix-ink) 6%, var(--mix-base) 97%);
 }
 .scene-mix-flow[data-cover-tone] {
-  --mix-ink: color-mix(in oklab, var(--scene-tone) 14%, #100c22);
-  --mix-base: color-mix(in oklab, var(--scene-tone) 28%, #1b2040);
-  --mix-rose: color-mix(in oklab, var(--scene-tone) 60%, #ab5b9f);
-  --mix-lilac: color-mix(in oklab, var(--scene-tone) 50%, #9b93ec);
-  --mix-blue: color-mix(in oklab, var(--scene-tone) 61%, #5180cc);
-  --mix-aqua: color-mix(in oklab, var(--scene-tone) 43%, #56c9c1);
+  --mix-ink: color-mix(in oklab, var(--scene-tone) 13%, #0e0a1e);
+  --mix-base: color-mix(in oklab, var(--scene-tone) 31%, #1b2144);
+  --mix-rose: color-mix(in oklab, var(--scene-tone) 62%, #b25aa2);
+  --mix-lilac: color-mix(in oklab, var(--scene-tone) 52%, #9c94f2);
+  --mix-blue: color-mix(in oklab, var(--scene-tone) 63%, #4a86dc);
+  --mix-aqua: color-mix(in oklab, var(--scene-tone) 45%, #5ad2c8);
 }
-.mix-flow-light { position: absolute; inset: -26% -23%; transform-origin: 53% 48%;
+.mix-flow-light { position: absolute; inset: -28%; transform-origin: 52% 54%; will-change: transform;
   background:
-    radial-gradient(ellipse 39% 40% at 32% 40%, color-mix(in oklab, var(--mix-rose) 68%, transparent), transparent 92%),
-    radial-gradient(ellipse 32% 35% at 52% 77%, color-mix(in oklab, var(--mix-aqua) 61%, transparent), transparent 92%),
-    radial-gradient(ellipse 42% 54% at 78% 45%, color-mix(in oklab, var(--mix-blue) 72%, transparent), transparent 91%),
-    radial-gradient(ellipse 40% 40% at 60% 32%, color-mix(in oklab, var(--mix-lilac) 44%, transparent), transparent 88%);
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent),
-    linear-gradient(transparent, #000 14%, #000 86%, transparent);
+    radial-gradient(ellipse 46% 44% at 30% 36%, color-mix(in oklab, var(--mix-rose) 74%, transparent), transparent 88%),
+    radial-gradient(ellipse 38% 42% at 57% 78%, color-mix(in oklab, var(--mix-aqua) 65%, transparent), transparent 90%),
+    radial-gradient(ellipse 50% 58% at 79% 43%, color-mix(in oklab, var(--mix-blue) 78%, transparent), transparent 87%),
+    radial-gradient(ellipse 46% 44% at 62% 26%, color-mix(in oklab, var(--mix-lilac) 52%, transparent), transparent 86%);
+  mask-image: linear-gradient(90deg, transparent, #000 13%, #000 87%, transparent),
+    linear-gradient(transparent, #000 13%, #000 87%, transparent);
   mask-composite: intersect;
-  animation: mix-liquid-flow calc(22s * var(--scene-tempo)) ease-in-out infinite alternate paused;
+  animation: mix-flow-remix calc(36s * var(--scene-tempo)) ease-in-out infinite alternate paused;
 }
-.mix-flow-light::after { content: ''; position: absolute; inset: 10% 8%;
-  background: radial-gradient(ellipse at 62% 48%, transparent 25%, color-mix(in oklab, var(--mix-lilac) 31%, transparent) 48%, transparent 68%),
-    radial-gradient(ellipse 54% 38% at 63% 63%, transparent 30%, color-mix(in oklab, var(--mix-aqua) 24%, transparent) 50%, transparent 81%);
-  mask-image: radial-gradient(ellipse closest-side, #000 39%, transparent 100%);
+/* A wide, heavily blurred colour wheel. It only shifts hue over the mesh, which is
+   what reads as a live iridescent перелив rather than moving blobs. */
+.mix-flow-light::before { content: ''; position: absolute; inset: 2% -4%;
+  background: conic-gradient(from 218deg at 56% 48%,
+    transparent 0deg, color-mix(in oklab, var(--mix-rose) 72%, transparent) 56deg,
+    color-mix(in oklab, var(--mix-lilac) 60%, transparent) 118deg, transparent 168deg,
+    color-mix(in oklab, var(--mix-blue) 68%, transparent) 236deg,
+    color-mix(in oklab, var(--mix-aqua) 58%, transparent) 296deg, transparent 344deg);
+  filter: blur(46px) saturate(1.18); opacity: .78; mix-blend-mode: screen;
+  animation: mix-flow-shimmer calc(54s * var(--scene-tempo)) linear infinite paused;
 }
-.scene-moving .mix-flow-light { animation-play-state: running; }
-@keyframes mix-liquid-flow {
-  0% { transform: translate3d(-3%, -3%, 0) rotate(-5deg) scale(1.04, 1.06); }
-  48% { transform: translate3d(2%, 2%, 0) rotate(3deg) scale(1.14, .98); }
-  100% { transform: translate3d(6%, -1%, 0) rotate(5deg) scale(1.07, 1.09); }
+/* The narrow highlight that crosses the surface, as in a slow caught light. */
+.mix-flow-light::after { content: ''; position: absolute; inset: 0;
+  background: linear-gradient(104deg, transparent 32%, #ffffff1f 44%, #ffffff3d 50%, #ffffff14 57%, transparent 68%);
+  mix-blend-mode: soft-light;
+  animation: mix-flow-sheen calc(19s * var(--scene-tempo)) ease-in-out infinite alternate paused;
 }
-@media (prefers-reduced-motion: reduce) { :is(.mix-flow-light, .tunnel-frame) { animation: none; } }
+.scene-moving .mix-flow-light, .scene-moving .mix-flow-light::before, .scene-moving .mix-flow-light::after { animation-play-state: running; }
+@keyframes mix-flow-remix {
+  0% { transform: translate3d(-4%, -3%, 0) rotate(-6deg) scale(1.03, 1.05); }
+  34% { transform: translate3d(3%, 4%, 0) rotate(4deg) scale(1.15, .97); }
+  63% { transform: translate3d(-2%, 5%, 0) rotate(-2deg) scale(1.06, 1.13); }
+  100% { transform: translate3d(6%, -2%, 0) rotate(7deg) scale(1.12, 1.06); }
+}
+@keyframes mix-flow-shimmer {
+  0% { transform: rotate(0deg) scale(1.02); }
+  50% { transform: rotate(180deg) scale(1.06); }
+  100% { transform: rotate(360deg) scale(1.02); }
+}
+@keyframes mix-flow-sheen {
+  0% { transform: translate3d(-13%, 6%, 0); opacity: .35; }
+  50% { opacity: .78; }
+  100% { transform: translate3d(13%, -6%, 0); opacity: .42; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.mix-flow-light, .mix-flow-light::before, .mix-flow-light::after) { animation: none; }
+}
+@media (prefers-reduced-motion: reduce) { :is(.tunnel-frame) { animation: none; } }
 
 .scene-pulse { background: radial-gradient(ellipse at 65% 49%,#4e2f66,#201839 44%,#101426 75%); }
 

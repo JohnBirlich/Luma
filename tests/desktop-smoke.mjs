@@ -1263,6 +1263,11 @@ async function smoke() {
       assert.match(firstCover, /^luma:\/\/app\/media\/vk-cover\/[0-9a-f-]{36}$/);
       await waitFor('the new cover decodes in the dock', () => coverAt(`${vkDock} .playing-mini img`, firstCover));
       assert.deepEqual(vkCoverRequests, [vkFixtureCovers[0]]);
+      const historyArtwork = await waitFor('the saved VK listen keeps only an opaque cover key',
+        async () => (await preferences()).vkRecent[0]?.artwork);
+      assert.match(historyArtwork, /^[a-f0-9]{32}$/);
+      assert.equal(await run(`fetch('luma://app/media/vk-listen/${historyArtwork}').then(r => r.ok && r.headers.get('Content-Type'))`),
+        'image/webp', 'the history cover decodes through the app protocol, not a VK address');
       const pageCount = () => vkRequests.filter((value) => new URL(value).pathname !== testAudioPath).length;
       const beforeLayout = pageCount();
       await waitFor('a playing VK track is recorded in the separate history', async () => (await preferences()).vkRecent[0]?.title === vkFixtureTracks[0]);

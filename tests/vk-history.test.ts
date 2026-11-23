@@ -6,6 +6,8 @@ import { decodePreferences, encodePreferences } from '../src/player/preferences.
 import { startQueue } from '../src/shared/queue.js';
 
 const sample = { title: 'Запись', artist: 'Артист' };
+const cover = 'c0ffee00c0ffee00c0ffee00c0ffee00';
+const withCover = { ...sample, artwork: cover };
 const noLink = { ...sample, link: 'https://vk.ru/away.php?target=https://other.invalid/track' };
 const direct = { ...sample, link: 'https://vk.com/music/track/123_456?tracking=fixture#discard' };
 const canonical = 'https://vk.ru/audio123_456';
@@ -22,6 +24,20 @@ test('VK history contains only titles, artists and validated official track link
   assert.equal(readVkNowPlaying(direct)?.link, canonical);
   assert.equal(readVkNowPlaying(noLink)?.link, undefined);
   assert.deepEqual(readVkHistory([{ title: 'VK Музыка' }, { title: '\u202e\n', artist: 'a' }]), []);
+});
+
+test('a saved VK listen keeps only an opaque app-local cover key, never a VK address', () => {
+  assert.deepEqual(readVkHistory([withCover]), [withCover]);
+  for (const artwork of ['https://sun9-51.userapi.com/impg/cover.webp', 'luma://app/media/vk-cover/00000000-0000-0000-0000-000000000000',
+    '00000000-0000-0000-0000-000000000000', cover.toUpperCase(), `${cover}00`, 'Москва']) {
+    assert.deepEqual(readVkHistory([{ ...sample, artwork }]), [sample], artwork);
+  }
+  // A replay without a cover key keeps the artwork that already worked.
+  const played = rememberVkListen([], withCover);
+  assert.deepEqual(rememberVkListen(played, sample), [withCover]);
+  assert.deepEqual(rememberVkListen(played, { ...sample, artwork: 'deadbeefdeadbeefdeadbeefdeadbeef' }),
+    [{ ...sample, artwork: 'deadbeefdeadbeefdeadbeefdeadbeef' }]);
+  assert.equal(rememberVkListen([], withCover)[0].artwork, cover);
 });
 
 test('VK history upgrades a search to an exact track URL, deduplicates replays and stays bounded', () => {
