@@ -3,7 +3,8 @@ import type { CSSProperties } from 'react';
 import { ArrowLeft, AudioLines, Globe2, LoaderCircle, LockKeyhole, Pause, Play, RotateCcw, RotateCw, ScanLine, SkipBack, SkipForward, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { formatTime } from '../shared/media';
-import type { VkBounds, VkPosition, VkSiteAction, VkSiteState } from '../shared/vk-site';
+import { readVkSiteAppearance } from '../shared/vk-site';
+import type { VkBounds, VkPosition, VkSiteAction, VkSiteAppearance, VkSiteState } from '../shared/vk-site';
 import './vk-site.css';
 
 const initial: VkSiteState = { phase: 'loading', host: '', back: false, signIn: false };
@@ -35,8 +36,10 @@ function VkTimeline({ timeline, seek }: { timeline: VkPosition; seek(ratio: numb
   </div>;
 }
 
+interface AppearanceProps { appearance: VkSiteAppearance; changeAppearance(appearance: VkSiteAppearance): void }
+
 /** The official QR and password screen is the site's own page inside the sandboxed view. */
-function SiteView({ url, close }: { url: string; close(): void }) {
+function SiteView({ url, close, appearance, changeAppearance }: AppearanceProps & { url: string; close(): void }) {
   const t = useText();
   const api = window.luma?.vkSite;
   const panel = useRef<HTMLElement>(null);
@@ -46,6 +49,9 @@ function SiteView({ url, close }: { url: string; close(): void }) {
   const [attempt, setAttempt] = useState(0);
   const [resetting, setResetting] = useState(false);
   const [notice, setNotice] = useState('');
+  const initialAppearance = useRef(appearance);
+  // Use the latest preference for new views without reopening VK when it changes.
+  useLayoutEffect(() => { initialAppearance.current = appearance; }, [appearance]);
   useLayoutEffect(() => {
     const node = slot.current, section = panel.current, pane = node?.closest('.main-pane');
     if (!api || !node || !section || !pane) return;
@@ -76,7 +82,7 @@ function SiteView({ url, close }: { url: string; close(): void }) {
     const bounds = showBounds(node, pane);
     last = JSON.stringify(bounds);
     setState(initial);
-    void api.open(id, url, bounds).catch(() => { if (live) setState({ ...initial, phase: 'failed' }); });
+    void api.open(id, url, bounds, initialAppearance.current).catch(() => { if (live) setState({ ...initial, phase: 'failed' }); });
     return () => {
       live = false;
       view.current = 0;
@@ -117,6 +123,17 @@ function SiteView({ url, close }: { url: string; close(): void }) {
       <span className="vk-site-origin" role="status"><LockKeyhole size={13} /><strong>{state.host || 'VK Музыка'}</strong>
         <small>{t(state.phase === 'loading' ? 'Загружаем…' : state.phase === 'failed' ? 'Недоступно' : 'Официальный сайт')}</small></span>
       <button className="icon-button" type="button" disabled={state.phase !== 'ready' || state.signIn || resetting} title={t('К музыке VK')} aria-label={t('К музыке VK')} onClick={() => command('music')}><Globe2 size={17} /></button>
+      <select className="vk-site-appearance" aria-label={t('Вид страниц VK Музыки')} title={t('Вид страниц VK Музыки')} value={appearance}
+        disabled={state.phase !== 'ready' || state.signIn || resetting} onChange={(event) => {
+          const next = readVkSiteAppearance(event.currentTarget.value);
+          if (!next || !api || !view.current) return;
+          changeAppearance(next);
+          void api.setAppearance(view.current, next).catch(() => {});
+        }}>
+        <option value="standard">{t('Обычный вид')}</option>
+        <option value="profile">{t('Только профиль')}</option>
+        <option value="minimal">{t('Без панелей')}</option>
+      </select>
       <button className="icon-button" type="button" data-vk-reset disabled={resetting || state.phase === 'loading'} title={resetLabel} aria-label={resetLabel} onClick={() => void reset()}><RotateCcw size={17} /></button>
       <button className="icon-button" type="button" title={t('Закрыть сайт VK')} aria-label={t('Закрыть сайт VK')} onClick={close}><X size={19} /></button>
     </header>
@@ -144,10 +161,10 @@ function SiteView({ url, close }: { url: string; close(): void }) {
   </section>;
 }
 
-export function VkSitePanel({ url, connected, close }: { url?: string; connected: boolean; close(): void }) {
+export function VkSitePanel({ url, connected, ...view }: AppearanceProps & { url?: string; connected: boolean; close(): void }) {
   const t = useText();
   const api = window.luma?.vkSite;
-  if (url && api) return <SiteView url={url} close={close} />;
+  if (url && api) return <SiteView url={url} {...view} />;
   return <p className="vk-site-placeholder" role="status">{t(!api ? 'Сайт VK внутри Luma доступен в приложении для Windows.'
     : !connected ? 'Для VK Музыки нужно подключение к интернету.' : 'Выберите вкладку VK Музыка, чтобы открыть сайт.')}</p>;
 }

@@ -15,6 +15,8 @@ import { defaultAppearance, defaultPlayback, readAppearance, readPlayback } from
 import type { Appearance, PlaybackPreferences } from '../shared/customization';
 import { defaultKaraokeStyle, readKaraokeStyle } from '../shared/karaoke-style';
 import type { KaraokeStyle } from '../shared/karaoke-style';
+import { readVkSiteAppearance } from '../shared/vk-site';
+import type { VkSiteAppearance } from '../shared/vk-site';
 
 import { defaultAudioQuality, readAudioQuality } from '../shared/audio-quality';
 import type { AudioQuality } from '../shared/audio-quality';
@@ -32,6 +34,7 @@ export interface Preferences {
   autoLyrics: boolean;
   karaokeStyle: KaraokeStyle;
   autoCatalogSearch: boolean;
+  vkSiteAppearance: VkSiteAppearance;
   searchHistory: string[];
   localFallback: boolean;
   discord: DiscordPreferences;
@@ -53,7 +56,7 @@ export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
   playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: '', enabled: false }, exportLyrics: false,
-  resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
+  vkSiteAppearance: 'standard', resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
 };
 const persistentIds = (ids: readonly string[]) => ids.filter((id) => !sessionCatalogId(id));
 const persistentShelf = (tracks: unknown) => readOnlineShelf(tracks).filter(({ id }) => !sessionCatalogId(id));
@@ -97,6 +100,7 @@ export function decodePreferences(value: string | null): Preferences {
       autoLyrics: data.autoLyrics === true,
       karaokeStyle: readKaraokeStyle(data.karaokeStyle),
       autoCatalogSearch: data.autoCatalogSearch !== false,
+      vkSiteAppearance: readVkSiteAppearance(data.vkSiteAppearance) ?? defaults.vkSiteAppearance,
       searchHistory: readSearchHistory(data.searchHistory),
       localFallback: data.localFallback === true,
       discord: readDiscordPreferences(data.discord),

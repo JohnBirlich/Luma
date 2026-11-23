@@ -2,13 +2,14 @@ import { dialog, session, WebContentsView } from 'electron';
 import type { BrowserWindow } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
-import { VK_SITE_PARTITION, VK_TRANSPORT, readVkNowPlaying, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
-import type { VkSiteState, VkTransport } from '../src/shared/vk-site.js';
+import { VK_SITE_PARTITION, VK_TRANSPORT, readVkNowPlaying, readVkSiteAppearance, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
+import type { VkSiteAppearance, VkSiteState, VkTransport } from '../src/shared/vk-site.js';
+import { vkAppearanceScript } from './vk-appearance.js';
 import { inspectVkPlayer } from './vk-player.js';
 
 interface VkView {
   id: number; owner: BrowserWindow; view: WebContentsView; entry: string; shown: boolean;
-  state: VkSiteState; revision: number; reading: boolean; confirming: boolean; qrStarted: boolean; returnToEntry: boolean; unbind(): void;
+  appearance: VkSiteAppearance; state: VkSiteState; revision: number; reading: boolean; confirming: boolean; qrStarted: boolean; returnToEntry: boolean; unbind(): void;
   poll?: ReturnType<typeof setInterval>; timer?: ReturnType<typeof setTimeout>;
 }
 const world = 1481;
@@ -60,6 +61,21 @@ export class VkSite {
     if (active && active.id === id && active.owner === owner) this.layoutView(active, value);
   }
 
+  setAppearance(owner: BrowserWindow, id: unknown, value: unknown) {
+    const active = this.active, appearance = readVkSiteAppearance(value);
+    if (this.resetting || !active || active.owner !== owner || active.id !== id || !appearance || active.view.webContents.isDestroyed()) return false;
+    active.appearance = appearance;
+    this.applyAppearance(active);
+    return true;
+  }
+
+  private applyAppearance(active: VkView) {
+    const contents = active.view.webContents;
+    if (active.state.phase !== 'ready' || contents.isDestroyed()) return;
+    const code = vkAppearanceScript(active.state.signIn ? 'standard' : active.appearance, contents.getURL());
+    if (code) void contents.executeJavaScriptInIsolatedWorld(world, [{ code }]).catch(() => {});
+  }
+
   close(owner?: BrowserWindow, id?: unknown) {
     const active = this.active;
     if (!active || (owner && (active.owner !== owner || active.id !== id))) return;
@@ -92,8 +108,9 @@ export class VkSite {
     });
   }
 
-  open(owner: BrowserWindow, id: unknown, url: unknown, bounds: unknown) {
-    if (this.resetting || typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || !vkSiteEntry(url) || owner.isMinimized()) throw new Error('VK view is unavailable');
+  open(owner: BrowserWindow, id: unknown, url: unknown, bounds: unknown, mode: unknown = 'standard') {
+    const appearance = readVkSiteAppearance(mode);
+    if (this.resetting || typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || !vkSiteEntry(url) || !appearance || owner.isMinimized()) throw new Error('VK view is unavailable');
     this.close();
     const view = new WebContentsView({ webPreferences: { preload, session: this.partition(), nodeIntegration: false, nodeIntegrationInSubFrames: false,
       contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, disableHtmlFullscreenWindowResize: true } });
@@ -101,7 +118,7 @@ export class VkSite {
     const contents = view.webContents;
     const close = () => this.close(owner, id);
     const navigation = (event: Electron.Event & { isMainFrame: boolean; isSameDocument: boolean }) => { if (event.isMainFrame && !event.isSameDocument) close(); };
-    const active: VkView = { id, owner, view, entry: url, shown: false, revision: 0, reading: false, confirming: false, qrStarted: false, returnToEntry: false,
+    const active: VkView = { id, owner, view, entry: url, appearance, shown: false, revision: 0, reading: false, confirming: false, qrStarted: false, returnToEntry: false,
       state: { host: '', phase: 'loading', back: false, signIn: false }, unbind() {
         owner.removeListener('minimize', close);
         owner.removeListener('hide', close);
@@ -189,6 +206,7 @@ export class VkSite {
     }
     this.publish(active, { phase: 'ready', host: safe.hostname, signIn, back: contents.navigationHistory.canGoBack(),
       ...((!music || signIn) && { track: undefined }) });
+    this.applyAppearance(active);
     this.visibility(active);
     void this.readTrack(active);
   }

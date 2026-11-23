@@ -2,7 +2,22 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseVkShareLink, vkPlaylistUrl, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { readMusicLink, musicLinkArgument } from '../src/shared/music-links.js';
-import { readVkNowPlaying, readVkPosition, vkMusicPage, vkMusicSearchUrl, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
+import { readVkNowPlaying, readVkPosition, readVkSiteAppearance, vkMusicPage, vkMusicSearchUrl, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
+
+import { decodePreferences, encodePreferences } from '../src/player/preferences.js';
+import { startQueue } from '../src/shared/queue.js';
+
+test('VK appearance is opt-in and only recognized options survive preference decoding', () => {
+  for (const option of [undefined, null, 1, {}, 'constructor', 'display: none']) {
+    assert.equal(readVkSiteAppearance(option), undefined);
+    assert.equal(decodePreferences(JSON.stringify({ vkSiteAppearance: option })).vkSiteAppearance, 'standard');
+  }
+  for (const option of ['standard', 'profile', 'minimal']) {
+    const preferences = decodePreferences(JSON.stringify({ vkSiteAppearance: option }));
+    assert.equal(readVkSiteAppearance(option), option);
+    assert.equal(decodePreferences(encodePreferences(preferences, startQueue([]))).vkSiteAppearance, option);
+  }
+});
 
 test('VK entry accepts canonical music pages and bounded literal searches, not auth URLs, snippets or arbitrary redirects', () => {
   const search = vkMusicSearchUrl('  Руки Вверх — Я не отдам  &   #1  ');

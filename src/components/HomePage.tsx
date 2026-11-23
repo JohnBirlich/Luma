@@ -26,6 +26,7 @@ import type { LumaPlaylist } from '../shared/luma-playlists';
 import { SceneBackground } from './SceneBackground';
 
 import { VkSitePanel } from './VkSitePanel';
+import type { VkSiteAppearance } from '../shared/vk-site';
 
 const TABS = { home: 'Для вас', mine: 'Моя музыка', radio: 'Радио', vk: 'VK Музыка', updates: 'Обновления' } as const;
 export type HomeTab = keyof typeof TABS;
@@ -61,6 +62,8 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   openPlaylistImport(): void;
   openMusicLink(): void;
   vkUrl?: string;
+  vkAppearance: VkSiteAppearance;
+  changeVkAppearance(appearance: VkSiteAppearance): void;
   searchVk?(query: string): void;
   closeVk(): void;
   sharePlaylist(title: string, tracks: readonly Track[]): void;
@@ -194,7 +197,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       </>}
       {tab === 'radio' && <RadioStations saved={props.stationIds} activeId={currentId} loading={props.loading} playing={playing} busy={props.busy}
         connected={connected} toggleSave={props.saveStation} play={play} tuneDiscovered={props.tuneDiscoveredStation} />}
-      {tab === 'vk' && <VkSitePanel url={vkUrl} connected={connected} close={closeVk} />}
+      {tab === 'vk' && <VkSitePanel url={vkUrl} connected={connected} close={closeVk} appearance={props.vkAppearance} changeAppearance={props.changeVkAppearance} />}
       {tab === 'updates' && <Updates tracks={tracks} {...rows} />}
     </>}
     {!vkTab && <footer className="hub-footer"><Headphones size={14} />{t('Для миксов Luma не нужен аккаунт.')}</footer>}

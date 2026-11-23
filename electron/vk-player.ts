@@ -1,7 +1,8 @@
 import type { VkTransport } from '../src/shared/vk-site.js';
 
-// Serialized into an isolated JS world. Only public MediaSession text and visible controls;
-// no calls into VK's private player internals, account DOM, storage, or requests.
+// Serialized into an isolated JS world. Only public MediaSession text and rendered
+// controls (still laid out when Luma hides VK's header); no private player internals,
+// account DOM, storage, or requests.
 function visibleMusicPlayer(action: VkTransport | null) {
   if (window.top !== window || location.protocol !== 'https:' || location.port
     || !['vk.ru', 'vk.com', 'm.vk.ru', 'm.vk.com', 'music.vk.ru', 'music.vk.com'].includes(location.hostname)
