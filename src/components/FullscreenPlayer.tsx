@@ -14,7 +14,7 @@ import { LyricsPanel } from './LyricsPanel';
 import './karaoke.css';
 import { Artwork } from './Artwork';
 import { DislikeButton, FavoriteButton } from './FavoriteButton';
-import { SeekTimeline, TransportControls, VolumeControl } from './PlaybackControls';
+import { SeekTimeline, TransportControls, VkFavoriteControl, VolumeControl } from './PlaybackControls';
 import type { PlaybackProps } from './PlaybackControls';
 import { SceneBackground } from './SceneBackground';
 import { VinylRecord } from './VinylRecord';
@@ -117,7 +117,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
           <div className="immersive-meta">
             <div><h1 id="immersive-title" title={track.title}>{track.title}</h1>{track.artist && <p title={track.artist}>{track.artist}</p>}
               {(track.online || track.album) && <small title={track.album}>{track.online ? <OnlineCredit track={{ online: track.online }} /> : track.album}</small>}</div>
-            {!vk && <div className="immersive-feedback">
+            {vk ? props.vkFavorite && <div className="immersive-feedback"><VkFavoriteControl {...props.vkFavorite} /></div> : <div className="immersive-feedback">
               <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />
               {!props.live && <DislikeButton track={track} selected={props.disliked} toggle={props.toggleDislike} immersive />}
             </div>}

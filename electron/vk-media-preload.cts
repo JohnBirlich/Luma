@@ -53,6 +53,7 @@ function installVkPlayback() {
     return active.length === 1 ? active[0]
       : active.length === 0 ? remembered ?? (candidates.length === 1 ? candidates[0] : undefined) : undefined;
   };
+  let lastVolume = 1;
   const supports = (action: MediaSessionAction) => handlers.has(action);
   const run = (action: MediaSessionAction, extra?: { seekTime: number }) => {
     const handler = handlers.get(action);
@@ -74,12 +75,27 @@ function installVkPlayback() {
     } : undefined;
     const timing = elementTime ?? sessionTime;
     const canUseAudio = !!audio && audio.readyState > 0 && !audio.error;
+    const volume = canUseAudio ? audio.muted ? 0 : audio.volume : undefined;
     const canSeekAudio = canUseAudio && !!elementTime && audio.seekable.length > 0;
     if (!action) return {
       ...(media.playbackState !== 'none' || audio ? { playing } : {}),
       previous: supports('previoustrack'), toggle: supports(toggle) || canUseAudio, next: supports('nexttrack'),
+      volume, canMute: canUseAudio, muted: canUseAudio && audio.muted,
       timeline: timing && { ...timing, seek: supports('seekto') || canSeekAudio },
     };
+    if (action === 'volume' || action === 'mute') {
+      if (!canUseAudio) return false;
+      if (!audio.muted && audio.volume > 0) lastVolume = audio.volume;
+      if (action === 'volume') {
+        if (typeof ratio !== 'number' || !Number.isFinite(ratio) || ratio < 0 || ratio > 1) return false;
+        audio.volume = ratio;
+        audio.muted = false;
+      } else if (audio.muted || audio.volume === 0) {
+        if (audio.volume === 0) audio.volume = lastVolume;
+        audio.muted = false;
+      } else audio.muted = true;
+      return true;
+    }
     if (action === 'previous') return run('previoustrack');
     if (action === 'next') return run('nexttrack');
     if (action === 'toggle' || action === 'pause') {

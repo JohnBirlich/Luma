@@ -175,3 +175,15 @@ test('each radio listing has its own offline cover, and playback keeps the same 
   assert.match(untrusted, /&amp;/);
   assert.doesNotMatch(untrusted, /<script|\u202e/u);
 });
+
+test('station logo URLs come from the matching curated Radioplayer listing, not live tracks', () => {
+  const station = RADIO_DIRECTORY.find(({ id }) => id === 'radio-ru-remix')!;
+  assert.equal(station.page, 'https://radioplayer.ru/station/remix-fm');
+  assert.equal(station.logo, 'https://api.radioplayer.ru/images/mfcd8r3e_colored.webp');
+  assert.equal(stationTracks.find(({ id }) => id === station.id)?.artworkFit, 'contain');
+  const logoSources = RADIO_DIRECTORY.flatMap(({ logo }) => logo && logo.includes('radioplayer.ru') ? [logo] : []);
+  assert.ok(logoSources.length >= 80);
+  assert.ok(logoSources.every(url => /^https:\/\/api\.radioplayer\.ru\/images\/[a-z0-9_]+_colored\.webp$/.test(url)));
+  assert.ok(RADIO_ORIGINS.images.split(' ').includes('https://api.radioplayer.ru/images/'));
+  assert.doesNotMatch(RADIO_ORIGINS.images, /meta\.fmgid|i\.amgradio/);
+});

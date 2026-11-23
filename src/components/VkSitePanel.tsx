@@ -1,11 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
-import { ArrowLeft, AudioLines, Globe2, LoaderCircle, LockKeyhole, Pause, Play, RotateCcw, RotateCw, ScanLine, SkipBack, SkipForward, X } from 'lucide-react';
+import { ArrowLeft, Globe2, LoaderCircle, LockKeyhole, RotateCcw, RotateCw, ScanLine, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { VkSiteController } from '../player/useVkSite';
-import { formatTime } from '../shared/media';
 import { readVkSiteAppearance } from '../shared/vk-site';
-import type { VkBounds, VkPosition, VkSiteAction, VkSiteAppearance } from '../shared/vk-site';
+import type { VkBounds, VkSiteAction, VkSiteAppearance } from '../shared/vk-site';
 import './vk-site.css';
 
 function showBounds(slot: HTMLElement, pane: Element): VkBounds | null {
@@ -13,25 +11,6 @@ function showBounds(slot: HTMLElement, pane: Element): VkBounds | null {
   const x = Math.max(box.left, clip.left, 0), y = Math.max(box.top, clip.top, 0);
   const width = Math.min(box.right, clip.right, innerWidth) - x, height = Math.min(box.bottom, clip.bottom, innerHeight) - y;
   return width >= 170 && height >= 82 ? { x, y, width, height } : null;
-}
-
-function VkTimeline({ timeline, seek }: { timeline: VkPosition; seek(ratio: number): void }) {
-  const t = useText();
-  const dragging = useRef(false);
-  const [draft, setDraft] = useState<number>();
-  const ratio = draft ?? timeline.position / timeline.duration;
-  const elapsed = formatTime(ratio * timeline.duration), total = formatTime(timeline.duration);
-  function cancel() { dragging.current = false; setDraft(undefined); }
-  return <div className="vk-site-timeline">
-    <span>{elapsed}</span>
-    <input type="range" className="range" min={0} max={1000} step={1} value={Math.round(ratio * 1000)} disabled={!timeline.seek}
-      aria-label={t('Позиция воспроизведения VK')} aria-valuetext={t('{0} из {1}', elapsed, total)}
-      style={{ '--filled': `${ratio * 100}%` } as CSSProperties}
-      onPointerDown={() => { dragging.current = true; }} onPointerCancel={cancel} onBlur={cancel}
-      onPointerUp={(event) => { if (dragging.current) seek(event.currentTarget.valueAsNumber / 1000); cancel(); }}
-      onChange={(event) => { const next = event.currentTarget.valueAsNumber / 1000; if (dragging.current) setDraft(next); else seek(next); }} />
-    <span>{total}</span>
-  </div>;
 }
 
 interface SettingsProps { appearance: VkSiteAppearance; changeAppearance(appearance: VkSiteAppearance): void; close(): void }
@@ -48,6 +27,7 @@ function SiteView({ view, layout: layoutView, command: send, retry, reset, close
   useLayoutEffect(() => {
     const node = slot.current, section = panel.current, pane = node?.closest('.main-pane');
     if (!node || !section || !pane) return;
+    pane.scrollTop = 0;
     let frame = 0;
     let last = '';
     const layout = () => {
@@ -60,17 +40,13 @@ function SiteView({ view, layout: layoutView, command: send, retry, reset, close
       });
     };
     const resize = new ResizeObserver(layout);
-    const observer = new IntersectionObserver(layout, { root: pane });
-    resize.observe(node); resize.observe(section); resize.observe(pane); observer.observe(node);
+    resize.observe(node); resize.observe(section); resize.observe(pane);
     window.addEventListener('resize', layout);
-    pane.addEventListener('scroll', layout, { passive: true });
-    section.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
     layout();
     return () => {
       cancelAnimationFrame(frame);
-      resize.disconnect(); observer.disconnect();
+      resize.disconnect();
       window.removeEventListener('resize', layout);
-      pane.removeEventListener('scroll', layout);
       layoutView(id, null, false);
     };
   }, [id, layoutView]);
@@ -82,8 +58,6 @@ function SiteView({ view, layout: layoutView, command: send, retry, reset, close
     setNotice('');
     void reset().catch(() => setNotice('Не удалось очистить сессию VK.'));
   }
-  const track = state.track;
-  const toggle = t(track?.playing ? 'Пауза VK' : 'Воспроизвести в VK');
   const resetLabel = t('Сбросить сессию VK');
   return <section className="vk-site" ref={panel} aria-label={t('Официальный сайт VK')} onKeyDown={(event) => {
     if (event.key === 'Escape') { event.preventDefault(); close(); }
@@ -109,18 +83,7 @@ function SiteView({ view, layout: layoutView, command: send, retry, reset, close
     {state.signIn ? <div className="vk-site-login">
       <span className="vk-site-mark"><ScanLine size={19} aria-hidden="true" /></span>
       <div><strong>{t('Войдите в VK по QR-коду')}</strong><p>{t('Чтобы музыка VK и Luma не мешали друг другу, войдите на официальном сайте ниже. Отсканируйте QR-код в приложении VK. Luma не читает и не отправляет данные входа — их обрабатывает сайт VK.')}</p></div>
-    </div> : state.phase === 'ready' && <>
-      <div className="vk-site-transport" role="group" aria-label={t('Управление воспроизведением VK')}>
-        <span className="vk-site-mark"><AudioLines size={18} aria-hidden="true" /></span>
-        <div className="vk-site-track" aria-live="polite"><strong title={track?.title}>{track?.title || t('Плеер VK')}</strong>
-          <small title={track?.artist}>{track?.artist || t('Выберите трек на сайте VK.')}</small></div>
-        <button data-vk-action="previous" className="icon-button" type="button" disabled={!track?.previous || resetting} title={t('Предыдущий трек VK')} aria-label={t('Предыдущий трек VK')} onClick={() => command('previous')}><SkipBack size={16} fill="currentColor" /></button>
-        <button data-vk-action="toggle" className="icon-button" type="button" disabled={!track?.toggle || resetting} title={toggle} aria-label={toggle} onClick={() => command('toggle')}>
-          {track?.playing ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}</button>
-        <button data-vk-action="next" className="icon-button" type="button" disabled={!track?.next || resetting} title={t('Следующий трек VK')} aria-label={t('Следующий трек VK')} onClick={() => command('next')}><SkipForward size={16} fill="currentColor" /></button>
-      </div>
-      {track?.timeline && <VkTimeline key={`${track.artist}\n${track.title}`} timeline={track.timeline} seek={(ratio) => command('seek', ratio)} />}
-    </>}
+    </div> : null}
     {notice && <p role="status" className="vk-site-notice">{t(notice)}</p>}
     <div className="vk-site-slot" ref={slot} aria-busy={state.phase === 'loading' || resetting}>
       {state.phase === 'loading' && <p className="vk-site-loading" role="status"><LoaderCircle size={16} aria-hidden="true" />{t('Загружаем сайт VK…')}</p>}

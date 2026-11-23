@@ -191,8 +191,10 @@ export default function App() {
   const vkEngaged = vkSite.view?.state.engaged === true;
   const vkTrack = vkEngaged ? vkSite.view?.state.track : undefined;
   const vkTitle = vkTrack?.title || t('VK Музыка'), vkArtist = vkTrack?.artist ?? '';
+  const vkCover = vkEngaged ? vkSite.view?.state.cover : undefined;
   const vkDisplay = useMemo<PlayingTrack>(() => ({ source: 'vk', id: 'vk-now-playing', title: vkTitle, artist: vkArtist,
-    album: '', artworkUrl: VK_ARTWORK_URL, color: '#8cbfff' }), [vkTitle, vkArtist]);
+    album: '', artworkUrl: vkCover ?? VK_ARTWORK_URL, fallbackArtworkUrl: VK_ARTWORK_URL,
+    ...(vkCover ? {} : { color: '#8cbfff' }) }), [vkTitle, vkArtist, vkCover]);
   const displayTrack = vkEngaged ? vkDisplay : current;
   const canUseLyrics = !!current && !live && !vkEngaged && !sessionCatalogId(current.id);
   const karaokeOpen = presentationKind === 'karaoke' && canUseLyrics;
@@ -268,7 +270,8 @@ export default function App() {
     return () => desktop.removeEventListener('change', resized);
   }, [widget, presentationOpen]);
   const localTone = usePalette(current);
-  const sampledTone = vkEngaged ? '#8cbfff' : localTone;
+  const vkTone = usePalette(vkEngaged ? vkDisplay : null);
+  const sampledTone = vkEngaged ? vkTone : localTone;
   const tint = appearance.coverColors ? sampledTone : theme['--accent'];
   const transportPlaying = player.playing || !!player.loading;
   const displayPlaying = vkEngaged ? vkTrack?.playing === true : transportPlaying;
@@ -524,13 +527,16 @@ export default function App() {
         else if (live) {
           if (!event.repeat) (forward ? next : previous)();
         } else seek(forward ? playback.seekStep : -playback.seekStep, true);
-      } else if (event.code === 'KeyM' && !event.repeat && !vkEngaged) mute();
+      } else if (event.code === 'KeyM' && !event.repeat) {
+        if (!vkEngaged && !vkVisible) mute();
+        else if (vkTrack?.canMute) vkAction('mute');
+      }
       else if (!presentationOpen && event.code === 'KeyQ' && !event.repeat) setQueueOpen((open) => !open);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [choose, mute, seek, seekVk, togglePlayback, next, previous, live, modalOpen, presentationOpen, presentationKind, showPresentation, showKaraoke,
-    closePresentation, canUseLyrics, displayTrack, queueOpen, widget, changeWidget, openSettings, playback.seekStep, vkVisible, vkEngaged]);
+    closePresentation, canUseLyrics, displayTrack, queueOpen, widget, changeWidget, openSettings, playback.seekStep, vkVisible, vkEngaged, vkTrack?.canMute, vkAction]);
 
   function addToQueue(id: string) {
     const state = queueRef.current;
@@ -841,10 +847,14 @@ export default function App() {
   const displayControls: PlaybackProps = vkEngaged ? {
     source: 'vk', hasTrack: true, canToggle: vkControllable && vkTrack.toggle, playing: displayPlaying,
     elapsed: vkTrack?.timeline?.position ?? 0, duration: vkTrack?.timeline?.duration ?? 0, seekable: vkControllable && vkTrack.timeline?.seek === true,
-    shuffle: false, repeat: 'off', volume: preferences.volume,
+    shuffle: vkTrack?.shuffle ?? false, canShuffle: vkControllable && vkTrack.shuffle !== undefined,
+    repeat: vkTrack?.repeat ?? 'off', canRepeat: vkControllable && vkTrack.repeat !== undefined,
+    volume: vkTrack?.volume ?? 0, canVolume: vkControllable && vkTrack.volume !== undefined,
+    canMute: vkControllable && vkTrack.canMute === true,
+    vkFavorite: vkControllable && vkTrack.favorite !== undefined ? { selected: vkTrack.favorite, toggle: () => vkAction('favorite') } : undefined,
     hasPrevious: vkControllable && vkTrack.previous, hasNext: vkControllable && vkTrack.next,
     togglePlay: togglePlayback, previous: () => vkAction('previous'), next: () => vkAction('next'), seek: seekVk,
-    toggleRepeat: noop, toggleShuffle: noop, toggleMute: noop, setVolume: noop,
+    toggleRepeat: () => vkAction('repeat'), toggleShuffle: () => vkAction('shuffle'), toggleMute: () => vkAction('mute'), setVolume: (value) => vkAction('volume', value),
   } : localControls;
 
   return (
@@ -872,7 +882,7 @@ export default function App() {
       {!widget && (glass ? <GlassNavigation page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled} openRadio={openRadio} radioActive={radioActive} /> : <Sidebar page={page} navigate={navigate} openRadio={openRadio} radioActive={radioActive} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
         fullNumbers={appearance.fullNumbers} queued={queued.length} queueOpen={queueOpen} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
         compact={appearance.compactSidebar} toggleCompact={toggleCompact} />)}
-      <main className="main-pane" ref={scrollArea}>
+      <main className={`main-pane${vkVisible ? ' vk-pane' : ''}`} ref={scrollArea}>
         <div key={basePage} className="page-body" hidden={widget || page === 'settings'}>
         {basePage === 'player' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
           <HomePage tracks={collection} recent={recent} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
@@ -886,7 +896,7 @@ export default function App() {
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
             openLibrary={goToLibrary} addMusic={choose} openMusicLink={() => setMusicDialog({})}
             sharePlaylist={sharePlaylist} seedFavorites={seedFavorites} openFavorites={() => navigate('favorites')}
-            nowPlaying={<NowPlayingCard track={displayTrack} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
+            nowPlaying={<NowPlayingCard vkControls={vkEngaged ? displayControls : undefined} track={displayTrack} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
               playing={vkEngaged ? displayPlaying : player.playing} loading={!vkEngaged && !!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
               count={queue.order.length} toggle={togglePlayback} canToggle={displayControls.canToggle} shareTrack={shareTrack} openVk={returnToVk} closeVk={closeVk}
               favorite={!!current && (live ? stationIds : favoriteIds).has(current.id)} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)}

@@ -7,6 +7,7 @@ import { useVisualMotion } from '../player/useVisualMotion';
 import oceanUrl from '../assets/scenes/ocean.webm?url';
 import oceanPoster from '../assets/scenes/ocean.webp?url';
 import { SceneCanvas } from './SceneCanvas';
+import { MixFlow } from './MixFlow';
 import { isCanvasEffect, sceneRuns } from '../shared/scene-motion';
 
 interface SceneProps {
@@ -61,7 +62,7 @@ export const SceneBackground = memo(function SceneBackground({ effect, tone, str
     {effect === 'horizon' && <><i className="scene-neon-sun" /><i className="scene-neon-floor" /><i className="scene-neon-light" /></>}
     {effect === 'kaleidoscope' && <div className="scene-chromatic"><i /><i /></div>}
     {effect === 'liquid' && <div className="scene-liquid-light" />}
-    {effect === 'mix-flow' && <div className="mix-flow-light" />}
+    {effect === 'mix-flow' && <MixFlow />}
     {effect === 'rain' && <i className="rain-glass-beads" />}
   </div>;
 });

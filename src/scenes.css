@@ -41,45 +41,34 @@
 .scene-liquid-light { position: absolute; inset: -12%; background: radial-gradient(ellipse at 71% 33%,#f9fdffca,transparent 52%),radial-gradient(ellipse at 27% 72%,#bfedffa7,transparent 55%); }
 .scene-moving .scene-liquid-light { animation: scene-swell calc(16s * var(--scene-tempo)) ease-in-out infinite alternate; }
 
-/* Share the mix’s fluid light without running hidden previews. */
-.mix-flow-light { position: absolute; inset: -32% -12%; transform-origin: 50% 53%;
-  animation: mix-liquid-flow calc(22s * var(--scene-tempo)) ease-in-out infinite alternate paused;
-  background:
-    radial-gradient(ellipse 54% 44% at 32% 9%, #111121 12%, #14203370 57%, transparent 70%),
-    radial-gradient(ellipse 42% 35% at 28% 36%, #90305aa8 0%, #63265c6b 40%, transparent 75%),
-    radial-gradient(ellipse 34% 47% at 44% 76%, #41e0b568, #127a908c 37%, transparent 82%),
-    radial-gradient(ellipse 34% 43% at 67% 46%, #349eff89, #3846a89e 49%, transparent 81%),
-    radial-gradient(ellipse 36% 44% at 82% 64%, color-mix(in srgb, var(--accent) 72%, transparent), color-mix(in srgb, var(--accent) 21%, #20243f 45%) 38%, transparent 78%),
-    conic-gradient(from 39deg at 38% 62%, #1c273c 2%, #2f103b 17%, #1f172c 29%, #36317a 40%, #123149 61%, #192036 81%, #1c273c 99%); }
-.mix-flow-light::before, .mix-flow-light::after { content: ''; position: absolute; pointer-events: none; border-radius: 48% 52% 63% 37%; }
-.mix-flow-light::before { inset: 14% 6% 21% 7%; transform: rotate(-10deg); opacity: .48;
-  background: radial-gradient(ellipse at 56% 11%, transparent 37%, #b2e3f53b 42%, #8fa9ffac 47%, #b6a1ff14 51%, transparent 59%); }
-.mix-flow-light::after { inset: 25% 18% 14% 9%; transform: rotate(11deg); opacity: .55;
-  background: radial-gradient(ellipse at 34% 90%, transparent 32%, #dac6ff2e 38%, #c283ff5a 50%, #7dd4fa2e 56%, transparent 68%); }
-/* Keep the banner's geometry and motion; replace its palette on player/preview surfaces only. */
-.scene-mix-flow[data-cover-tone] > .mix-flow-light {
-  --mix-ink: color-mix(in oklab, var(--scene-tone) 34%, #100c22);
-  --mix-mid: color-mix(in oklab, var(--scene-tone) 62%, #131932);
-  --mix-light: color-mix(in oklab, var(--scene-tone) 68%, #f2eaff);
-  background: radial-gradient(ellipse 54% 44% at 32% 9%, #101021 12%, #14203370 57%, transparent 70%),
-    radial-gradient(ellipse 42% 38% at 28% 36%, var(--mix-mid), transparent 75%),
-    radial-gradient(ellipse 36% 48% at 47% 73%, color-mix(in oklab, var(--scene-tone) 53%, transparent), transparent 82%),
-    radial-gradient(ellipse 43% 54% at 75% 41%, var(--mix-light), var(--mix-mid) 42%, transparent 82%),
-    conic-gradient(from 39deg at 38% 62%, var(--mix-ink) 2%, var(--mix-mid) 17%, #141123 29%, var(--mix-ink) 63%, var(--mix-mid) 82%, var(--mix-ink) 99%);
+/* A continuous, vector silk pattern. The wash stays edge-to-edge while the ribbons drift. */
+.scene-mix-flow {
+  --mix-rose: #c15d9b;
+  --mix-lilac: #a18bff;
+  --mix-blue: #4f81ef;
+  --mix-aqua: #8be8df;
+  --mix-ink: #100c21;
+  --mix-base: #1d2851;
+  background: radial-gradient(ellipse at 75% 77%, color-mix(in oklab, var(--mix-blue) 43%, transparent), transparent 68%),
+    radial-gradient(ellipse at 27% 75%, color-mix(in oklab, var(--mix-rose) 32%, transparent), transparent 64%),
+    linear-gradient(132deg, var(--mix-ink) 20%, var(--mix-base) 100%);
 }
-.scene-mix-flow[data-cover-tone] > .mix-flow-light::before {
-  background: radial-gradient(ellipse at 56% 11%, transparent 37%, color-mix(in oklab, var(--mix-light) 38%, transparent) 42%, var(--mix-light) 47%, transparent 58%);
+.scene-mix-flow[data-cover-tone] {
+  --mix-ink: color-mix(in oklab, var(--scene-tone) 14%, #100c22);
+  --mix-base: color-mix(in oklab, var(--scene-tone) 30%, #141932);
+  --mix-rose: color-mix(in oklab, var(--scene-tone) 69%, #e887ba);
+  --mix-lilac: color-mix(in oklab, var(--scene-tone) 63%, #c3a4ff);
+  --mix-blue: color-mix(in oklab, var(--scene-tone) 68%, #738dff);
+  --mix-aqua: color-mix(in oklab, var(--scene-tone) 53%, #b8f2ee);
 }
-.scene-mix-flow[data-cover-tone] > .mix-flow-light::after {
-  background: radial-gradient(ellipse at 34% 90%, transparent 32%, color-mix(in oklab, var(--mix-light) 55%, transparent) 45%, transparent 67%);
+.mix-flow-ribbons { display: block; position: absolute; inset: -13% -10%; width: 120%; height: 126%;
+  animation: mix-ribbon-drift calc(24s * var(--scene-tempo)) ease-in-out infinite alternate paused; }
+.scene-moving .mix-flow-ribbons { animation-play-state: running; }
+@keyframes mix-ribbon-drift {
+  from { transform: translate3d(-3%, -5%, 0); }
+  to { transform: translate3d(4%, 6%, 0); }
 }
-.scene-moving .mix-flow-light { animation-play-state: running; }
-@keyframes mix-liquid-flow {
-  0% { transform: translate3d(-3%, -8%, 0) rotate(-7deg) scale(1.07, 1.08) skewY(-3deg); }
-  48% { transform: translate3d(3%, 3%, 0) rotate(4deg) scale(1.20, .92) skewY(3deg); }
-  100% { transform: translate3d(-2%, 8%, 0) rotate(-4deg) scale(1.04, 1.18) skewY(-2deg); }
-}
-@media (prefers-reduced-motion: reduce) { :is(.mix-flow-light, .tunnel-frame) { animation: none; } }
+@media (prefers-reduced-motion: reduce) { :is(.mix-flow-ribbons, .tunnel-frame) { animation: none; } }
 
 .scene-pulse { background: radial-gradient(ellipse at 65% 49%,#4e2f66,#201839 44%,#101426 75%); }
 

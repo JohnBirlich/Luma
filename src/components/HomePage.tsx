@@ -125,15 +125,15 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
     playMix(makeMix(sources, { type, favorites, recent: data.history, offline: !connected || justFiles, disliked,
       seed: Math.floor(Math.random() * (2 ** 32)) }));
   }
-  return <div className="page home-page">
+  return <div className={`page home-page${vkTab && vkSite?.view ? ' home-page-vk' : ''}`}>
     <header className="hub-masthead">
-      <div className="hub-heading"><div>
+      {!vkTab && <div className="hub-heading"><div>
         <p className="overline page-kicker"><span />{t('Ваша коллекция')}</p>
         <h1>{t('Главная')}</h1>
-      </div>{!vkTab && <div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
+      </div><div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
         onKeyDown={(event) => { if (event.key === 'Enter' && !composing && !event.nativeEvent.isComposing) props.rememberSearch(query); }}
         onChange={(event) => setQuery(event.currentTarget.value)} onCompositionStart={() => setComposing(true)}
-        onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div>}</div>
+        onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div></div>}
       <div className="hub-topline"><nav aria-label={t('Разделы на главной')} className="hub-tabs">
         {(Object.keys(TABS) as HomeTab[]).map((id) => <button type="button" key={id} data-home-tab={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => selectTab(id)}>{t(TABS[id])}</button>)}
       </nav><div className="hub-top-actions">

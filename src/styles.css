@@ -230,6 +230,9 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
   background: #26242b;
 }
 .artwork > img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+/* Transparent station identity marks are not cropped like square album art. */
+.artwork.artwork-logo { background: #f1f3f7; }
+.artwork.artwork-logo > img { object-fit: contain; inset: 10%; width: 80%; height: 80%; }
 .card-image { position: relative; width: 100%; border: 1px solid #ffffff16; border-radius: 10px; overflow: hidden; background: #22212a; }
 .card-image .artwork { height: 100%; width: 100%; border-radius: 0; }
 .card-image .artwork > img { transition: transform .26s; }
@@ -886,7 +889,7 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .immersive-art { width: min(100%, 61dvh, 500px); aspect-ratio: 1; justify-self: center; }
 .immersive-art > .artwork { width: 100%; height: 100%; border: 1px solid #ffffff3b; border-radius: clamp(15px, 2vw, 27px); box-shadow: 0 29px 95px #05030ba8, 0 5px 19px #09080e77; }
 .immersive-art .vinyl-record { width: 100%; }
-.immersive-content { min-width: 0; display: grid; gap: clamp(17px, 3.1dvh, 32px); }
+.immersive-content { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(17px, 3.1dvh, 32px); }
 .immersive-meta { display: flex; align-items: center; justify-content: space-between; min-width: 0; gap: 13px; }
 .immersive-meta > div { min-width: 0; }
 .immersive-meta h1 { font: 820 clamp(30px, 5.5vw, 81px)/1.04 var(--display); letter-spacing: -.057em; }
@@ -911,6 +914,14 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .immersive-content .play-button svg { width: 25px; height: 25px; }
 .immersive-tools { display: flex; align-items: center; gap: 9px; padding-top: 9px; border-top: 1px solid #ffffff20; }
 .immersive-tools .volume { margin-left: auto; }
+.immersive-player[data-playback-source='vk'] .transport-controls { gap: clamp(4px, 1vw, 18px); flex-wrap: wrap; }
+.immersive-player[data-playback-source='vk'] .immersive-feedback .favorite-toggle { width: 40px; height: 40px; }
+@media (min-width: 701px) and (max-width: 960px) {
+  .immersive-player[data-playback-source='vk'] .immersive-main { column-gap: clamp(16px, 4vw, 32px); padding-block: 14px; }
+  .immersive-player[data-playback-source='vk'] .immersive-meta h1 { font-size: clamp(25px, 3.8vw, 37px); }
+  .immersive-player[data-playback-source='vk'] .immersive-content { row-gap: 13px; }
+  .immersive-player[data-playback-source='vk'] .transport-controls .icon-button { width: 34px; }
+}
 .immersive-tools .icon-button { width: 41px; height: 41px; color: #e2d8e4; }
 .immersive-queue-jump { display: none; }
 .immersive-with-queue { grid-template: 'art queue' auto 'controls queue' auto / minmax(0, 1.2fr) minmax(285px, .8fr); gap: clamp(16px, 3dvh, 25px) clamp(28px, 6.5vw, 96px); padding-block: clamp(16px, 3dvh, 38px); }

@@ -1,6 +1,7 @@
 import { serviceQuery } from './music-services.js';
 import { readMusicLink } from './music-links.js';
 import { VK_MUSIC_URL } from './vk.js';
+import type { Repeat } from './queue.js';
 
 // A separate Chromium profile. Never reuse cookies from Luma's old VK modes or the system browser.
 export const VK_SITE_PARTITION = 'persist:luma-vk-site';
@@ -8,7 +9,7 @@ const musicHosts = ['vk.ru', 'vk.com', 'm.vk.ru', 'm.vk.com', 'music.vk.ru', 'mu
 const siteHosts = new Set([...musicHosts, 'id.vk.ru', 'id.vk.com', 'login.vk.ru', 'login.vk.com', 'oauth.vk.ru', 'oauth.vk.com']);
 export const VK_TRANSPORT = ['previous', 'toggle', 'next'] as const;
 export type VkTransport = typeof VK_TRANSPORT[number];
-export type VkPlaybackAction = VkTransport | 'pause';
+export type VkPlaybackAction = VkTransport | 'pause' | 'shuffle' | 'repeat' | 'favorite' | 'volume' | 'mute';
 export type VkSiteAction = VkPlaybackAction | 'seek' | 'back' | 'reload' | 'music';
 export type VkSiteAppearance = 'standard' | 'profile' | 'minimal';
 
@@ -20,9 +21,12 @@ export interface VkBounds { x: number; y: number; width: number; height: number 
 export interface VkPosition { position: number; duration: number; seek: boolean }
 export interface VkNowPlaying {
   title: string; artist: string; playing: boolean; previous: boolean; toggle: boolean; next: boolean; timeline?: VkPosition;
+  volume?: number; canMute?: boolean; shuffle?: boolean; repeat?: Repeat; favorite?: boolean;
 }
 export interface VkSiteState {
   host: string; phase: 'loading' | 'ready' | 'failed' | 'closed'; back: boolean; signIn: boolean; track?: VkNowPlaying;
+  /** Ephemeral Luma image URL; no VK URL or authentication data crosses IPC. */
+  cover?: string;
   /** Playback has started in this signed-in music document. It stays selected when paused. */
   engaged?: boolean;
 }
@@ -31,6 +35,19 @@ function https(value: unknown) {
   if (typeof value !== 'string' || value.length > 8192 || /[\\\p{Cc}]/u.test(value)) return;
   const url = URL.parse(value);
   if (url?.protocol === 'https:' && !url.username && !url.password && !url.port) return url;
+}
+
+const artworkQuery = new Set(['as', 'ava', 'c_uniq_tag', 'crop', 'cs', 'keep_aspect_ratio', 'quality', 'sign', 'size', 'stp', 'type', 'u']);
+
+/** Only VK's numbered image CDN and raster image routes; never arbitrary guest URLs. */
+export function vkArtworkUrl(value: unknown) {
+  if (typeof value !== 'string' || value.length > 2_048 || /[^\x21-\x7e]/u.test(value)) return;
+  const url = https(value);
+  if (!url || url.hash || !/^sun[0-9]{1,3}(?:-[0-9]{1,4})?\.userapi\.com$/.test(url.hostname)
+    || !/^\/(?:[\w-]+\/)*[\w.-]+$/u.test(url.pathname)
+    || !(url.pathname.startsWith('/impg/') || /\.(?:jpe?g|png|webp)$/i.test(url.pathname))
+    || [...url.searchParams.keys()].some(key => !artworkQuery.has(key))) return;
+  return url.href;
 }
 
 export function vkSiteUrl(value: unknown) {
@@ -95,5 +112,10 @@ export function readVkNowPlaying(value: unknown): VkNowPlaying | undefined {
   const title = text(row.title), artist = text(row.artist);
   const previous = row.previous === true, toggle = row.toggle === true, next = row.next === true;
   const timeline = readVkPosition(row.timeline);
-  if (title || artist || previous || toggle || next) return { title, artist, playing: row.playing === true, previous, toggle, next, ...(timeline && { timeline }) };
+  if (!(title || artist || previous || toggle || next || timeline)) return;
+  const volume = vkSeekRatio(row.volume);
+  const repeat = row.repeat === 'off' || row.repeat === 'one' || row.repeat === 'all' ? row.repeat : undefined;
+  return { title, artist, playing: row.playing === true, previous, toggle, next, ...(timeline && { timeline }),
+    ...(volume !== undefined && { volume, canMute: row.canMute === true }), ...(typeof row.shuffle === 'boolean' && { shuffle: row.shuffle }),
+    ...(repeat && { repeat }), ...(typeof row.favorite === 'boolean' && { favorite: row.favorite }) };
 }

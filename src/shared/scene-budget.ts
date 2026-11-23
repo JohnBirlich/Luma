@@ -1,6 +1,7 @@
-export const SCENE_MAX_PIXELS = 368_640;
-export const SCENE_MAX_SIDE = 1152;
-export const COMPACT_SCENE_PIXELS = 134_400;
+export const SCENE_MAX_PIXELS = 1920 * 1080;
+export const SCENE_MAX_SIDE = 2560;
+export const COMPACT_SCENE_PIXELS = 960 * 480;
+export const COMPACT_SCENE_SIDE = 1536;
 export const SPECTRUM_FPS = 30;
 export const FIREWORKS_FPS = 24;
 export const COMPACT_SCENE_FPS = 20;
@@ -12,7 +13,8 @@ export const sceneFps = (compact: boolean, reactive: boolean) => compact ? COMPA
 export function sceneBufferSize(width: number, height: number, ratio: number) {
   if (!(width > 0 && height > 0) || !Number.isFinite(width * height)) return { width: 0, height: 0 };
   const compact = compactScene(width, height);
-  const scale = Math.min(Math.max(1, ratio || 1), (compact ? 768 : SCENE_MAX_SIDE) / Math.max(width, height),
+  const density = Number.isFinite(ratio) ? Math.min(2, Math.max(1, ratio)) : 1;
+  const scale = Math.min(density, (compact ? COMPACT_SCENE_SIDE : SCENE_MAX_SIDE) / Math.max(width, height),
     Math.sqrt((compact ? COMPACT_SCENE_PIXELS : SCENE_MAX_PIXELS) / (width * height)));
   return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
 }
