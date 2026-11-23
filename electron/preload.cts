@@ -6,6 +6,7 @@ import type { DesktopBridge } from '../src/shared/media.js';
 import type { LastFmStatus } from '../src/shared/lastfm.js';
 import type { CredentialService, MusicServiceStatus } from '../src/shared/music-services.js';
 
+import type { UpdateDownloadState } from '../src/shared/release-updates.js';
 import type { VkSiteState } from '../src/shared/vk-site.js';
 
 const bridge: DesktopBridge = {
@@ -15,7 +16,19 @@ const bridge: DesktopBridge = {
   cancelCatalogSearch: (id) => ipcRenderer.invoke('online:cancel-search', id),
   openOnlineLink: (url: string) => ipcRenderer.invoke('online:open-link', url),
   openReleases: () => ipcRenderer.invoke('app:releases'),
-  updates: { check: () => ipcRenderer.invoke('updates:check'), install: (version) => ipcRenderer.invoke('updates:install', version) },
+  updates: {
+    check: () => ipcRenderer.invoke('updates:check'),
+    install: (version) => ipcRenderer.invoke('updates:install', version),
+    download: (version) => ipcRenderer.invoke('updates:download', version),
+    downloadState: () => ipcRenderer.invoke('updates:download-state'),
+    cancelDownload: () => ipcRenderer.invoke('updates:cancel-download'),
+    revealDownload: () => ipcRenderer.invoke('updates:reveal-download'),
+    onDownloadState: (callback) => {
+      const listener = (_event: IpcRendererEvent, state: UpdateDownloadState) => callback(state);
+      ipcRenderer.on('updates:download-changed', listener);
+      return () => ipcRenderer.removeListener('updates:download-changed', listener);
+    },
+  },
   getAudioFormat: (id) => ipcRenderer.invoke('library:audio-format', id),
   getTracks: () => ipcRenderer.invoke('library:list'),
   chooseTracks: () => ipcRenderer.invoke('library:choose'),

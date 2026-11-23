@@ -182,6 +182,9 @@ async function smoke() {
   assert.equal(await run('window.luma.lastfm.status().then(({ enabled }) => enabled)'), false);
   assert.equal(await run('window.luma.discord.status()'), process.platform === 'win32' ? 'off' : 'unsupported');
   assert.equal(await run(`window.luma.updates.install(${JSON.stringify(nextVersion)})`), 'unavailable', 'a source build cannot launch an installer');
+  assert.equal(await run(`window.luma.updates.download(${JSON.stringify(nextVersion)})`), 'unavailable', 'a source build cannot download an update');
+  assert.deepEqual(await run('window.luma.updates.downloadState()'), { state: 'idle' });
+  assert.equal(await run('window.luma.updates.revealDownload()'), false, 'only a completed download can be revealed');
   assert.equal(first.artist, 'Ария');
   assert.equal(first.album, 'Живой звук');
   assert.equal(first.picture.type, 'image/jpeg');
@@ -449,9 +452,9 @@ async function smoke() {
     await run(`document.querySelector('.settings-page [aria-label="Обновления приложения"]').click()`);
     await waitFor('settings show package version', () => run(`document.querySelector('.settings-page .setting-card header')?.textContent.includes(${JSON.stringify(`Установлена версия ${version}.`)})`));
     const report = await run('window.luma.updates.check()');
-    assert.deepEqual(report, { state: 'available', mode: 'development', version: nextVersion, bytes: 1234 });
+    assert.deepEqual(report, { state: 'available', mode: 'development', version: nextVersion, bytes: 1234, downloadable: false });
     await waitFor('latest release is detected without installing from a development build', () => run(`document.querySelector('.settings-page .update-status')?.textContent.includes('Доступна версия ${nextVersion}.')
-      && ![...document.querySelectorAll('.settings-page .update-status button')].some(button => button.textContent.includes('Скачать и установить'))`));
+      && ![...document.querySelectorAll('.settings-page .update-status button')].some(button => button.matches('[data-update-download]') || button.textContent.includes('Скачать и установить'))`));
     assert.equal(updateLookups, 1, 'settings and an explicit check reuse the same release request');
   } finally { session.defaultSession.protocol.unhandle('https'); }
   await go('Меню');
