@@ -1,57 +1,71 @@
-/* Cosmetic only. Keep this independently usable as an unpacked extension. */
+/* Shared cosmetic stylesheet. Chrome opts in via the HTML marker; Luma
+   adopts the same rules only for «Без панелей» on a VK Music route. */
 @supports (interactivity: inert) {
-  @scope (html[data-vk-music-only] #layout_wrapper_root:has(
-    > #page_header_cont #page_header
+  @scope (html[data-vk-music-only] > body:has(
+    #page_layout #page_body :is(#spa_layout_content, #content)
   ):has(
-    > #page_layout > * > #page_body > #spa_layout_content
-  ):has(
-    > #page_layout > * > #layout_sidebar nav li#l_pr > a[href]
+    :is(#layout_sidebar, #side_bar) #l_pr a[href], :is(#page_header_cont, #page_header, #top_nav) a#top_profile_link[href]
   ):not(:has(
-    > #page_header_cont a:is([href="/join"], [href="https://vk.ru/join"], [href="https://vk.com/join"])
+    :is(#page_header_cont, #page_header, #top_nav) a:is([href="/join"], [href^="/join?"], [href="https://vk.ru/join"], [href="https://vk.com/join"])
   ))) {
-    :scope {
-      --vk-music-only-gutter: clamp(6px, 1vw, 16px);
+    :scope { --vk-music-only-gutter: clamp(6px, 1vw, 16px); }
+    :scope, #layout_wrapper_root {
       --spa-layout-with-scrollbar-width: 100% !important;
       --spa-layout-width: 100% !important;
       --spa-layout-sidebar-width: 0px !important;
       --spa-layout-contnet-width: 100% !important;
       --spa-layout-header-height: 0px !important;
-      width: 100% !important;
     }
-    :scope > #page_layout {
+    :scope, :is(#page_wrap, #wrap, #spa_root, #layout_wrapper_root):has(#page_layout), #page_layout {
       width: 100% !important; min-width: 0 !important; max-width: none !important;
-      margin: 0 !important; padding: 0 var(--vk-music-only-gutter) !important; box-sizing: border-box !important;
+      margin-inline: 0 !important; box-sizing: border-box !important;
     }
-    :scope > #page_layout > :has(> #layout_sidebar):has(> #page_body) {
-      display: block !important; padding-top: 0 !important;
-      & > #layout_sidebar { display: none !important; }
-      & > #page_body, & > #page_body > #spa_layout_content {
-        width: 100% !important; min-width: 0 !important; max-width: 100% !important; box-sizing: border-box !important;
-      }
-      & > #page_body { margin: 0 !important; }
+    #page_layout { padding: 0 var(--vk-music-only-gutter) !important; }
+    #page_layout, #page_layout :has(#page_body) { display: block !important; padding-top: 0 !important; }
+    #page_layout #page_body, #page_layout #page_body :is(#spa_layout_content, #content) {
+      width: 100% !important; min-width: 0 !important; max-width: 100% !important; box-sizing: border-box !important;
     }
+    #page_layout #page_body { float: none !important; margin: 0 !important; }
+    :is(#layout_sidebar, #side_bar):not(#page_body *) { display: none !important; }
 
-    /* Prefer the in-page player. On other layouts, keep just the header music slot. */
-    :scope > #page_header_cont {
+    /* VK mounts the mini messenger next to #page_wrap, not inside the catalogue. */
+    :is(#fastchat-reforged, #fastchat-reforged-modals, #fc_contacts, #friends_online, .friends_online, #chat_list):not(#page_body *) {
       display: none !important;
     }
-    :scope:has(> #page_header_cont > #page_header_wrap > #page_header > li :is(#top_audio_layer_place, #top_audio_player)):not(:has(
-      > #page_layout > * > #page_body :is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"]):not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *)
-    )) > #page_header_cont {
-      display: block !important;
-      position: relative !important; inset: auto !important; width: auto !important; height: auto !important;
-      margin: 0 var(--vk-music-only-gutter) var(--vk-music-only-gutter) !important;
-      border-radius: var(--vkui--size_border_radius_paper--regular, 10px);
-      & > #page_header_wrap, & > #page_header_wrap > #page_header {
-        width: 100% !important; min-width: 0 !important; max-width: 100% !important;
-        height: auto !important; margin: 0 !important; box-sizing: border-box !important;
+
+    /* The legacy header can be #page_header or #top_nav without #page_header_cont.
+       Only style the outermost shell. Keep hidden controls measurable for Luma's
+       transport fallback; don't keep any of the general header interactive. */
+    :is(#page_header_cont, #page_header, #top_nav):not(:is(#page_header_cont, #page_header, #top_nav) *, #page_body *) {
+      &:not(:has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"]))),
+      body:has(#page_body :is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"]):not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *)) & {
+        position: fixed !important; opacity: 0 !important; interactivity: inert !important;
+        & * { interactivity: inert !important; }
       }
-      & #page_header {
+      &:has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"])):not(body:has(
+        #page_body :is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"]):not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *)
+      ) *) {
+        position: relative !important; inset: auto !important; width: auto !important; height: auto !important;
+        margin: 0 var(--vk-music-only-gutter) var(--vk-music-only-gutter) !important;
+        padding: 0 var(--vk-music-only-gutter) !important; box-sizing: border-box !important;
+        border-radius: var(--vkui--size_border_radius_paper--regular, 10px);
         display: flex !important; align-items: center !important; min-height: var(--header-height, 48px);
-        padding: 0 var(--vk-music-only-gutter) !important; background: transparent !important;
+        & :is(#page_header_wrap, #page_header, #top_nav) {
+          width: 100% !important; min-width: 0 !important; max-width: 100% !important;
+          height: auto !important; margin: 0 !important; padding: 0 !important; box-sizing: border-box !important;
+        }
+        & :is(#page_header, #top_nav) { display: flex !important; align-items: center !important; background: transparent !important; }
+        & :has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"])),
+        & :is(#top_audio_player, [class*="TopNavigation__player--"]) {
+          flex: 1 1 auto !important; min-width: 0 !important; max-width: 100% !important;
+        }
+        /* Keep just the music subtree and its ancestors, even with extra wrappers. */
+        & :not(
+          :is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"]),
+          :is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"]) *,
+          :has(:is(#top_audio_player, #top_audio_layer_place, [class*="TopNavigation__player--"]))
+        ) { display: none !important; }
       }
-      & #page_header > :not(li:has(:is(#top_audio_layer_place, #top_audio_player))) { display: none !important; }
-      & #page_header > li:has(:is(#top_audio_layer_place, #top_audio_player)) { flex: 1 1 auto !important; min-width: 0 !important; }
     }
   }
 }

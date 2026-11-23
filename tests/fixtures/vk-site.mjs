@@ -4,7 +4,22 @@ export const vkFixtureTracks = ['Туманная гавань', 'Северны
 export const vkFixtureArtist = 'VK · Тестовый исполнитель';
 
 // Synthetic desktop shell with the same stable IDs and sizing as VK, without account data.
-export function vkDesktopPage(content, { player = '', signedOut = false } = {}) {
+export function vkDesktopPage(content, { player = '', signedOut = false, legacy = false } = {}) {
+  const header = `<div id="${legacy ? 'top_nav' : 'page_header_cont'}"><div id="page_header_wrap" style="margin-left: 4px"><ul id="page_header">
+    <li><a href="/feed" id="fixture-vk-home">ВКонтакте</a></li>
+    <li>${signedOut ? '<a href="/join">Регистрация</a>' : '<input id="fixture-vk-search" aria-label="Поиск VK">'}</li>
+    ${player ? `<li${legacy ? '' : ' class="TopNavigation__player--test"'}>${player}</li>` : ''}
+    <li><button id="fixture-vk-account">Аккаунт</button></li>
+  </ul></div></div>`;
+  const profile = '<a href="/id42">Профиль</a>';
+  const sidebar = `<div id="${legacy ? 'side_bar' : 'layout_sidebar'}"><div class="LeftMenu__root--test"><nav><ol>
+    <li id="l_pr">${legacy ? `<span>${profile}</span>` : profile}<button id="fixture-profile-more">Ещё</button></li>
+    <li id="l_feed"><a href="/feed">Лента</a></li><li><a href="/audio">Музыка</a></li>
+  </ol></nav><div id="ads_wrapper">Дополнительный блок меню</div></div></div>`;
+  const body = `<div id="page_body" style="width: 911px"><main id="${legacy ? 'content' : 'spa_layout_content'}">${content}</main></div>`;
+  const layout = `<div id="page_layout" style="padding: 0 16px"><div class="fixture-layout-body">
+    ${legacy ? `<div>${sidebar}</div><div class="fixture-wrapped-content">${body}</div>` : `${sidebar}${body}`}
+  </div></div>`;
   return `<!doctype html><meta charset="utf-8"><title>VK Music fixture</title>
     <style>
       :root { color-scheme: dark; --fixture-page: #1e2230; --fixture-panel: #252831; --fixture-text: white; }
@@ -17,18 +32,20 @@ export function vkDesktopPage(content, { player = '', signedOut = false } = {}) 
         --spa-layout-with-scrollbar-width: var(--spa-layout-with-scrollbar-width-by-js);
         width: var(--spa-layout-with-scrollbar-width);
       }
-      #page_header_cont {
-        position: fixed; inset: 0 0 auto; width: var(--spa-layout-with-scrollbar-width) !important;
+      :is(#page_header_cont, #top_nav) {
+        position: fixed; inset: 0 0 auto; width: var(--spa-layout-with-scrollbar-width, 964px) !important;
         height: 48px; background: var(--fixture-panel); z-index: 100;
       }
-      #page_header_wrap { width: var(--spa-layout-width) !important; height: inherit; }
+      #page_header_wrap { width: var(--spa-layout-width, 950px) !important; height: inherit; }
       #page_header { display: flex; align-items: center; gap: 10px; height: inherit; margin: 0; padding: 0 8px; list-style: none; }
-      #page_layout { width: var(--spa-layout-width) !important; margin: 0 auto; }
-      .fixture-layout-body { display: flex; align-items: flex-start; padding-top: var(--spa-layout-header-height); }
-      #layout_sidebar { flex: none; width: var(--spa-layout-sidebar-width); padding-top: 8px; }
-      #layout_sidebar ol { margin: 0; padding: 8px; list-style: none; }
-      #layout_sidebar a { color: inherit; display: block; padding: 4px; }
-      #page_body { width: var(--spa-layout-contnet-width) !important; }
+      #page_layout { width: var(--spa-layout-width, 950px) !important; margin: 0 auto; }
+      .fixture-layout-body { display: flex; align-items: flex-start; padding-top: var(--spa-layout-header-height, 48px); }
+      .fixture-legacy-wrap { width: 964px; max-width: 964px; margin: 0 auto; }
+      :is(#layout_sidebar, #side_bar) { flex: none; width: var(--spa-layout-sidebar-width, 164px); padding-top: 8px; }
+      :is(#layout_sidebar, #side_bar) ol { margin: 0; padding: 8px; list-style: none; }
+      :is(#layout_sidebar, #side_bar) a { color: inherit; display: block; padding: 4px; }
+      #page_body { width: var(--spa-layout-contnet-width, 750px) !important; }
+      .FCPanel { position: fixed; right: 0; top: 58px; width: 64px; background: var(--fixture-panel); z-index: 101; }
       .fixture-vk-player { display: flex; align-items: center; min-width: 0; gap: 4px; }
       .fixture-vk-player span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .fixture-music-block { padding: 12px; margin-bottom: 12px; border-radius: 8px; background: var(--fixture-panel); }
@@ -38,21 +55,15 @@ export function vkDesktopPage(content, { player = '', signedOut = false } = {}) 
       .fixture-music-cards { display: flex; gap: 8px; overflow-x: auto; }
       .fixture-music-cards button { flex: 0 0 min(100%, 140px); }
     </style>
-    <div id="layout_wrapper_root" style="--spa-layout-with-scrollbar-width-by-js: 964px">
-      <div id="page_header_cont"><div id="page_header_wrap" style="margin-left: 4px"><ul id="page_header">
-        <li><a href="/feed" id="fixture-vk-home">ВКонтакте</a></li>
-        <li>${signedOut ? '<a href="/join">Регистрация</a>' : '<input id="fixture-vk-search" aria-label="Поиск VK">'}</li>
-        ${player ? `<li class="TopNavigation__player--test">${player}</li>` : ''}
-        <li><button id="fixture-vk-account">Аккаунт</button></li>
-      </ul></div></div>
-      <div id="page_layout" style="padding: 0 16px"><div class="fixture-layout-body">
-        <div id="layout_sidebar"><div class="LeftMenu__root--test"><nav><ol>
-          <li id="l_pr"><a href="/id42">Профиль</a><button id="fixture-profile-more">Ещё</button></li>
-          <li id="l_feed"><a href="/feed">Лента</a></li><li><a href="/audio">Музыка</a></li>
-        </ol></nav><div id="ads_wrapper">Дополнительный блок меню</div></div></div>
-        <div id="page_body" style="width: 911px"><main id="spa_layout_content">${content}</main></div>
-      </div></div>
-    </div>`;
+    ${legacy ? `${header}<div id="page_wrap" class="fixture-legacy-wrap">${layout}</div>`
+      : `<div id="page_wrap"><div id="spa_root"><div id="layout_wrapper_root" style="--spa-layout-with-scrollbar-width-by-js: 964px">
+        ${header}${layout}
+      </div></div></div>`}
+    <section id="fastchat-reforged"><div class="FCApp"><aside class="FCPanel">
+      <button class="FCPanel__widthToggle" aria-label="Свернуть список чатов">«</button>
+      <div class="FCPanel__list"><button id="fixture-chat">Тестовый чат</button></div>
+    </aside></div></section>
+    <section id="fastchat-reforged-modals"></section>`;
 }
 
 export const vkPublicPage = vkDesktopPage('<h1>Публичный каталог до входа</h1>', { signedOut: true });
@@ -62,8 +73,8 @@ export const vkFixtureReturn = 'https://vk.ru/feed?fixture=signed-in';
 export const vkSignInPage = `<!doctype html><meta charset="utf-8"><label>Тестовая форма входа <input id="fixture-password" type="password" value="${vkFixturePrivate}"></label>
   <a id="fixture-sign-in" href="${vkFixtureReturn}">Продолжить</a>`;
 
-export function vkPlayerPage(audioPath, { inline = false } = {}) {
-  const player = `<div ${inline ? 'class="fixture-vk-player audio_page_player2"' : 'class="fixture-vk-player" id="top_audio_layer_place"'}>
+export function vkPlayerPage(audioPath, { inline = false, legacy = false } = {}) {
+  const player = `<div ${inline ? 'class="fixture-vk-player audio_page_player2"' : `class="fixture-vk-player" id="${legacy ? 'top_audio_player' : 'top_audio_layer_place'}"`}>
       <button type="button" id="fixture-previous" aria-label="Предыдущая аудиозапись">⏮</button>
       <button type="button" id="fixture-toggle" aria-label="Воспроизвести">▶</button>
       <button type="button" id="fixture-next" aria-label="Следующая аудиозапись"><svg class="vkuiIcon--skip_next_24"></svg>⏭</button>
@@ -104,7 +115,7 @@ export function vkPlayerPage(audioPath, { inline = false } = {}) {
       document.querySelector('#fixture-music-row').onclick = document.querySelector('#fixture-mix').onclick = toggle.onclick;
       media.onplay = media.onpause = update;
       update();
-    </script>`, { player: inline ? '<div id="top_audio_layer_place"></div><button id="fixture-launcher">Музыка</button>' : player });
+    </script>`, { legacy, player: inline ? '<div id="top_audio_layer_place"></div><button id="fixture-launcher">Музыка</button>' : player });
 }
 
 // Native media-session controls only, or just a detached Audio (no global player DOM).

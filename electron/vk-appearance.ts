@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { vkMusicPage, vkSiteUrl } from '../src/shared/vk-site.js';
 import type { VkSiteAppearance } from '../src/shared/vk-site.js';
 
@@ -34,60 +35,20 @@ const profileOnly = `
   }
 `;
 
-const headerPath = '> #page_header_cont > #page_header_wrap > #page_header';
-const playerSlot = ':is(#top_audio_layer_place, #top_audio_player)';
-const inlinePlayer = ':is(.audio_page_player, .audio_page_player2, [data-testid="audio-player"], [data-testid="music-player"], [data-testid="MusicPlayer"])'
-  + ':not(:empty, [hidden], [hidden] *, [aria-hidden="true"], [aria-hidden="true"] *)';
-const compactPlayer = `:has(${headerPath} > li ${playerSlot})`
-  + `:not(:has(> #page_layout > * > #page_body ${inlinePlayer}))`;
-
-// Only size the desktop shell, not individual tabs/cards or carousels. If VK
-// renders its player inside the page, leave it there. Otherwise reuse the native
-// music slot in the header (it can be just a launcher before the first play).
-// The unpacked browser extension has its own stylesheet; Luma never loads it.
-const minimal = `
-  :scope {
-    --luma-vk-music-gutter: clamp(6px, 1vw, 16px);
-    --spa-layout-with-scrollbar-width: 100% !important;
-    --spa-layout-width: 100% !important;
-    --spa-layout-sidebar-width: 0px !important;
-    --spa-layout-contnet-width: 100% !important;
-    --spa-layout-header-height: 0px !important;
-    width: 100% !important;
+// The extension and Luma share only this audited stylesheet. No manifest or
+// browser-extension script is packaged. Luma gates the sheet by route and mode
+// rather than adding the extension's opt-in attribute to VK's DOM.
+function readMusicOnlyStyle() {
+  try {
+    return readFileSync(new URL('../vk-extension/styles.css', import.meta.url), 'utf8')
+      .replace('html[data-vk-music-only]', 'html');
+  } catch {
+    return ''; // A missing build asset must not prevent opening the official site.
   }
-  :scope > #page_layout {
-    width: 100% !important; min-width: 0 !important; max-width: none !important;
-    margin: 0 !important; padding: 0 var(--luma-vk-music-gutter) !important; box-sizing: border-box !important;
-  }
-  :scope > #page_layout > :has(> #layout_sidebar):has(> #page_body) {
-    display: block !important; padding-top: 0 !important;
-    & > #layout_sidebar { display: none !important; }
-    & > #page_body, & > #page_body > #spa_layout_content {
-      width: 100% !important; min-width: 0 !important; max-width: 100% !important; box-sizing: border-box !important;
-    }
-    & > #page_body { margin: 0 !important; }
-  }
-  ${hiddenHeader(`:scope:not(${compactPlayer})`)}
-  :scope${compactPlayer} > #page_header_cont {
-    position: relative !important; inset: auto !important; width: auto !important; height: auto !important;
-    margin: 0 var(--luma-vk-music-gutter) var(--luma-vk-music-gutter) !important;
-    border-radius: var(--vkui--size_border_radius_paper--regular, 10px);
-    & > #page_header_wrap, & > #page_header_wrap > #page_header {
-      width: 100% !important; min-width: 0 !important; max-width: 100% !important;
-      height: auto !important; margin: 0 !important; box-sizing: border-box !important;
-    }
-    & #page_header {
-      display: flex !important; align-items: center !important; min-height: var(--header-height, 48px);
-      padding: 0 var(--luma-vk-music-gutter) !important; background: transparent !important;
-    }
-    & #page_header > :not(li:has(${playerSlot})) { display: none !important; }
-    & #page_header > li:has(${playerSlot}) { flex: 1 1 auto !important; min-width: 0 !important; }
-  }
-`;
-
-function musicLayout(mode: 'profile' | 'minimal') {
-  return `@supports (interactivity: inert) { @scope (${desktopShell}) { ${mode === 'profile' ? profileOnly : minimal} } }`;
 }
+
+const minimal = readMusicOnlyStyle();
+const profile = `@supports (interactivity: inert) { @scope (${desktopShell}) { ${profileOnly} } }`;
 
 // Runs in Luma's isolated world. Only replace our own sheet, without editing VK's
 // stylesheets, relocating its controls or reading any data from the profile link.
@@ -109,6 +70,7 @@ function setAppearance(css: string, page: string) {
 export function vkAppearanceScript(mode: VkSiteAppearance, href: string) {
   const page = vkSiteUrl(href);
   if (!page) return;
-  const css = mode !== 'standard' && (page.hostname === 'vk.ru' || page.hostname === 'vk.com') && vkMusicPage(href) ? musicLayout(mode) : '';
+  const music = (page.hostname === 'vk.ru' || page.hostname === 'vk.com') && vkMusicPage(href);
+  const css = !music || mode === 'standard' ? '' : mode === 'profile' ? profile : minimal;
   return `(${setAppearance.toString()})(...${JSON.stringify([css, page.origin + page.pathname])})`;
 }
