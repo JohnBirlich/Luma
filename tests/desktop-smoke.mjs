@@ -22,7 +22,6 @@ import { wordLyrics } from './fixtures/word-lyrics.mjs';
 import { installerName, LATEST_RELEASE_API, RELEASE_REPO } from '../dist-electron/src/shared/release-updates.js';
 import { musicLaunchUrl, readMusicLink } from '../dist-electron/src/shared/music-links.js';
 import { parseByteRange } from '../dist-electron/electron/protocol.js';
-import { COMPACT_SCENE_PIXELS } from '../dist-electron/src/shared/scene-budget.js';
 import { commonsRecording, jamendoRecording } from './fixtures/openverse.mjs';
 import { audiusRecording, creatorStream, storageStream } from './fixtures/public-catalogs.mjs';
 import { parseFile } from 'music-metadata';
@@ -59,6 +58,8 @@ const liveRadio = process.env.LUMA_LIVE_RADIO === '1';
 // GitHub limits notices per step. Leave that budget for actual provider results in live runs.
 const fixtureNotice = (title, message) => console.log(liveCatalog || liveServices || liveRadio
   ? `${title}: ${message}` : `::notice title=${title}::${message}`);
+// Maximum raster size expected in compact scene previews. The renderer module is not emitted by the Electron compiler.
+const COMPACT_SCENE_PIXELS = 460_800;
 const timer = setTimeout(() => fail(new Error('Desktop smoke test did not finish')), liveRadio ? 410_000 : liveCatalog ? 400_000 : liveServices ? 260_000 : 170_000);
 // The main process must register its custom protocol before the ready event.
 const sample = await readFile(join(root, 'public/demo/afterimage.mp3'));
@@ -1367,7 +1368,8 @@ async function smoke() {
       await fill(`${vkStage} .volume input`, '42');
       await waitFor('volume falls back to the single detached Audio element', () => guestRun(`Math.abs(fixtureAudio.volume - .42) < .01`));
       await click(`${vkStage} [aria-label="Выключить звук"]`);
-      await waitFor('mute controls the VK audio only', () => guestRun(`fixtureAudio.muted`));
+      await waitFor('mute controls the VK audio only and updates the toggle', async () => await guestRun(`fixtureAudio.muted`)
+        && await run(`!!document.querySelector('${vkStage} [aria-label="Включить звук"]')`));
       await click(`${vkStage} [aria-label="Включить звук"]`);
       await waitFor('unmute restores VK volume', () => guestRun(`!fixtureAudio.muted && Math.abs(fixtureAudio.volume - .42) < .01`));
       assert.equal(vkView(), nativeView);
