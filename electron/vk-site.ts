@@ -317,7 +317,10 @@ export class VkSite {
         this.startQr(active);
         return;
       }
-      const visible = readVkNowPlaying(snapshot);
+      // The renderer keeps one public cover address for a saved listen; the
+      // image itself still arrives over the private protocol.
+      const cover = Array.isArray(snapshot?.artwork) ? snapshot.artwork.map(vkArtworkUrl).find(Boolean) : undefined;
+      const visible = readVkNowPlaying({ ...snapshot, artwork: cover });
       const track = snapshot && readVkNowPlaying({ ...visible,
         playing: typeof media?.playing === 'boolean' ? media.playing : visible?.playing,
         previous: media?.previous === true || visible?.previous, toggle: media?.toggle === true || visible?.toggle,
@@ -368,7 +371,9 @@ export class VkSite {
         return await fromDom(action, ratio) || (stillHere() && (await fromMedia(action, ratio)) === true);
       }
       if (action === 'shuffle' || action === 'repeat' || action === 'favorite') {
-        return track?.[action] !== undefined && await fromDom(action);
+        // The published snapshot is a poll behind the rendered player, so a
+        // stale "not offered" flag must not refuse a control that is on screen.
+        return await fromDom(action);
       }
       if (action !== 'pause' && !VK_TRANSPORT.some((value) => value === action)) return false;
       const transport = action as typeof VK_TRANSPORT[number] | 'pause';

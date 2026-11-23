@@ -94,7 +94,7 @@ export function MyPlaylists({ items, byId, collection, currentId, playing, busy,
       </div>}
       {tracks.length < playlist.trackIds.length && <p>{t('Недоступных записей в списке: {0}', playlist.trackIds.length - tracks.length)}</p>}
       {!connected && available.length < tracks.length && <p>{t('Для онлайн-записей в плейлисте нужна сеть.')}</p>}
-      <TrackRows tracks={all ? available : available.slice(0, 8)} currentId={currentId} playing={playing} play={play} credits disabled={busy} />
+      <TrackRows tracks={all ? available : available.slice(0, 8)} currentId={currentId} playing={playing} play={play} playAll={playAll} credits disabled={busy} />
       {available.length > 8 && <button className="text-button" type="button" aria-expanded={all} onClick={() => setAll(!all)}>{t(all ? 'Свернуть список' : 'Показать все')}<ChevronRight size={15} /></button>}
     </section>}
   </Shelf>;

@@ -15,6 +15,8 @@ export interface VkBounds { x: number; y: number; width: number; height: number 
 export interface VkPosition { position: number; duration: number; seek: boolean }
 export interface VkNowPlaying {
   title: string; artist: string; playing: boolean; previous: boolean; toggle: boolean; next: boolean; timeline?: VkPosition;
+  /** Public cover address, validated below, so a saved listen can show the same artwork later. */
+  artwork?: string;
   link?: string; volume?: number; canMute?: boolean; shuffle?: boolean; repeat?: Repeat; favorite?: boolean;
 }
 export interface VkSiteState {
@@ -121,7 +123,8 @@ export function readVkNowPlaying(value: unknown): VkNowPlaying | undefined {
   const volume = vkSeekRatio(row.volume);
   const repeat = row.repeat === 'off' || row.repeat === 'one' || row.repeat === 'all' ? row.repeat : undefined;
   const link = title ? vkHistoryLink(row.link) : undefined;
-  return { title, artist, ...(link && { link }), playing: row.playing === true, previous, toggle, next, ...(timeline && { timeline }),
+  const artwork = title ? vkArtworkUrl(row.artwork) : undefined;
+  return { title, artist, ...(link && { link }), ...(artwork && { artwork }), playing: row.playing === true, previous, toggle, next, ...(timeline && { timeline }),
     ...(volume !== undefined && { volume, canMute: row.canMute === true }), ...(typeof row.shuffle === 'boolean' && { shuffle: row.shuffle }),
     ...(repeat && { repeat }), ...(typeof row.favorite === 'boolean' && { favorite: row.favorite }) };
 }

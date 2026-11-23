@@ -103,7 +103,7 @@ function TopicDetail({ card, own, disliked, currentId, playing, play, connected,
 export function Discovery(props: DiscoveryProps) {
   const t = useText();
   const [selected, setSelected] = useState<string>();
-  const { tracks, recent, related, seed, favorites, currentId, playing, play } = props;
+  const { tracks, recent, related, seed, favorites, currentId, playing, play, playAll } = props;
   const genres = useMemo(() => {
     const extra = musicGroups(tracks, 'genre', 30).filter(({ label }) => !GENRES.some(({ tags }) => hasGenre(label, tags)));
     return [...GENRES, ...extra.map(({ id, label }): DiscoveryCard => ({ id: `local:${id}`, title: label, query: label, tags: [label], color: 'blue', mark: '♪' }))];
@@ -123,7 +123,7 @@ export function Discovery(props: DiscoveryProps) {
     <TopicShelf name="Подборки Luma" detail="Подборки по тегам из медиатеки." topics={EDITORIAL} {...selection}>{detail}</TopicShelf>
     {picks.length > 0 && <Shelf title={related.length && seed ? t('Похоже на «{0}»', seed.title) : t('Из вашей коллекции')}
       detail={t('По вашим прослушиваниям и отметкам в Luma.')}>
-      <TrackRows tracks={picks} currentId={currentId} playing={playing} play={play} strip />
+      <TrackRows tracks={picks} currentId={currentId} playing={playing} play={play} playAll={playAll} strip />
     </Shelf>}
   </>;
 }

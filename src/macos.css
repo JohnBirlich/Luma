@@ -140,6 +140,36 @@
   --line: #ffffff2b; --accent-fill: #ffffff1c; --accent-border: #ffffff56; --hover-bg: #ffffff26;
   --raised-bg: #202b51; --chrome-bg: #1a2445; --stage-bg: #182441;
 }
+/* The now-playing card follows the theme as well: MacOS gets the same light
+   wallpaper instead of a dark stage, with its own readable tokens. */
+[data-layout='glass'] .home-now .hero {
+  color-scheme: light; color: #111c35; border-color: #ffffffd4;
+  background: linear-gradient(116deg, #f8fbffed 0%, #eff6ffc9 52%, #e7f0ff96 100%),
+    #e7f0ff url('./assets/liquid-wallpaper.webp') center / cover no-repeat;
+  --text: #111c35; --muted: #435474; --quiet: #50617b;
+  --accent: #2058c4; --accent-light: #1b47a6; --accent-ink: #fdfdff; --accent-shadow: #2058c440;
+  --line: #3658802c; --accent-fill: #2058c414; --accent-border: #2058c452; --hover-bg: #365da016;
+  --raised-bg: #ffffffd9; --chrome-bg: #f6fbff; --stage-bg: #e3efff;
+}
+[data-layout='glass'] .home-now .hero > .scene-background { opacity: calc(var(--strength) * .58); }
+[data-layout='glass'] .home-now .hero-scrim {
+  background: linear-gradient(90deg, #f9fcfff2 0%, #f8fbffd6 36%, #f7fbff82 61%, #f7fbff0d 86%),
+    linear-gradient(0deg, #edf5ffb4, transparent 46%);
+}
+[data-layout='glass'] .home-now .hero :is(h2, .hero-meta > span, .timeline > span) { color: #111c35; }
+[data-layout='glass'] .home-now .hero .hero-label { color: #1f3f74; border-color: #2058c433; background: #ffffffbd; }
+[data-layout='glass'] .home-now .hero :is(.step-button, .mode-button) { color: #22375f; }
+[data-layout='glass'] .home-now .hero .icon-button { color: #24395f; border-color: #2058c42e; background: #ffffffb5; }
+[data-layout='glass'] .home-now .hero .icon-button:hover:not(:disabled) { color: #14346e; background: #ffffffe8; }
+[data-layout='glass'] .home-now .hero .range::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--accent) var(--filled), #c3d2ec var(--filled)); }
+[data-layout='glass'] .home-now .hero .range::-moz-range-track { background: linear-gradient(to right, var(--accent) var(--filled), #c3d2ec var(--filled)); }
+[data-layout='glass'] .home-now .hero .range::-webkit-slider-thumb { background: var(--accent); }
+[data-layout='glass'] .home-now .hero .range::-moz-range-thumb { background: var(--accent); }
+[data-layout='glass'] .home-now .hero :is(.favorite-toggle, .hero-fullscreen, .hero-vk-return) {
+  color: #22375f; border-color: #2058c438; background: #ffffffc2;
+}
+[data-layout='glass'] .home-now .hero :is(.favorite-toggle, .hero-fullscreen, .hero-vk-return):hover { color: #14346e; border-color: #2058c46b; background: #fff; }
+[data-layout='glass'] .home-now .hero .hero-dot { background: #7f93b4; }
 [data-layout='glass'] .home-now .hero-content .hero-meta > span { color: var(--muted); }
 [data-layout='glass'] .hub-hero .outline-button { color: #fff; border-color: #fffa; background: #ffffff21; }
 [data-layout='glass'] .hub-shelf .hub-error { color: #8b2242; }

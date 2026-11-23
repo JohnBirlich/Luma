@@ -191,15 +191,15 @@ export default function App() {
     && !(queueOpen && window.matchMedia('(max-width: 1079px)').matches);
   const vkEngaged = vkSite.view?.state.engaged === true;
   const vkTrack = vkEngaged ? vkSite.view?.state.track : undefined;
-  const listenedTitle = vkTrack?.title, listenedArtist = vkTrack?.artist, listenedLink = vkTrack?.link;
+  const listenedTitle = vkTrack?.title, listenedArtist = vkTrack?.artist, listenedLink = vkTrack?.link, listenedArtwork = vkTrack?.artwork;
   const listeningToVk = vkTrack?.playing === true;
   useEffect(() => {
     if (!listeningToVk || !listenedTitle || !playback.rememberRecent) return;
     setPreferences((data) => {
-      const vkRecent = rememberVkListen(data.vkRecent, { title: listenedTitle, artist: listenedArtist, link: listenedLink });
+      const vkRecent = rememberVkListen(data.vkRecent, { title: listenedTitle, artist: listenedArtist, link: listenedLink, artwork: listenedArtwork });
       return vkRecent === data.vkRecent ? data : { ...data, vkRecent };
     });
-  }, [listeningToVk, listenedTitle, listenedArtist, listenedLink, playback.rememberRecent]);
+  }, [listeningToVk, listenedTitle, listenedArtist, listenedLink, listenedArtwork, playback.rememberRecent]);
   const vkTitle = vkTrack?.title || t('VK Музыка'), vkArtist = vkTrack?.artist ?? '';
   const vkCover = vkEngaged ? vkSite.view?.state.cover : undefined;
   const vkDisplay = useMemo<PlayingTrack>(() => ({ source: 'vk', id: 'vk-now-playing', title: vkTitle, artist: vkArtist,

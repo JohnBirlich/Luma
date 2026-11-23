@@ -75,6 +75,9 @@ test('only current title/artist and boolean playback capabilities are received f
   assert.deepEqual(readVkNowPlaying({ title: ' Трек\n\u202e 1 ', artist: ' Автор  ', playing: true, toggle: true, next: true, previous: 'yes',
     url: 'https://example.test/secret', password: 'fixture', audio: 'https://example.test/audio.mp3', artwork: [] }),
   { title: 'Трек 1', artist: 'Автор', playing: true, toggle: true, next: true, previous: false });
+  assert.equal(readVkNowPlaying({ title: 'Трек', artwork: 'https://sun9-9.userapi.com/impg/a.webp?size=600x600&sign=x' })?.artwork,
+    'https://sun9-9.userapi.com/impg/a.webp?size=600x600&sign=x');
+  assert.equal(readVkNowPlaying({ title: 'Трек', artwork: 'https://files.example.test/a.webp' })?.artwork, undefined);
   assert.equal(readVkNowPlaying({ playing: true }), undefined);
   assert.equal(readVkNowPlaying({ title: 'a'.repeat(1000) })?.title.length, 160);
 });
