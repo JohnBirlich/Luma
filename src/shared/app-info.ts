@@ -1,8 +1,10 @@
 import { RELEASE_REPO } from './release-updates.js';
 
-export const APP_NAME = 'Luma Player';
+export const APP_NAME = 'Luma';
+// This is a storage path, not the display name. Keep existing files and Chromium partitions.
+export const APP_PROFILE_DIR = 'Luma Player';
 // Keep the Windows media/launcher ID resolvable by both AppsFolder and executable-name readers.
-export const APP_USER_MODEL_ID = 'LumaPlayer.exe';
+export const APP_USER_MODEL_ID = 'Luma.exe';
 
 export interface AppInfo {
   version: string;

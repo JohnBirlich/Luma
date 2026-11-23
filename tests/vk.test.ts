@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseVkShareLink, vkPlaylistUrl, VK_MUSIC_URL } from '../src/shared/vk.js';
 import { readMusicLink, musicLinkArgument } from '../src/shared/music-links.js';
-import { readVkNowPlaying, vkMusicPage, vkMusicSearchUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
+import { readVkNowPlaying, readVkPosition, vkMusicPage, vkMusicSearchUrl, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
 
 test('VK entry accepts canonical music pages and bounded literal searches, not auth URLs, snippets or arbitrary redirects', () => {
   const search = vkMusicSearchUrl('  Руки Вверх — Я не отдам  &   #1  ');
@@ -24,6 +24,34 @@ test('native navigation stays first-party; the playback adapter never runs on a 
     'file:///C:/Windows', 'luma://app/', 'luma-player://open/', 'data:text/html,hi', 'javascript:void(0)']) assert.equal(vkSiteUrl(url), undefined, url);
   for (const url of ['https://vk.ru/audio?q=джаз', 'https://vk.com/music/playlist/-31_4', 'https://m.vk.ru/audios-42']) assert.ok(vkMusicPage(url), url);
   for (const url of ['https://id.vk.ru/audio', 'https://vk.ru/login', 'https://vk.ru/audio.php', 'https://vk.ru/widget_playlist.php', 'https://vk.ru/im', 'https://vk.ru/audio../settings']) assert.equal(vkMusicPage(url), false, url);
+});
+
+test('official QR sign-in preserves a validated music return path and does not confuse music with login', () => {
+  for (const target of [VK_MUSIC_URL, vkMusicSearchUrl('джаз & to=https://other.invalid/'),
+    'https://vk.ru/audio-42_4', 'https://vk.ru/music/playlist/-31_4_aShare']) {
+    const wanted = new URL(target!);
+    const login = new URL(vkSignInUrl(target)!);
+    assert.equal(login.origin + login.pathname, 'https://vk.ru/login');
+    assert.deepEqual([...login.searchParams], [['to', wanted.pathname + wanted.search]]);
+    assert.ok(vkSignInPage(login));
+    assert.ok(!vkSignInPage(wanted));
+  }
+  for (const url of ['https://vk.ru/?to=/audio', 'https://vk.ru/authcheck', 'https://id.vk.ru/auth?state=fixture']) {
+    assert.equal(vkSignInPage(new URL(url)), true, url);
+    assert.equal(vkSignInUrl(url), undefined, url);
+  }
+  for (const value of [null, 'https://outside.invalid/audio', 'https://vk.ru/away.php?to=//other.invalid']) assert.equal(vkSignInUrl(value), undefined);
+  assert.equal(vkSignInPage(new URL('https://vk.ru/feed')), false);
+});
+
+test('VK seek accepts only numeric fractions and bounded media position values', () => {
+  for (const value of [undefined, null, '0.5', true, {}, NaN, Infinity, -0.1, 1.001]) assert.equal(vkSeekRatio(value), undefined);
+  for (const value of [0, 0.5, 1]) assert.equal(vkSeekRatio(value), value);
+  for (const value of [null, {}, { duration: 90, position: NaN }, { duration: Infinity, position: 4 }, { duration: 0, position: 0 },
+    { duration: 86_401, position: 0 }, { duration: '90', position: 50 }]) assert.equal(readVkPosition(value), undefined);
+  assert.deepEqual(readVkPosition({ duration: 90, position: -1, seek: 'true' }), { duration: 90, position: 0, seek: false });
+  assert.deepEqual(readVkNowPlaying({ title: 'Трек', timeline: { duration: 90, position: 91, seek: true, url: 'https://outside.invalid' } })?.timeline,
+    { duration: 90, position: 90, seek: true });
 });
 
 test('native view bounds are contained in the owner, including zoom and undersized slots', () => {

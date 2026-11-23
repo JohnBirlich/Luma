@@ -1,3 +1,4 @@
+import { APP_NAME } from '../shared/app-info';
 import { useText } from '../i18n/context';
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
@@ -93,7 +94,7 @@ export function NowPlayingDialog({ appearance, change, close, tint, track, playi
             animate={playing} sample={appearance.audioReactive && playing ? sample : undefined} />
           {appearance.hero === 'vinyl' ? <VinylRecord className="scene-preview-record" track={track} animate={appearance.motion && playing} />
             : <Artwork track={track} imageUrl={appearance.effect === 'off' && (appearance.hero === 'blur' || appearance.hero === 'cover') ? track?.backdropUrl : undefined} className="scene-preview-art" />}
-          <div className="scene-preview-copy"><p className="overline">{t("Предпросмотр")}</p><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
+          <div className="scene-preview-copy"><p className="overline">{t("Предпросмотр")}</p><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? APP_NAME}</span></div>
         </div>
         <NowPlayingOptions appearance={appearance} change={change} />
         <div className="scene-dialog-tuning">

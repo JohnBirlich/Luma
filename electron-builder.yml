@@ -1,6 +1,6 @@
-appId: LumaPlayer.exe
-productName: Luma Player
-executableName: LumaPlayer
+appId: Luma.exe
+productName: Luma
+executableName: Luma
 asar: true
 electronLanguages:
   - ru
@@ -32,7 +32,7 @@ nsis:
   include: Assets/installer.nsh
   # Preserve the upgrade/uninstall identity of app.lumaplayer.desktop.
   guid: 05d31eca-e044-513b-8c10-678775f8445d
-  shortcutName: Luma Player
+  shortcutName: Luma
   installerLanguages:
     - ru_RU
   language: '1049'
@@ -42,6 +42,7 @@ nsis:
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  # Older Luma releases require this exact asset name to detect the update.
   artifactName: 'Luma-Player-Setup-${version}-${arch}.${ext}'
 portable:
-  artifactName: 'Luma-Player-Portable-${version}-${arch}.${ext}'
+  artifactName: 'Luma-Portable-${version}-${arch}.${ext}'

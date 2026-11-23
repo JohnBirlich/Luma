@@ -1,6 +1,6 @@
 import { textFor } from '../i18n/text.js';
 import type { Text } from '../i18n/text.js';
-import { runtimeMode } from './app-info.js';
+import { APP_NAME, runtimeMode } from './app-info.js';
 import type { AppInfo } from './app-info.js';
 
 export const MAX_LOG_ENTRIES = 300;
@@ -127,7 +127,7 @@ export const reportFilename = () => `Luma-diagnostics-${new Date().toISOString()
 
 export function diagnosticsReport({ entries, environment }: DiagnosticSnapshot, t: Text = textFor('ru')): string {
   const info = [
-    `Luma Player ${environment.version} · ${t(runtimeMode[environment.mode])}`,
+    `${APP_NAME} ${environment.version} · ${t(runtimeMode[environment.mode])}`,
     t("Система: {0}", diagnosticSystem(environment.system, t)), t("Среда: {0}", t(environment.runtime)),
     t("Сеть: {0}", environment.online ? t("устройство в сети") : t("устройство вне сети")), t("Записей: {0}", entries.length), '',
   ];

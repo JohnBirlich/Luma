@@ -11,6 +11,7 @@ export const AUDIUS_CONTENT_ORIGIN = 'https://creatornode.audius.co';
 export const AUDIUS_LEGAL = {
   terms: 'https://audius.co/legal/api-terms', privacy: 'https://audius.co/legal/privacy-policy',
 } as const;
+// Keep Audius's existing API client label separate from the display brand.
 export const AUDIUS_APP_NAME = 'Luma Player';
 export const PHISH_API = 'https://phish.in/api/v2/';
 export const PHISH_BLOB = 'https://phish.in/blob/';

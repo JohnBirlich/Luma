@@ -85,7 +85,7 @@ test('ListenBrainz validates the personal token, requires separate consent and p
     assert.equal(headers.get('content-type'), 'application/json');
     assert.deepEqual(JSON.parse(String(options.body)), { listen_type: 'single', payload: [{ listened_at: started + 122, track_metadata: {
       artist_name: event.artist, track_name: event.title, release_name: event.album,
-      additional_info: { duration_ms: 235_000, media_player: 'Luma Player', submission_client: 'Luma Player', submission_client_version: version },
+      additional_info: { duration_ms: 235_000, media_player: 'Luma', submission_client: 'Luma', submission_client_version: version },
     } }] });
     return Response.json({ status: 'ok' });
   };

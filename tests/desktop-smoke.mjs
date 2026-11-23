@@ -10,9 +10,11 @@ import { app, BrowserWindow, clipboard, dialog, powerMonitor, screen, session, s
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
 import { AUDIUS_MEDIA_PARTITION } from '../dist-electron/electron/audius-network.js';
 import { RADIO_DIRECTORY, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
+import { APP_NAME, APP_PROFILE_DIR } from '../dist-electron/src/shared/app-info.js';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
-import { VK_SITE_PARTITION, vkMusicSearchUrl } from '../dist-electron/src/shared/vk-site.js';
-import { vkFixtureArtist, vkFixtureAuth, vkFixturePrivate, vkFixtureTracks, vkPlayerPage, vkSignInPage } from './fixtures/vk-site.mjs';
+import { VK_SITE_PARTITION, vkMusicSearchUrl, vkSignInUrl } from '../dist-electron/src/shared/vk-site.js';
+import { vkFixtureArtist, vkFixtureAuth, vkFixturePrivate, vkFixtureReturn, vkFixtureTracks, vkHeadlessPlayerPage, vkPlayerPage,
+  vkPublicPage, vkQrPage, vkSignInPage } from './fixtures/vk-site.mjs';
 import { acoustic, madam, remix } from './fixtures/recognition.mjs';
 import { alternateRecording, recording } from './fixtures/musicbrainz.mjs';
 import { audioDbTrack, phishSong, phishTrack, untimedLyrics } from './fixtures/free-sources.mjs';
@@ -71,20 +73,20 @@ await writeFile(broken, taggedMp3(sample, {
   title: "Ty Zdes'", picture: { mime: 'image/png', data: Buffer.from('89504e470d0a1a0a', 'hex') },
 }));
 try {
-  const library = await DesktopLibrary.open(join(profile, 'Luma Player'));
+  const library = await DesktopLibrary.open(join(profile, APP_PROFILE_DIR));
   const { added } = await library.importPaths([tagged, broken]);
   assert.equal(added.length, 2);
   const localTagged = library.list().find(({ id }) => id === added[0]);
   assert.equal(localTagged.isrc, 'USABC1200001');
   // An upgraded library has no format fields. Find the fixture by ID: realpath can expand Windows short names.
-  const libraryFile = join(profile, 'Luma Player', 'library.json');
+  const libraryFile = join(profile, APP_PROFILE_DIR, 'library.json');
   const index = JSON.parse(await readFile(libraryFile, 'utf8'));
   const legacyEntry = index.find((entry) => entry.id === added[1]);
   assert.ok(legacyEntry?.format);
   delete legacyEntry.format;
   await writeFile(libraryFile, JSON.stringify(index));
 } catch (error) { fail(error); }
-const indexedLocal = (await DesktopLibrary.open(join(profile, 'Luma Player'))).list().find(({ fileName }) => fileName === 'Ты здесь.mp3');
+const indexedLocal = (await DesktopLibrary.open(join(profile, APP_PROFILE_DIR))).list().find(({ fileName }) => fileName === 'Ты здесь.mp3');
 const groupedJamendo = { ...jamendoRecording, id: 'f1a70211-e1f3-48a9-834b-b196122c5bc1', title: indexedLocal.title,
   creator: indexedLocal.artist, duration: Math.round(indexedLocal.duration * 1000), audio_set: { title: indexedLocal.album }, isrc: indexedLocal.isrc,
   foreign_landing_url: 'https://www.jamendo.com/track/3111002', url: 'https://prod-1.storage.jamendo.com/?trackid=3111002&format=mp32' };
@@ -266,7 +268,7 @@ async function smoke() {
   const fallback = await withArt("Ty Zdes'");
   assert.match(fallback.picture.src, /^data:image\/jpeg;base64,/);
   assert.notEqual(fallback.picture.src, first.picture.src, 'broken cover does not keep the previous track’s artwork');
-  assert.equal(window.getTitle(), "Ty Zdes' — Luma Player");
+  assert.equal(window.getTitle(), `Ty Zdes' — ${APP_NAME}`);
   assert.equal((await run('window.luma.getAppInfo()')).version, version);
   const go = (name) => run(`[...document.querySelectorAll('nav .nav-item, .glass-navigation button')].find((item) => item.getAttribute('aria-label') === ${JSON.stringify(name)}).click()`);
   await go('Главная');
@@ -706,15 +708,25 @@ async function smoke() {
     }
     return new Response(null, { status: 404 });
   });
-  isolatedVk.protocol.handle('https', (request) => {
+  const authCookie = { url: VK_MUSIC_URL, name: 'fixtureVkAuthorized', value: vkFixturePrivate };
+  const playerHeaders = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' };
+  const fakeQr = (entry) => `https://vk.ru/?${new URLSearchParams({ to: new URL(entry).pathname + new URL(entry).search })}`;
+  isolatedVk.protocol.handle('https', async (request) => {
     const url = new URL(request.url);
     vkRequests.push(url.href);
-    if (url.origin === 'https://vk.ru' && url.pathname === testAudioPath) return fixtureAudio(request);
-    if (url.href === VK_MUSIC_URL) return Response.redirect(vkFixtureAuth, 302);
-    if (url.href === vkFixtureAuth || (url.origin === 'https://vk.ru' && ['/audio', '/music/playlist/-31_4_aShare'].includes(url.pathname))) {
-      return new Response(url.href === vkFixtureAuth ? vkSignInPage : vkPlayerPage(testAudioPath),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+    if (url.href === vkFixtureAuth) return new Response(vkSignInPage, { headers: playerHeaders });
+    if (url.origin !== 'https://vk.ru') return new Response(null, { status: 404 });
+    if (url.pathname === testAudioPath) return fixtureAudio(request);
+    if (url.pathname === '/login') return Response.redirect(`${url.origin}/${url.search}`, 302);
+    if (url.pathname === '/') return new Response(vkQrPage, { headers: playerHeaders });
+    if (url.href === vkFixtureReturn) {
+      await isolatedVk.cookies.set(authCookie);
+      return new Response('<!doctype html><h1>VK feed after sign-in</h1>', { headers: playerHeaders });
     }
+    if (!(await isolatedVk.cookies.get({ name: authCookie.name })).length) return new Response(vkPublicPage, { headers: playerHeaders });
+    if (url.pathname === '/feed' && url.searchParams.get('fixture') === 'handlers') return new Response(vkHeadlessPlayerPage(testAudioPath, true), { headers: playerHeaders });
+    if (url.pathname === '/audio' && url.searchParams.get('fixture') === 'detached') return new Response(vkHeadlessPlayerPage(testAudioPath, false), { headers: playerHeaders });
+    if (['/audio', '/music/playlist/-31_4_aShare', '/audio123_456'].includes(url.pathname)) return new Response(vkPlayerPage(testAudioPath), { headers: playerHeaders });
     return new Response(null, { status: 404 });
   });
   session.defaultSession.protocol.handle('https', async (request) => {
@@ -1051,8 +1063,11 @@ async function smoke() {
         return view?.webContents.getURL() === url && view;
       });
       assert.deepEqual(vkRequests, [], 'VK receives no query while the user is typing');
+      await isolatedVk.cookies.set(authCookie); // A returning session, including after an update.
       await click('[data-catalog-vk]');
       await waitVk(vkMusicSearchUrl('Ария — Ты здесь'));
+      assert.ok(!vkRequests.some((value) => new URL(value).pathname === '/login'), 'authorized searches go directly to music');
+      await isolatedVk.cookies.remove(authCookie.url, authCookie.name);
       await click('.vk-site-bar [aria-label="Закрыть сайт VK"]');
       await waitFor('explicit close destroys the website', () => !vkView());
       await click('.player-bar .play-button');
@@ -1066,66 +1081,133 @@ async function smoke() {
       })()`));
       const homeImport = '.hub-top-actions [data-playlist-import]';
       assert.deepEqual(await run(`[...document.querySelectorAll('.hub-top-actions button')].map(button => [button.textContent.trim(), button.getAttribute('aria-label')])`),
-        [['', 'Добавить музыку'], ['', 'Импорт из сервисов'], ['', 'Открыть музыкальную ссылку'], ['', 'Миксы Luma']]);
+        [['', 'Добавить музыку'], ['', 'Импорт из сервисов'], ['', 'Открыть музыкальную ссылку']]);
       await click('[data-open-music-link]');
       await waitFor('link dialog accepts pasted links', () => run(`!!document.querySelector('.music-link-dialog[open]')`));
       await fill('.music-link-dialog input', 'https://music.yandex.ru/album/42/track/51?utm_source=fixture');
       await click('.music-link-dialog button[type="submit"]');
       await waitFor('Yandex track is recognized inside Luma', () => run(`!!document.querySelector('.music-link-target[data-provider="yandex"]')`));
       assert.equal(opened.length, 0, 'parsing never opens the source');
+      await click('.music-link-dialog .music-link-target a');
+      assert.deepEqual(opened.splice(0), ['https://music.yandex.ru/album/42/track/51']);
       await click('.music-link-dialog header button');
       const vkLink = readMusicLink('https://vk.com/audio?z=audio_playlist-31_4%2FaShare');
-      app.emit('second-instance', {}, [process.execPath, '--', musicLaunchUrl(vkLink)]);
-      await waitFor('Windows handoff queues a VK playlist in the existing app', () => run(`!!document.querySelector('.music-link-dialog[open] [data-provider="vk"]')`));
-      assert.equal(opened.length, 0);
-      await click('.music-link-dialog .music-link-target a');
-      assert.deepEqual(opened.splice(0), [vkLink.url]);
-      await click('.music-link-dialog header button');
-      assert.equal(await run(`window.luma.musicLinks.openBrowser('https://example.invalid/').then(() => false, () => true)`), true);
+      for (const rejected of ['https://example.invalid/', vkLink.url, VK_MUSIC_URL]) {
+        assert.equal(await run(`window.luma.musicLinks.openBrowser(${JSON.stringify(rejected)}).then(() => false, () => true)`), true);
+      }
       assert.equal(await run(`window.luma.vkSite.open(1, 'https://outside.invalid/', { x: 0, y: 0, width: 350, height: 300 }).then(() => false, () => true)`), true);
       const vkQueue = (await preferences()).queue;
-      const beforeOpening = vkRequests.length;
+      await run(`window.vkFixtureStates = []; void window.luma.vkSite.onState((id, state) => window.vkFixtureStates.push({ id, state }));`);
+      const readyView = () => run(`document.querySelector('.vk-site-slot')?.getAttribute('aria-busy') === 'false'`);
+      const waitQr = async (entry) => {
+        const view = await waitVk(fakeQr(entry));
+        await waitFor('official QR greeting and explanation above the native view', async () => await readyView() && view.getVisible()
+          && await view.webContents.executeJavaScript('!!document.getElementById("fixture-qr")')
+          && await run(`(() => { const login = document.querySelector('.vk-site-login'), slot = document.querySelector('.vk-site-slot');
+            return login?.querySelector('strong')?.textContent === 'Войдите в VK по QR-коду' && login.getBoundingClientRect().bottom <= slot.getBoundingClientRect().top + 1;
+          })()`));
+        return view;
+      };
+      const startRequest = vkRequests.length;
       await click('[data-home-tab="vk"]');
-      await waitFor('VK landing has the official site button', () => run(`!!document.querySelector('[data-vk-open]')`));
-      assert.equal(vkRequests.length, beforeOpening, 'opening the VK tab makes no request');
-      assert.equal(await run(`!!document.querySelector('.vk-site-intro textarea, iframe')`), false, 'no paste-code form or embedded player');
-      await run(`window.vkFixtureStates = []; void window.luma.vkSite.onState((_, state) => window.vkFixtureStates.push(state));`);
-      await click('[data-vk-open]');
-      const nativeView = await waitVk(vkFixtureAuth), guest = nativeView.webContents;
+      const firstView = await waitQr(VK_MUSIC_URL);
+      assert.deepEqual(vkRequests.slice(startRequest), [VK_MUSIC_URL, vkSignInUrl(VK_MUSIC_URL), fakeQr(VK_MUSIC_URL)]);
+      assert.equal(await run(`!!document.querySelector('.vk-site-intro, .vk-site a[target="_blank"], [data-vk-open], iframe')`), false);
+      assert.equal(await run(`!!document.querySelector('.vk-site-bar [data-vk-reset]:enabled')`), true);
+      assert.equal(await run(`document.querySelector('${onlineAudio}').paused`), true);
+      assert.equal(await firstView.webContents.executeJavaScript('typeof window.__lumaVkPlayback'), 'undefined');
+
+      app.emit('second-instance', {}, [process.execPath, '--', musicLaunchUrl(vkLink)]);
+      await waitFor('Windows playlist handoff closes a live guest for the link dialog', async () => !vkView()
+        && await run(`!!document.querySelector('.music-link-dialog[open] [data-provider="vk"]')`));
+      assert.equal(await run(`!!document.querySelector('.music-link-dialog [data-provider="vk"] a')`), false);
+      await click('.music-link-dialog .music-link-target .primary-button');
+      const nativeView = await waitQr(vkLink.url), guest = nativeView.webContents;
       const guestRun = (code) => guest.executeJavaScript(code, true);
-      await waitFor('VK sign-in page loads inside the isolated view', () => guestRun(`!!document.getElementById('fixture-password')`));
-      assert.deepEqual(await guestRun(`[typeof window.luma, typeof window.require, typeof window.process]`), ['undefined', 'undefined', 'undefined']);
+      assert.ok(vkRequests.includes(vkSignInUrl(vkLink.url)), 'QR sign-in retains the playlist target');
+      await guestRun(`document.getElementById('fixture-auth').click()`);
+      await waitVk(vkFixtureAuth);
+      await waitFor('VK ID hostname visible, with no guest bridge or playback controls', async () => await readyView()
+        && await guestRun(`!!document.getElementById('fixture-password')`)
+        && await run(`document.querySelector('.vk-site-origin strong')?.textContent === 'id.vk.ru' && !document.querySelector('.vk-site-transport')`));
+      assert.deepEqual(await guestRun(`[typeof window.luma, typeof window.require, typeof window.process, typeof window.__lumaVkPlayback]`),
+        ['undefined', 'undefined', 'undefined', 'undefined']);
       assert.equal(await guestRun(`navigator.permissions.query({ name: 'geolocation' }).then(s => s.state)`), 'denied');
       assert.ok(!isolatedVk.protocol.isProtocolHandled('luma'), 'the VK partition has no application protocol handler');
       assert.equal((await isolatedVk.cookies.get({ name: 'lumaFixture' }))[0].value, 'isolated');
-      assert.equal(await run(`document.querySelector('${onlineAudio}').paused && !document.querySelector('iframe')`), true);
-      await waitFor('VK ID hostname visible, auth path and playback inaccessible', () => run(`document.querySelector('.vk-site-origin strong')?.textContent === 'id.vk.ru'
-        && document.querySelector('[data-vk-action="toggle"]').disabled`));
       await guestRun(`document.getElementById('fixture-sign-in').click()`);
-      await waitVk('https://vk.ru/audio?fixture=signed-in');
+      await waitVk(vkLink.url);
+      assert.ok(vkRequests.includes(vkFixtureReturn), 'generic VK feed returns to the requested playlist');
       const titleIs = (index) => run(`document.querySelector('.vk-site-track strong')?.textContent === ${JSON.stringify(vkFixtureTracks[index])}
         && document.querySelector('.vk-site-track small')?.textContent === ${JSON.stringify(vkFixtureArtist)}`);
       await waitFor('native toolbar shows the current title and artist', () => titleIs(0));
+      assert.equal(await run(`!!document.querySelector('.vk-site-login')`), false);
       assert.equal(await guestRun(`document.querySelector('audio').paused`), true, 'no VK autoplay by Luma');
-      await click('[data-vk-action="toggle"]');
+      const toggleVk = '[data-vk-action="toggle"]';
+      await click(toggleVk);
       await waitFor('Luma Play clicks VK play and the site audio decodes', () => guestRun(`(() => {
         const audio = document.querySelector('audio'); return !audio.paused && audio.currentTime > .15 && audio.readyState >= 2;
       })()`));
-      await waitFor('Luma pause label follows site playback', () => run(`document.querySelector('[data-vk-action="toggle"]').getAttribute('aria-label') === 'Пауза VK'`));
-      await click('[data-vk-action="toggle"]');
+      const waitPauseVk = () => waitFor('VK transport follows playing state', () => run(`document.querySelector('${toggleVk}')?.getAttribute('aria-label') === 'Пауза VK'`));
+      await waitPauseVk();
+      await click(toggleVk);
       await waitFor('Luma pauses the site player', () => guestRun(`document.querySelector('audio').paused`));
       await click('[data-vk-action="next"]');
       await waitFor('Next delegates to VK and updates from visible text without MediaSession', () => titleIs(1));
       await click('[data-vk-action="previous"]');
       await waitFor('Previous delegates to VK', () => titleIs(0));
+
+      const feedUrl = 'https://vk.ru/feed?fixture=handlers', handlersUrl = 'https://vk.ru/audio?fixture=handlers';
+      await guestRun(`setTimeout(() => { location.href = '${feedUrl}'; }, 0)`);
+      await waitVk(feedUrl);
+      await waitFor('the SPA feed settles without playback', async () => await readyView() && await guestRun('!!window.fixtureAudio'));
+      assert.equal(await guestRun(`typeof window.__lumaVkPlayback?.()`), 'undefined', 'the observer is inert on the feed');
+      await guestRun(`history.pushState(null, '', '${handlersUrl}')`);
+      await waitVk(handlersUrl);
+      const seekInput = '.vk-site-timeline input';
+      await waitFor('MediaSession-only VK, no visible player: play, next, previous and seek enabled', async () => await titleIs(0) && await run(`
+        document.querySelectorAll('[data-vk-action]:enabled').length === 3 && !!document.querySelector('${seekInput}:enabled')`));
+      assert.equal(await guestRun(`document.querySelector('audio, #top_audio_layer_place')`), null);
+      assert.equal(await guestRun(`window.fixtureAudio.paused`), true);
+      const vkCommand = (action, ratio) => run(`window.luma.vkSite.command(window.vkFixtureStates.at(-1).id, ${JSON.stringify(action)}, ${JSON.stringify(ratio)})`);
+      for (const invalid of ['0.5', -1, 2, null]) assert.equal(await vkCommand('seek', invalid), false);
+      assert.equal(await vkCommand('unknown'), false);
+      await click(toggleVk);
+      await waitFor('MediaSession play calls the actual handler and decodes its audio', () => guestRun(`window.fixtureAction === 'play' && fixtureAudio.currentTime > .15 && fixtureAudio.readyState >= 2`));
+      await waitPauseVk();
+      await click(toggleVk);
+      await waitFor('MediaSession pause delegates', () => guestRun(`window.fixtureAction === 'pause' && fixtureAudio.paused`));
+      await fill(seekInput, '500');
+      await waitFor('timeline delegates to seekto with seconds and actually seeks', () => guestRun(`window.fixtureAction === 'seekto'
+        && !fixtureAudio.seeking && Math.abs(fixtureAudio.currentTime - fixtureAudio.duration * .5) < .25`));
+      await click('[data-vk-action="next"]');
+      await waitFor('MediaSession next delegates without rendered VK buttons', async () => await titleIs(1) && await guestRun(`window.fixtureAction === 'nexttrack'`));
+      await click('[data-vk-action="previous"]');
+      await waitFor('MediaSession previous delegates without rendered VK buttons', async () => await titleIs(0) && await guestRun(`window.fixtureAction === 'previoustrack'`));
+      await guestRun(`navigator.mediaSession.setActionHandler('nexttrack', null)`);
+      await waitFor('actions that VK unregisters disable again', () => run(`document.querySelector('[data-vk-action="next"]').disabled`));
+
+      const detachedUrl = 'https://vk.ru/audio?fixture=detached';
+      await guestRun(`setTimeout(() => { location.href = '${detachedUrl}'; }, 0)`);
+      await waitVk(detachedUrl);
+      await waitFor('metadata alone does not invent unsupported controls', async () => await titleIs(0)
+        && await run(`document.querySelectorAll('[data-vk-action]:enabled').length === 0`));
+      await guestRun(`document.getElementById('fixture-start-song').click()`);
+      await waitFor('detached audio decodes and supports the play/pause and timeline fallbacks', async () => await guestRun(`fixtureAudio.currentTime > .15`)
+        && await run(`document.querySelectorAll('[data-vk-action]:enabled').length === 1 && !!document.querySelector('${seekInput}:enabled')`));
+      await waitPauseVk();
+      await click(toggleVk);
+      await waitFor('detached audio pauses without a handler or visible player controls', () => guestRun(`fixtureAudio.paused`));
+      assert.equal(await vkCommand('seek', .75), true);
+      await waitFor('detached audio position follows the bounded seek', () => guestRun(`!fixtureAudio.seeking && Math.abs(fixtureAudio.currentTime - fixtureAudio.duration * .75) < .25`));
       assert.deepEqual((await preferences()).queue, vkQueue);
       const observed = await run(`JSON.stringify(window.vkFixtureStates)`);
-      assert.doesNotMatch(observed, /vk-fixture-sign-in-only|signed-in|https:\/\/|fixture-password/);
+      assert.doesNotMatch(observed, /vk-fixture-sign-in-only|signed-in|https:\/\/|fixture-password|fixtureVkAuthorized|luma-smoke-audio/);
       assert.doesNotMatch(JSON.stringify(await preferences()), new RegExp(vkFixturePrivate));
-      assert.equal(await guestRun(`(() => { const p = open('https://outside.invalid/'); return p === null; })()`), true);
+      assert.equal(await guestRun(`open('https://outside.invalid/') === null`), true);
       await guestRun(`setTimeout(() => { location.href = 'https://outside.invalid/'; }, 0);`);
       await delay(250);
-      assert.equal(guest.getURL(), 'https://vk.ru/audio?fixture=signed-in');
+      assert.equal(guest.getURL(), detachedUrl);
       assert.ok(vkRequests.every((value) => ['vk.ru', 'id.vk.ru'].includes(new URL(value).hostname)));
       assert.equal(BrowserWindow.getAllWindows().length, 1);
       const vkBounds = window.getBounds();
@@ -1143,29 +1225,50 @@ async function smoke() {
       window.minimize();
       await waitFor('minimizing destroys the VK view', () => !vkView());
       window.restore();
-      await waitFor('VK does not reopen on restore', () => run(`!!document.querySelector('[data-vk-open]')`));
+      await waitFor('VK does not reopen on restore', () => run(`document.querySelector('[data-home-tab="home"]').getAttribute('aria-current') === 'page' && !document.querySelector('.vk-site')`));
+
+      const trackUrl = 'https://vk.ru/audio123_456';
       await click('[data-open-music-link]');
-      await fill('.music-link-dialog input', vkLink.url);
+      await fill('.music-link-dialog input', trackUrl);
       await click('.music-link-dialog button[type="submit"]');
+      const reopenAt = vkRequests.length;
       await click('.music-link-dialog .music-link-target .primary-button');
-      await waitVk(vkLink.url);
+      await waitVk(trackUrl);
+      await waitFor('returning VK session keeps the explicit track without asking for sign-in', async () => await titleIs(0)
+        && await run(`!document.querySelector('.vk-site-login')`));
+      assert.equal(vkRequests[reopenAt], trackUrl);
       await click('.player-bar .play-button');
       await waitFor('native playback closes VK', () => !vkView());
       await waitFor('return to Luma audio', () => run(`!document.querySelector('${onlineAudio}').paused`));
+      await click('[data-home-tab="vk"]');
+      const resettingView = await waitVk(VK_MUSIC_URL);
+      await waitFor('VK ready for toolbar reset', readyView);
       const showMessage = dialog.showMessageBox;
+      const reset = (id = 'window.vkFixtureStates.at(-1).id') => run(`window.luma.vkSite.reset(${id})`);
       try {
-        dialog.showMessageBox = async (_owner, options) => { assert.equal(options.defaultId, 0); assert.equal(options.cancelId, 0); return { response: 0 }; };
-        assert.equal(await run('window.luma.vkSite.reset()'), false);
-        assert.equal((await isolatedVk.cookies.get({ name: 'lumaFixture' })).length, 1);
+        assert.equal(await reset('0'), false, 'a stale view cannot reset the partition');
+        dialog.showMessageBox = async (owner, options) => {
+          assert.equal(owner, window);
+          assert.equal(options.defaultId, 0); assert.equal(options.cancelId, 0);
+          assert.equal(resettingView.getVisible(), false, 'the guest does not overlap the confirmation dialog');
+          assert.equal(resettingView.webContents.isAudioMuted(), true);
+          return { response: 0 };
+        };
+        assert.equal(await reset(), false);
+        assert.equal(vkView(), resettingView);
+        assert.equal(resettingView.getVisible(), true, 'cancelling leaves the same guest and authorization');
+        assert.equal((await isolatedVk.cookies.get({ name: authCookie.name })).length, 1);
         dialog.showMessageBox = async () => ({ response: 1 });
-        await click('[data-vk-reset]');
-        await waitFor('clear confirmation', () => run(`document.querySelector('.vk-site-intro [role="status"]')?.textContent === 'Сессия VK очищена.'`));
+        await click('.vk-site-bar [data-vk-reset]');
+        const newView = await waitQr(VK_MUSIC_URL);
+        assert.notEqual(newView, resettingView);
       } finally { dialog.showMessageBox = showMessage; }
       assert.equal((await legacyVk.cookies.get({ name: 'lumaFixture' })).length, 0);
       assert.equal((await isolatedVk.cookies.get({ name: 'lumaFixture' })).length, 0);
+      assert.equal((await isolatedVk.cookies.get({ name: authCookie.name })).length, 0);
       assert.equal((await session.defaultSession.cookies.get({ name: 'lumaFixture' })).length, 1);
       assert.deepEqual(await oldVkData(), { bookmarks: legacyBookmarks, tracks: legacyTracks });
-      fixtureNotice('VK website', 'Official-host fixture: isolated VK ID, metadata and visible controls, MP3 decode, pause/skip, bounded view, teardown and confirmed reset. No real account used.');
+      fixtureNotice('VK website', 'Official-host fixture: automatic QR, VK ID isolation and playlist return, visible and hidden media controls, MP3 decode and seek, clipping, teardown and reset. No real account used.');
       await click('[data-home-tab="home"]');
       await run(`document.querySelector('${homeImport}').focus()`);
       await click(homeImport);
@@ -1678,7 +1781,7 @@ async function smoke() {
     }
 
   }
-  const journalFile = join(profile, 'Luma Player', 'logs', 'diagnostics.json');
+  const journalFile = join(profile, APP_PROFILE_DIR, 'logs', 'diagnostics.json');
   const snapshot = await waitFor('desktop and renderer startup events', async () => {
     const data = await run('window.luma.diagnostics.snapshot()');
     const names = data.entries.map(({ event }) => event);
@@ -1710,7 +1813,7 @@ async function smoke() {
     assert.equal(await run('window.luma.diagnostics.saveReport()'), true);
   } finally { dialog.showSaveDialog = saveDialog; }
   const report = await readFile(reportFile, 'utf8');
-  assert.ok(report.startsWith(`Luma Player ${version} ·`));
+  assert.ok(report.startsWith(`${APP_NAME} ${version} ·`));
   assert.match(report, /Система: .*Electron/s);
   assert.match(report, /audio\.error/u);
   assert.doesNotMatch(report, /private-test/u);

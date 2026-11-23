@@ -3,7 +3,7 @@ import type { IpcMainInvokeEvent } from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APP_NAME, APP_USER_MODEL_ID, RELEASES_URL } from '../src/shared/app-info.js';
+import { APP_NAME, APP_PROFILE_DIR, APP_USER_MODEL_ID, RELEASES_URL } from '../src/shared/app-info.js';
 import { WIDGET_SHORTCUT } from '../src/shared/customization.js';
 import type { AppInfo } from '../src/shared/app-info.js';
 import { readUiLanguage } from '../src/shared/ui-language.js';
@@ -35,7 +35,6 @@ import { isStationPage } from '../src/shared/radio.js';
 import { musicLaunchUrl, musicLinkArgument, readMusicLink } from '../src/shared/music-links.js';
 import { LATEST_RELEASE_API, readSignerSha256 } from '../src/shared/release-updates.js';
 import { readSharedPlaylist } from '../src/shared/playlist-share.js';
-import { vkSiteEntry } from '../src/shared/vk-site.js';
 import { APP_ORIGIN, DesktopLibrary } from './library.js';
 import { DesktopDiscord } from './discord-presence.js';
 import { DesktopFloatOutput } from './float-output.js';
@@ -54,7 +53,7 @@ app.commandLine.appendSwitch('lang', 'ru');
 app.setName(APP_NAME);
 app.setAppUserModelId(APP_USER_MODEL_ID);
 const devUrl = getDevUrl();
-app.setPath('userData', join(app.getPath('appData'), devUrl ? 'Luma Player Dev' : 'Luma Player'));
+app.setPath('userData', join(app.getPath('appData'), devUrl ? `${APP_PROFILE_DIR} Dev` : APP_PROFILE_DIR));
 let window: BrowserWindow | null = null;
 let journal: DesktopDiagnostics | undefined;
 let updates: WindowsUpdates | undefined;
@@ -147,8 +146,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('music-link:browser', (event, value: unknown) => {
     appWindow(event);
     const link = readMusicLink(value);
-    if (vkSiteEntry(value)) return shell.openExternal(value);
-    if (!link || link.url !== value) throw new Error('Unsupported music link');
+    if (!link || link.provider === 'vk' || link.url !== value) throw new Error('Unsupported music link');
     return shell.openExternal(link.url);
   });
   ipcMain.handle('music-link:copy', (event, value: unknown) => {
@@ -171,8 +169,8 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('vk-site:open', (event, id, url, bounds) => vkSite.open(appWindow(event), id, url, bounds));
   ipcMain.handle('vk-site:layout', (event, id, bounds) => vkSite.layout(appWindow(event), id, bounds));
   ipcMain.handle('vk-site:close', (event, id) => vkSite.close(appWindow(event), id));
-  ipcMain.handle('vk-site:command', (event, id, action) => vkSite.command(appWindow(event), id, action));
-  ipcMain.handle('vk-site:reset', (event) => vkSite.clear(appWindow(event), {
+  ipcMain.handle('vk-site:command', (event, id, action, fraction) => vkSite.command(appWindow(event), id, action, fraction));
+  ipcMain.handle('vk-site:reset', (event, id) => vkSite.clear(appWindow(event), id, {
     type: 'warning', title: t('Сессия VK'), message: t('Сбросить данные входа VK в Luma?'),
     detail: t('Вход в обычном браузере и сохранённые плейлисты Luma останутся.'),
     buttons: [t('Отмена'), t('Сбросить')], defaultId: 0, cancelId: 0,
@@ -454,7 +452,7 @@ if (!app.requestSingleInstanceLock()) {
   }).catch((error: unknown) => {
     journal?.main('desktop.failed');
     console.error(error);
-    dialog.showErrorBox('Luma Player', 'Не удалось открыть плеер. При запуске из исходников сначала выполните npm run build или используйте npm run dev.');
+    dialog.showErrorBox(APP_NAME, 'Не удалось открыть плеер. При запуске из исходников сначала выполните npm run build или используйте npm run dev.');
     app.quit();
   });
   let flushing = false;

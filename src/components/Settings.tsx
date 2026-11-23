@@ -1,3 +1,4 @@
+import { APP_NAME } from '../shared/app-info';
 import { useText } from '../i18n/context';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -82,13 +83,13 @@ function ThemePreview({ appearance, track, tint }: { appearance: Appearance; tra
     <aside className="settings-preview" aria-label={t("Предпросмотр оформления")}>
       <div className="settings-preview-heading"><p className="overline">{t("Предпросмотр")}</p><span>{t(THEMES[appearance.theme].name)}</span></div>
       <div className="settings-preview-window" aria-hidden="true">
-        <div className="settings-preview-chrome"><AudioLines size={13} /><span>Luma Player</span><i /><i /><i /></div>
+        <div className="settings-preview-chrome"><AudioLines size={13} /><span>{APP_NAME}</span><i /><i /><i /></div>
         <div data-effect={appearance.effect} className={`settings-preview-hero settings-preview-${appearance.hero}`} style={{ '--sample-tone': tint, '--scene-tone': tint } as CSSProperties}>
           <SceneBackground effect={appearance.effect} tone={track ? tint : undefined} strength={appearance.effectStrength} tempo={appearance.effectTempo} animate={appearance.motion} visible={appearance.motion} />
           {appearance.effect === 'off' && picture && appearance.hero !== 'vinyl' && appearance.hero !== 'center' && <img src={picture} alt="" />}
           {appearance.hero === 'center' && <Artwork track={track} className="settings-preview-center-art" />}
           {appearance.hero === 'vinyl' && <VinylRecord className="settings-preview-record" track={track} animate={appearance.motion} />}
-          <div><small>{t("СЕЙЧАС ИГРАЕТ")}</small><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? 'Luma Player'}</span></div>
+          <div><small>{t("СЕЙЧАС ИГРАЕТ")}</small><strong>{track?.title ?? t("Ваша музыка")}</strong><span>{track?.artist ?? APP_NAME}</span></div>
         </div>
         <div className="settings-preview-controls"><i /><i /><b><Play size={12} fill="currentColor" /></b><i /><i /></div>
       </div>

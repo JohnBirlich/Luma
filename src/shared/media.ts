@@ -94,11 +94,11 @@ export interface DesktopBridge {
     copy(url: string): Promise<void>;
   };
   vkSite: {
-    open(id: number, url: string, bounds: VkBounds): Promise<void>;
+    open(id: number, url: string, bounds: VkBounds | null): Promise<void>;
     layout(id: number, bounds: VkBounds | null): Promise<void>;
     close(id: number): Promise<void>;
-    command(id: number, action: VkSiteAction): Promise<boolean>;
-    reset(): Promise<boolean>;
+    command(id: number, action: VkSiteAction, fraction?: number): Promise<boolean>;
+    reset(id: number): Promise<boolean>;
     onState(callback: (id: number, state: VkSiteState) => void): () => void;
   };
   lyrics: {

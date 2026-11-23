@@ -60,14 +60,14 @@ export function MusicLinkDialog({ initial = '', connected, disabled, close, choo
           <button type="button" className="button primary-button" disabled={disabled || !connected} onClick={() => { choose(track, 'play'); close(); }}><Play size={16} />{t('Слушать в Luma')}</button></>
           : <button type="button" className="button primary-button" disabled={!connected || busy} onClick={() => void find()}>{t(busy ? 'Проверяем…' : 'Загрузить карточку')}</button>}
       </> : <>
-        <p>{t(link.provider === 'vk' ? 'Ссылка откроется на официальном сайте VK. Ограничения VK сохраняются.' : 'Ссылка распознана. Для воспроизведения внутри Luma нужен подтверждённый доступ к каталогу этого сервиса.')}</p>
+        <p>{t(link.provider === 'vk' ? (openVk ? 'Ссылка откроется на официальном сайте VK. Ограничения VK сохраняются.' : 'Сайт VK внутри Luma доступен в приложении для Windows.') : 'Ссылка распознана. Для воспроизведения внутри Luma нужен подтверждённый доступ к каталогу этого сервиса.')}</p>
         {link.provider === 'vk' && openVk && <button type="button" className="button primary-button" disabled={!connected} onClick={() => { close(); openVk(link.url); }}>
           <Play size={16} aria-hidden="true" />{t('Открыть в VK')}</button>}
-        <a className="button outline-button" href={link.url} target="_blank" rel="noopener noreferrer" onClick={(event) => {
+        {link.provider !== 'vk' && <a className="button outline-button" href={link.url} target="_blank" rel="noopener noreferrer" onClick={(event) => {
           if (!window.luma) return;
           event.preventDefault();
           void window.luma.musicLinks.openBrowser(link.url).catch(() => setError('Не удалось открыть ссылку.'));
-        }}>{t('Открыть в браузере')} <ArrowUpRight size={15} /></a>
+        }}>{t('Открыть в браузере')} <ArrowUpRight size={15} /></a>}
       </>}
     </section>}
     {error && <p className="online-message error" role="alert">{t(error)}</p>}

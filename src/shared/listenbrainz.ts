@@ -1,3 +1,4 @@
+import { APP_NAME } from './app-info.js';
 import { catalogObject as object } from './online.js';
 import type { ListeningEvent } from './lastfm.js';
 import { serviceCredential } from './music-services.js';
@@ -15,8 +16,8 @@ export function listenBrainzUser(data: unknown) {
 export function listenBrainzPayload(listen: ListeningEvent, version: string) {
   return { listen_type: 'single', payload: [{ listened_at: listen.started, track_metadata: {
     artist_name: listen.artist, track_name: listen.title, ...(listen.album && { release_name: listen.album }),
-    additional_info: { duration_ms: Math.round(listen.duration * 1000), media_player: 'Luma Player',
-      submission_client: 'Luma Player', submission_client_version: version },
+    additional_info: { duration_ms: Math.round(listen.duration * 1000), media_player: APP_NAME,
+      submission_client: APP_NAME, submission_client_version: version },
   } }] };
 }
 

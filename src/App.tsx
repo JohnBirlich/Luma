@@ -32,6 +32,7 @@ import { connectionState, recordDiagnostic, subscribeConnection } from './data/d
 import { saveSharedPlaylist } from './data/playlist-share';
 import { musicLaunchUrl, readMusicLink } from './shared/music-links';
 import { vkMusicSearchUrl, vkSiteEntry } from './shared/vk-site';
+import { VK_MUSIC_URL } from './shared/vk';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
 import type { TrackDetails } from './data/track-details';
@@ -100,7 +101,10 @@ export default function App() {
   const [homeTab, setHomeTab] = useState<HomeTab>('home');
   const [homeQuery, setHomeQuery] = useState('');
   const [vkUrl, setVkUrl] = useState<string>();
-  const closeVk = useCallback(() => setVkUrl(undefined), []);
+  const closeVk = useCallback(() => {
+    setVkUrl(undefined);
+    setHomeTab((tab) => tab === 'vk' ? 'home' : tab);
+  }, []);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>();
   const settingsFrom = useRef<{ page: Exclude<Page, 'settings'>; top: number }>({ page: 'player', top: 0 });
   const returningTop = useRef(0);
@@ -739,14 +743,6 @@ export default function App() {
   }, []);
   const goToLibrary = useCallback(() => navigate('library'), [navigate]);
   const openMixes = useCallback(() => navigate('mixes'), [navigate]);
-  const selectHomeTab = useCallback((tab: HomeTab) => {
-    setHomeTab(tab); setHomeQuery('');
-    scrollArea.current?.scrollTo({ top: 0 });
-  }, []);
-  const openRadio = useCallback(() => {
-    navigate('player');
-    selectHomeTab('radio');
-  }, [navigate, selectHomeTab]);
   const openVk = useCallback((url: string) => {
     if (!window.luma?.vkSite || !connected || document.hidden || !vkSiteEntry(url)) return;
     pause(); // VK owns its queue. Keep the position and contents of the local queue.
@@ -756,6 +752,16 @@ export default function App() {
     setHomeQuery('');
     setVkUrl(url);
   }, [connected, pause]);
+  const selectHomeTab = useCallback((tab: HomeTab) => {
+    if (tab === 'vk' && vkOpen) return;
+    setHomeTab(tab); setHomeQuery('');
+    scrollArea.current?.scrollTo({ top: 0 });
+    if (tab === 'vk') openVk(VK_MUSIC_URL);
+  }, [openVk, vkOpen]);
+  const openRadio = useCallback(() => {
+    navigate('player');
+    selectHomeTab('radio');
+  }, [navigate, selectHomeTab]);
   const searchVk = useCallback((query: string) => {
     const url = vkMusicSearchUrl(query);
     if (url) openVk(url);
@@ -830,10 +836,10 @@ export default function App() {
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={homeVisible}
-            vkUrl={vkOpen ? vkUrl : undefined} vkAvailable={vkAvailable} openVk={openVk} closeVk={closeVk} searchVk={window.luma?.vkSite ? searchVk : undefined}
+            vkUrl={vkOpen ? vkUrl : undefined} closeVk={closeVk} searchVk={window.luma?.vkSite ? searchVk : undefined}
             busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} tuneDiscoveredStation={tuneDiscoveredStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
-            openLibrary={goToLibrary} openMixes={openMixes} addMusic={choose} openMusicLink={() => setMusicDialog({})}
+            openLibrary={goToLibrary} addMusic={choose} openMusicLink={() => setMusicDialog({})}
             sharePlaylist={sharePlaylist} seedFavorites={seedFavorites} openFavorites={() => navigate('favorites')}
             nowPlaying={<NowPlayingCard track={current} tint={tint} appearance={effectiveAppearance} disliked={dislikedIds} toggleDislike={toggleDislike}
               playing={player.playing} loading={!!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
