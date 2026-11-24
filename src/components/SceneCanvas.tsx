@@ -214,7 +214,7 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
         if (!canMove || (!active && !velocity)) flattenSpectrum(terrain);
         else if (dt > 0) advanceSpectrum(terrain, dt, live ? { time: t, bins, kick: beat.kick }
           : active && !read ? { time: t, kick: 0 } : undefined);
-        drawSpectrum(ctx, w, h, terrain);
+        drawSpectrum(ctx, w, h, terrain, t, beat.kick);
       } else if (bars && barColors) {
         if (!canMove || (!active && !velocity)) bars.fill(0);
         else if (dt > 0) advanceColumns(bars, dt, live ? { time: t, bins } : active && !read ? { time: t } : undefined);

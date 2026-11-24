@@ -83,7 +83,12 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
     {system && snapshot && <section className="diagnostic-system" aria-label={t("Сведения о приложении")}>
       <div><div className="diagnostic-system-icon"><Terminal size={18} /></div><span><small>{t("Версия Luma")}</small><strong>{system.version}</strong><span>{t(runtimeMode[system.mode])}</span></span></div>
       <div><div className="diagnostic-system-icon"><Monitor size={18} /></div><span><small>{t("Система")}</small><strong>{diagnosticSystem(system.system, t)}</strong><span>{t(system.runtime)}</span></span></div>
-      <div className={`diagnostic-connection state-${connection}`}><div className="diagnostic-system-icon"><Radio size={18} /></div><span><small>{t("Подключение")}</small><strong><span className="connection-dot" aria-hidden="true" />{connection === 'checking' ? t("Подключение..") : connection === 'online' ? t("Подключено") : t("Нет Соединения")}</strong><span className="diagnostic-connection-note">{t("При отсутствии Интернета некоторые функции могут быть недоступны. Проверьте соединение, если оно недоступно или подключитесь к интернету.")}</span></span></div>
+      <div className={`diagnostic-connection state-${connection}`}><div className="diagnostic-system-icon"><Radio size={18} /></div>
+        <span className="diagnostic-connection-body">
+          <span className="diagnostic-connection-head"><small>{t("Интернет Соединение")}</small>
+            <strong><span className="connection-dot" aria-hidden="true" />{connection === 'checking' ? t("Подключение..") : connection === 'online' ? t("Подключено") : t("Нет Соединения")}</strong></span>
+          <span className="diagnostic-connection-note">{t("При отсутствии Интернета некоторые функции могут быть недоступны. Проверьте соединение, если оно недоступно или подключитесь к интернету.")}</span>
+        </span></div>
     </section>}
     <section className="journal" aria-label={t("Журнал приложения")}>
       <header className="journal-header">

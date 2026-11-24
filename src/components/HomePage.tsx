@@ -1,7 +1,7 @@
 import { APP_NAME } from '../shared/app-info';
 import { memo, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AudioLines, ChevronLeft, ChevronRight, Headphones, Link2, ListEnd, Play, Plus, Search, Settings2, X } from 'lucide-react';
+import { ArrowLeft, AudioLines, ChevronRight, Headphones, Link2, ListEnd, Play, Plus, Search, Settings2, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { Track } from '../shared/media';
 import type { VkCollection } from '../shared/vk-site';
@@ -47,6 +47,7 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   vkRecent: readonly VkHistoryEntry[];
   openRecent(): void;
   openVkRecent?(url: string): void;
+  playVkRecent?(entry: VkHistoryEntry): void;
   /** VK Music playback for the mix and «Собрано в Luma» tiles, once the VK account is signed in. */
   playVkCollection?(kind: VkCollection, name?: string): Promise<boolean>;
   stationIds: ReadonlySet<string>;
@@ -83,11 +84,10 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   addMusic(): void;
 }
 
-function Updates({ back }: { back(): void }) {
+function Updates() {
   const t = useText();
   const info = useInstalledBuild();
   return <>
-    <div className="hub-updates-head"><button type="button" className="text-button" onClick={back}><ChevronLeft size={15} />{t('На главную')}</button></div>
     <section className="hub-shelf hub-version"><div className="hub-version-mark"><AudioLines size={27} /></div>
       <div><p className="overline">{APP_NAME}</p><h2>{info ? t('Версия {0}', info.version) : info === null ? t('Версия недоступна') : t('Читаем версию…')}</h2>
         <UpdatesPanel /></div>
@@ -100,6 +100,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
   const { tracks, recent, disliked, favorites, saved, visible, connected, currentId, playing, play, playMix, addMusic, openLibrary, playCatalog } = props;
   const { tab, query, setQuery, selectTab, vkSite, closeVk } = props;
   const vkTab = tab === 'vk';
+  const updatesTab = tab === 'updates';
   const [composing, setComposing] = useState(false);
   const [tune, setTune] = useState(false);
   const [mixType, setMixType] = useState<MixType>('library');
@@ -140,24 +141,26 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
   return <div className={`page home-page${vkTab && vkSite?.view ? ' home-page-vk' : ''}`}>
     <header className="hub-masthead">
       {!vkTab && <div className="hub-heading"><div>
-        <p className="overline page-kicker"><span />{t('Ваша коллекция')}</p>
-        <h1>{t('Главная')}</h1>
-      </div><div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
+        {!updatesTab && <p className="overline page-kicker"><span />{t('Ваша коллекция')}</p>}
+        <h1>{t(updatesTab ? 'Обновление' : 'Главная')}</h1>
+      </div>{updatesTab ? <button type="button" className="icon-button hub-back" onClick={() => selectTab('home')}
+        aria-label={t('На главную')} title={t('На главную')}><ArrowLeft size={18} /></button>
+        : <div className="hub-search"><Search size={18} aria-hidden="true" /><input ref={formInput} type="search" aria-label={t('Поиск музыки')} placeholder={t('Поиск музыки')} maxLength={140} value={query}
         onKeyDown={(event) => { if (event.key === 'Enter' && !composing && !event.nativeEvent.isComposing) props.rememberSearch(query); }}
         onChange={(event) => setQuery(event.currentTarget.value)} onCompositionStart={() => setComposing(true)}
-        onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div></div>}
+        onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div>}</div>}
       <div className="hub-topline"><nav aria-label={t('Разделы на главной')} className="hub-tabs">
         {(Object.keys(TABS) as (keyof typeof TABS)[]).map((id) => <button type="button" key={id} data-home-tab={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => selectTab(id)}>{t(TABS[id])}</button>)}
-      </nav><div className="hub-top-actions">
+      </nav>{!updatesTab && <div className="hub-top-actions">
         <button type="button" className="icon-button" disabled={props.busy} onClick={addMusic}
           aria-label={t('Добавить музыку')} title={t('Добавить музыку (Ctrl+O)')}><Plus size={18} aria-hidden="true" /></button>
         <button type="button" className="icon-button" data-playlist-import aria-haspopup="dialog" disabled={props.busy} onClick={props.openPlaylistImport}
           aria-label={t('Импорт из сервисов')} title={t('Импорт из сервисов')}><ListEnd size={18} aria-hidden="true" /></button>
         <button type="button" className="icon-button" data-open-music-link aria-haspopup="dialog" onClick={props.openMusicLink}
           aria-label={t('Открыть музыкальную ссылку')} title={t('Открыть музыкальную ссылку')}><Link2 size={17} /></button>
-      </div></div>
+      </div>}</div>
     </header>
-    {!vkTab && <SearchHistory history={props.searchHistory} select={(value) => { setQuery(value); props.rememberSearch(value); formInput.current?.focus(); }} clear={props.clearSearchHistory} />}
+    {!vkTab && !updatesTab && <SearchHistory history={props.searchHistory} select={(value) => { setQuery(value); props.rememberSearch(value); formInput.current?.focus(); }} clear={props.clearSearchHistory} />}
     {term ? <OnlineSearch key={catalogTerm} query={query} visible={visible && !composing} saved={saved} disabled={props.busy} choose={props.chooseOnline}
       library={found} playLibrary={(id) => play(id, true)} remember={props.rememberSearch} searchVk={props.searchVk}
       renderLibrary={(items) => items.length > 0 || !found.length ? <Shelf title={t('В вашей медиатеке')}>
@@ -204,7 +207,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         </Shelf>
         {props.vkRecent.length > 0 && <Shelf title={t('Недавно в VK Музыке')}
           action={<button type="button" className="text-button" onClick={props.openRecent}>{t('Вся история')}<ChevronRight size={15} /></button>}>
-          <VkHistoryRows entries={props.vkRecent.slice(0, 4)} open={props.openVkRecent} />
+          <VkHistoryRows entries={props.vkRecent.slice(0, 4)} open={props.openVkRecent} play={props.playVkRecent} />
         </Shelf>}
         <Discovery tracks={discoveryTracks} recent={data.history} related={data.related} seed={data.seed} favorites={favorites} disliked={disliked}
           {...rows} busy={props.busy} visible={visible} connected={connected} playAll={props.playCatalog} save={props.savePlaylist}
@@ -222,7 +225,7 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
       {tab === 'radio' && <RadioStations saved={props.stationIds} activeId={currentId} loading={props.loading} playing={playing} busy={props.busy}
         connected={connected} toggleSave={props.saveStation} play={play} tuneDiscovered={props.tuneDiscoveredStation} />}
       {tab === 'vk' && <VkSitePanel controller={vkSite} connected={connected} close={closeVk} />}
-      {tab === 'updates' && <Updates back={() => selectTab('home')} />}
+      {tab === 'updates' && <Updates />}
     </>}
     {!vkTab && <footer className="hub-footer"><Headphones size={14} />{t('Для миксов Luma не нужен аккаунт.')}</footer>}
   </div>;

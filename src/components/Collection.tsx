@@ -185,6 +185,7 @@ interface LibraryPageProps extends CatalogSearchPreferences, SearchHistoryProps 
   mode: 'library' | 'search' | 'favorites' | 'recent';
   vkRecent: readonly VkHistoryEntry[];
   openVkRecent?(url: string): void;
+  playVkRecent?(entry: VkHistoryEntry): void;
   initialScope?: 'all' | 'offline';
   fullNumbers: boolean;
   favorites: ReadonlySet<string>;
@@ -323,7 +324,7 @@ export function LibraryPage(props: LibraryPageProps) {
       </> : libraryResults(results)}
       {vkResults.length > 0 && <section className="vk-history-section" aria-labelledby="vk-history-title">
         <h2 id="vk-history-title">{t('История VK Музыки')}</h2>
-        <VkHistoryRows entries={vkResults} open={props.openVkRecent} />
+        <VkHistoryRows entries={vkResults} open={props.openVkRecent} play={props.playVkRecent} />
       </section>}
     </div>
   );

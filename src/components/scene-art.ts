@@ -47,39 +47,69 @@ export function drawStars(ctx: CanvasRenderingContext2D, w: number, h: number, t
 }
 
 export function drawAurora(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, energy: number) {
-  const count = Math.min(160, Math.max(64, Math.floor(w / 5)));
+  const steps = Math.max(56, Math.min(160, Math.round(w / 9)));
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
+  ctx.lineJoin = 'round';
+  // Every curtain is one smooth sheet: its top hem rises and falls in wide folds and
+  // both ends pinch to nothing, so no column, seam or hard band can show.
+  const trace = (top: (u: number) => number, hem: (u: number) => number) => {
+    ctx.beginPath();
+    ctx.moveTo(0, top(0));
+    let here = top(0);
+    for (let i = 1; i <= steps; i++) {
+      const u = i / steps, next = top(u);
+      ctx.quadraticCurveTo((i - .5) / steps * w, here, u * w, (here + next) * .5);
+      here = next;
+    }
+    for (let i = steps; i >= 0; i--) {
+      const u = i / steps, next = hem(u);
+      ctx.quadraticCurveTo((i + .5) / steps * w, next, u * w, next);
+    }
+    ctx.closePath();
+  };
   for (let layer = 0; layer < 3; layer++) {
-    const x0 = -w * .12, span = w * 1.25, dt = t * (.38 - layer * .055);
-    const offset = .43 + .13 * layer;
-    const edge = (u: number) => h * (offset + .13 * Math.sin(u * 7 - dt + layer) + .045 * Math.sin(u * 18 + dt + layer) - .20 * u);
-    const light = layer === 1 ? '180,133,255' : layer === 2 ? '78,186,255' : '86,255,183';
-    // Follow a curved lower hem with overlapping vertical folds, each fading into the sky.
-    for (let i = 0; i <= count; i++) {
-      const u = i / count, x = x0 + u * span, y = edge(u);
-      const folds = .58 + .29 * Math.sin(u * (33 + layer * 6) + dt * 1.7) + .13 * Math.sin(u * 105 - dt * 2);
-      const height = h * (.18 + .37 * folds + .09 * Math.sin(u * 5 + dt));
-      const strength = (layer === 0 ? .71 : .44) * (1 + .22 * energy) * Math.sin(Math.PI * u) ** .6;
-      const glow = ctx.createLinearGradient(x, y - height, x, y + h * .025);
-      glow.addColorStop(0, `rgba(${light},0)`);
-      glow.addColorStop(.52, `rgba(${light},${strength * folds * .22})`);
-      glow.addColorStop(.88, `rgba(${light},${strength * (.30 + .7 * folds)})`);
-      glow.addColorStop(1, `rgba(${light},0)`);
-      ctx.fillStyle = glow;
-      ctx.beginPath(); ctx.moveTo(x - span / count, y + h * .025);
-      ctx.lineTo(x + span / count, y + h * .025);
-      ctx.lineTo(x + span / count + h * .075, y - height);
-      ctx.lineTo(x - span / count + h * .075, y - height); ctx.fill();
+    const drift = t * (.3 - layer * .045);
+    const light = layer === 1 ? '188,142,255' : layer === 2 ? '96,198,255' : '98,255,190';
+    const strength = (layer === 0 ? .8 : .52) * (1 + .2 * Math.min(1, energy));
+    const base = h * (.5 + .1 * layer);
+    const hem = (u: number) => base + h * (.1 * Math.sin(u * 4.6 - drift + layer * .9) + .03 * Math.sin(u * 9 + drift * 1.2) - .12 * u);
+    const height = (u: number) => h * (.26 + .1 * Math.sin(u * 2.4 + drift * .7 + layer)
+      + .06 * Math.sin(u * 4.1 - drift * .9) + .04 * Math.sin(u * 7.3 + drift * 1.5 + layer * 1.4)) * (1 + .1 * energy);
+    const taper = (u: number) => Math.sin(Math.PI * u) ** .6;
+    const top = (u: number) => hem(u) - height(u) * taper(u);
+    const paint = ctx.createLinearGradient(0, 0, w, 0);
+    paint.addColorStop(0, `rgba(${light},0)`);
+    paint.addColorStop(.18, `rgba(${light},${strength * .3})`);
+    paint.addColorStop(.46, `rgba(${light},${strength * .62})`);
+    paint.addColorStop(.74, `rgba(${light},${strength * .34})`);
+    paint.addColorStop(1, `rgba(${light},0)`);
+    for (const [spread, alpha] of [[.016, .22], [0, 1]] as const) {
+      const inner = (u: number) => top(u) - h * spread * taper(u);
+      trace(inner, (u) => hem(u) + h * spread * taper(u));
+      ctx.fillStyle = paint;
+      ctx.globalAlpha = alpha * (spread ? 1 : .92);
+      ctx.shadowColor = `rgba(${light},.6)`;
+      ctx.shadowBlur = spread ? Math.max(14, h * .07) : Math.max(6, h * .03);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    // A lit crest along the upper hem: the sheet's edge, not a border.
+    ctx.beginPath();
+    ctx.moveTo(0, top(0));
+    let crest = top(0);
+    for (let i = 1; i <= steps; i++) {
+      const u = i / steps, next = top(u);
+      ctx.quadraticCurveTo((i - .5) / steps * w, crest, u * w, (crest + next) * .5);
+      crest = next;
     }
     const rim = ctx.createLinearGradient(0, 0, w, 0);
-    rim.addColorStop(0, `rgba(${light},0)`); rim.addColorStop(.46, `rgba(${light},.48)`); rim.addColorStop(1, `rgba(${light},.08)`);
-    ctx.strokeStyle = rim; ctx.lineWidth = Math.max(1.1, h * .0039);
-    ctx.beginPath();
-    for (let i = 0; i <= count; i++) {
-      const u = i / count;
-      if (!i) ctx.moveTo(x0, edge(u)); else ctx.lineTo(x0 + u * span, edge(u));
-    }
+    rim.addColorStop(0, `rgba(${light},0)`);
+    rim.addColorStop(.45, `rgba(${light},${Math.min(.8, strength * .85)})`);
+    rim.addColorStop(1, `rgba(${light},0)`);
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = Math.max(1, h * .0032);
     ctx.stroke();
   }
   ctx.restore();
@@ -134,32 +164,76 @@ export function spectrumSpan(depth: number): readonly [number, number] {
   return [.018 + .036 * depth, .987 - .031 * depth];
 }
 
-export function drawSpectrum(ctx: CanvasRenderingContext2D, w: number, h: number, frames: SpectrumFrames) {
-  const light = ctx.createLinearGradient(0, 0, w, 0);
-  light.addColorStop(0, '#a26cfa'); light.addColorStop(.26, '#fba5f8'); light.addColorStop(.55, '#a4b9ff');
-  light.addColorStop(.81, '#63ecff'); light.addColorStop(1, '#a7ffd8');
-  ctx.save(); ctx.strokeStyle = light; ctx.lineCap = 'round'; ctx.globalCompositeOperation = 'screen';
-  for (let row = frames.length - 1; row >= 0; row--) {
-    const depth = row / (frames.length - 1), base = h * (.91 - .53 * depth);
-    const shape = frames[row];
-    const [start, end] = spectrumSpan(depth);
-    const step = w * (end - start) / (SPECTRUM_STEPS - 1), offset = start * w;
-    const y = (i: number) => {
-      const u = i / (SPECTRUM_STEPS - 1);
-      const smooth = .6 * shape[i] + .2 * (shape[Math.max(0, i - 1)] + shape[Math.min(SPECTRUM_STEPS - 1, i + 1)]);
-      return base - h * (.52 - .24 * depth) * smooth * (.65 + .35 * Math.sin(Math.PI * u));
+/** «Спектр»: one continuous multi-colour wave that leans on the live bands. */
+export function drawSpectrum(ctx: CanvasRenderingContext2D, w: number, h: number, frames: SpectrumFrames, t = 0, energy = 0) {
+  const newest = frames[0], previous = frames[1] ?? newest;
+  // Both the newest bands and the one before them feed the silhouette, so the wave
+  // glides between frames instead of stepping with the analyser's 48 bands.
+  const level = (u: number) => {
+    const at = Math.min(SPECTRUM_STEPS - 1, Math.max(0, u * (SPECTRUM_STEPS - 1)));
+    const index = Math.min(SPECTRUM_STEPS - 2, Math.floor(at)), f = at - index, ease = f * f * (3 - 2 * f);
+    const now = newest[index] + (newest[index + 1] - newest[index]) * ease;
+    const was = previous[index] + (previous[index + 1] - previous[index]) * ease;
+    // A gentle travelling swell keeps the ribbon alive between beats.
+    const swell = .06 + .04 * Math.sin(u * 6.2 - t * .9);
+    return Math.max(0, .74 * now + .26 * was) * (1 + .17 * energy) + swell * .35;
+  };
+  const layers = [
+    { palette: ['#7b4dff', '#ff5fc8', '#ffd166'], lift: .60, size: .30, alpha: .55 },
+    { palette: ['#2f8bff', '#59f2ff', '#a8ffcf'], lift: .53, size: .24, alpha: .42 },
+    { palette: ['#ff3d7f', '#c86bff', '#7ee8ff'], lift: .46, size: .18, alpha: .34 },
+  ];
+  const samples = Math.max(48, Math.min(180, Math.round(w / 9)));
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (const [index, layer] of layers.entries()) {
+    const phase = t * (.5 + index * .16) + index * 1.7;
+    const mid = h * layer.lift, amp = h * layer.size;
+    const crest = (u: number) => {
+      const wave = .72 + .28 * Math.sin(u * Math.PI * 2.2 + phase) * Math.sin(u * Math.PI);
+      return mid - amp * (level(u) * 1.35 + .12) * wave;
     };
-    ctx.beginPath(); ctx.moveTo(offset, y(0));
-    let here = y(0);
-    for (let i = 1; i < SPECTRUM_STEPS; i++) {
-      const next = y(i);
-      ctx.quadraticCurveTo(offset + (i - 1) * step, here, offset + (i - .5) * step, (here + next) * .5);
+    const hem = (u: number) => {
+      const wave = .74 + .26 * Math.cos(u * Math.PI * 1.7 - phase * .8);
+      return mid + amp * (.42 + .5 * level(u)) * wave;
+    };
+    const gradient = ctx.createLinearGradient(0, 0, w, 0);
+    gradient.addColorStop(0, layer.palette[0]);
+    gradient.addColorStop(.5, layer.palette[1]);
+    gradient.addColorStop(1, layer.palette[2]);
+    ctx.beginPath();
+    ctx.moveTo(-2, crest(0));
+    let here = crest(0);
+    for (let i = 1; i <= samples; i++) {
+      const u = i / samples, next = crest(u);
+      ctx.quadraticCurveTo((i - .5) / samples * w, here, u * w, (here + next) * .5);
       here = next;
     }
-    ctx.lineTo(end * w, here);
-    const core = Math.max(1, h * (.0055 - .0021 * depth));
-    ctx.globalAlpha = .19 - .08 * depth; ctx.lineWidth = core * 4; ctx.stroke();
-    ctx.globalAlpha = .93 - .41 * depth; ctx.lineWidth = core; ctx.stroke();
+    for (let i = samples; i >= 0; i--) {
+      const u = i / samples, next = hem(u);
+      ctx.quadraticCurveTo((i + .5) / samples * w, next, u * w, next);
+    }
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.globalAlpha = layer.alpha;
+    ctx.shadowColor = layer.palette[1];
+    ctx.shadowBlur = Math.max(6, h * .05);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // A bright crest line keeps the wave readable on busy covers.
+    ctx.beginPath();
+    ctx.moveTo(0, crest(0));
+    here = crest(0);
+    for (let i = 1; i <= samples; i++) {
+      const u = i / samples, next = crest(u);
+      ctx.quadraticCurveTo((i - .5) / samples * w, here, u * w, (here + next) * .5);
+      here = next;
+    }
+    ctx.strokeStyle = gradient;
+    ctx.globalAlpha = Math.min(1, layer.alpha + .38);
+    ctx.lineWidth = Math.max(1, h * .0055);
+    ctx.lineJoin = 'round';
+    ctx.stroke();
   }
   ctx.restore();
 }

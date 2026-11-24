@@ -406,6 +406,14 @@ export class VkSite {
     const literal = action === 'genre' || action === 'mood' ? readVkCollectionName(name) : undefined;
     if ((action === 'genre' || action === 'mood') && !literal) return false;
     if (!active.windowVisible || active.minimized) return false;
+    // A background start keeps Luma's own screen in front, so the guest was opened
+    // without bounds. Its catalogue only lays out inside a real viewport, so give it
+    // the window's size while it stays invisible.
+    if (!active.shown) {
+      const [w, h] = active.owner.getContentSize();
+      active.view.setBounds({ x: 0, y: 0, width: Math.max(1024, w), height: Math.max(720, h) });
+      active.view.setVisible(false);
+    }
     // Any page of the guest can be the one on screen; the catalogue only exists on
     // the music page, so the guest is sent there and given time to load it.
     if (!this.musicReady(active)) {
