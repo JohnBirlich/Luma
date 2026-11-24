@@ -1,4 +1,4 @@
-import type { DownloadResult, InstallResult, UpdateDownloadState, UpdateReport } from './release-updates.js';
+import type { DownloadResult, InstallResult, ReleaseHistoryEntry, UpdateDownloadState, UpdateReport } from './release-updates.js';
 import type { DiscordStatus, DiscordTrack } from './discord-presence.js';
 import type { SharedPlaylist } from './playlist-share.js';
 import type { FloatStart } from './float-output.js';
@@ -7,6 +7,7 @@ import { formatCount } from './customization.js';
 import { readIsrc } from './recording-match.js';
 import type { AudioFormat } from './audio-quality.js';
 import type { AppInfo } from './app-info.js';
+import type { LabSettings } from './labs.js';
 import type { DiagnosticsBridge } from './diagnostics.js';
 import { embeddedArtworkMime, MAX_COVER_FILE } from './artwork.js';
 import { cleanTrackText, musicSearchKey, readTrackTag } from './russian.js';
@@ -22,7 +23,7 @@ import type { OpenwhydDraft } from './openwhyd.js';
 import type { RadioBrowserQuery, RadioBrowserStation } from './radio-browser.js';
 
 import type { CatalogReply } from './catalog-reply.js';
-import type { VkBounds, VkSiteAction, VkSiteState } from './vk-site.js';
+import type { VkBounds, VkCollection, VkSiteAction, VkSiteState } from './vk-site.js';
 
 export const AUDIO_MIMES = {
   mp3: 'audio/mpeg',
@@ -80,12 +81,20 @@ export interface DesktopBridge {
   setUiLanguage(value: UiLanguage): Promise<void>;
   getAppInfo(): Promise<AppInfo>;
   openReleases(): Promise<void>;
+  /** A real reachability probe, not the browser's cached online flag. */
+  probeNetwork(): Promise<boolean>;
+  /** Main-process settings that must be known before the window exists. */
+  labs: {
+    read(): Promise<LabSettings>;
+    update(patch: Partial<LabSettings> | { proxy?: Partial<LabSettings['proxy']> }): Promise<LabSettings>;
+  };
   updates: {
     check(): Promise<UpdateReport>;
     install(version: string): Promise<InstallResult>;
     download(version: string): Promise<DownloadResult>;
     downloadState(): Promise<UpdateDownloadState>;
     cancelDownload(): Promise<boolean>;
+    history(): Promise<ReleaseHistoryEntry[]>;
     revealDownload(): Promise<boolean>;
     onDownloadState(callback: (state: UpdateDownloadState) => void): () => void;
   };
@@ -114,6 +123,7 @@ export interface DesktopBridge {
     layout(id: number, bounds: VkBounds | null, foreground: boolean): Promise<void>;
     close(id: number): Promise<void>;
     command(id: number, action: VkSiteAction, fraction?: number): Promise<boolean>;
+    collection(id: number, kind: VkCollection, name?: string): Promise<boolean>;
     reset(id: number): Promise<boolean>;
     onState(callback: (id: number, state: VkSiteState) => void): () => void;
   };

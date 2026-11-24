@@ -2,6 +2,7 @@ import { useText } from '../i18n/context';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowLeft, Bug, Copy, Monitor, Radio, Terminal, Trash2 } from 'lucide-react';
 import { clearDiagnostics, getDiagnostics, saveDiagnostics, subscribeDiagnostics } from '../data/diagnostics';
+import { refreshConnection, useConnectionPhase } from '../data/network';
 import { diagnosticSystem, diagnosticsReport, displayValues, LOG_AREAS, LOG_EVENTS, LOG_LEVELS, MAX_LOG_ENTRIES } from '../shared/diagnostics';
 import { runtimeMode } from '../shared/app-info';
 import type { DiagnosticSnapshot, LogArea } from '../shared/diagnostics';
@@ -16,6 +17,8 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
   const [confirm, setConfirm] = useState(false);
   const [working, setWorking] = useState(false);
   const [status, setStatus] = useState('');
+  const connection = useConnectionPhase();
+  useEffect(() => { void refreshConnection(); }, []);
   useEffect(() => {
     let active = true;
     let revision = 0;
@@ -80,11 +83,11 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
     {system && snapshot && <section className="diagnostic-system" aria-label={t("Сведения о приложении")}>
       <div><div className="diagnostic-system-icon"><Terminal size={18} /></div><span><small>{t("Версия Luma")}</small><strong>{system.version}</strong><span>{t(runtimeMode[system.mode])}</span></span></div>
       <div><div className="diagnostic-system-icon"><Monitor size={18} /></div><span><small>{t("Система")}</small><strong>{diagnosticSystem(system.system, t)}</strong><span>{t(system.runtime)}</span></span></div>
-      <div><div className="diagnostic-system-icon"><Radio size={18} /></div><span><small>{t("Подключение")}</small><strong>{system.online ? t("Устройство в сети") : t("Устройство вне сети")}</strong><span>{t(storageLabel[snapshot.storage])}</span></span></div>
+      <div className={`diagnostic-connection state-${connection}`}><div className="diagnostic-system-icon"><Radio size={18} /></div><span><small>{t("Подключение")}</small><strong><span className="connection-dot" aria-hidden="true" />{connection === 'checking' ? t("Подключение..") : connection === 'online' ? t("Подключено") : t("Нет Соединения")}</strong><span className="diagnostic-connection-note">{t("При отсутствии Интернета некоторые функции могут быть недоступны. Проверьте соединение, если оно недоступно или подключитесь к интернету.")}</span></span></div>
     </section>}
     <section className="journal" aria-label={t("Журнал приложения")}>
       <header className="journal-header">
-        <div><h2>{t("Журнал событий")}</h2><p>{snapshot ? t("Показано {0} из {1}", rows.length, snapshot.entries.length) : t("Читаем журнал…")}</p></div>
+        <div><h2>{t("Журнал событий")}</h2><p>{snapshot ? `${t("Показано {0} из {1}", rows.length, snapshot.entries.length)} · ${t(storageLabel[snapshot.storage])}` : t("Читаем журнал…")}</p></div>
         <div className="journal-actions">
           <button className="button outline-button" type="button" disabled={!snapshot || working} onClick={() => void action('save')} aria-label={t("Сохранить журнал")} title={t("Сохранить .log")}><ArrowDownToLine size={16} /><span>{t("Сохранить .log")}</span></button>
           <button className="icon-button" type="button" disabled={!snapshot || working} onClick={() => void action('copy')} aria-label={t("Скопировать отчёт")} title={t("Скопировать отчёт")}><Copy size={16} /></button>

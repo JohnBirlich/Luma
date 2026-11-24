@@ -2,7 +2,7 @@ import { APP_NAME } from '../shared/app-info';
 import { useText } from '../i18n/context';
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Activity, AudioLines, ChartNoAxesColumnIncreasing, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Music2, Droplets, Sparkles, Sunset, Hexagon, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
+import { Activity, AudioLines, AudioWaveform, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Music2, Droplets, Sparkles, Sunset, Hexagon, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
 import type { TrackDisplay } from '../shared/media';
 import type { ReadSpectrum } from '../player/useAudio';
 import { EFFECT_TEMPOS } from '../shared/customization';
@@ -24,7 +24,7 @@ const EFFECTS = [
   { id: 'waves', label: 'Волны', description: 'Морской прибой в сумерках', icon: Waves },
   { id: 'stars', label: 'Звёзды', description: 'Звёздная пыль и мягкий параллакс', icon: Sparkles },
   { id: 'spectrum', label: 'Спектр', description: 'Длинные линии в ритме трека', icon: AudioLines },
-  { id: 'columns', label: 'Столбцы', description: 'Световые столбцы частот', icon: ChartNoAxesColumnIncreasing },
+  { id: 'columns', label: 'Ленты', description: 'Плавные волновые ленты в такт частотам', icon: AudioWaveform },
   { id: 'orbits', label: 'Орбиты', description: 'Планета, кольца и спутники', icon: Orbit },
   { id: 'prism', label: 'Призма', description: 'Вращающаяся пирамида с цветными лучами', icon: Triangle },
   { id: 'pulse', label: 'Импульс', description: 'Кольца в ритме баса', icon: Activity },
@@ -46,7 +46,7 @@ export function NowPlayingOptions({ appearance, change }: SceneOptionsProps) {
   const t = useText();
   return <div className="scene-options">
     <div className="scene-option-group">
-      <h3>{t("Компоновка")}</h3>
+      <h3>{t("Тип фона")}</h3>
       <div className="scene-layouts" role="group" aria-label={t("Компоновка «Сейчас играет»")}>
         {LAYOUTS.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={appearance.hero === id} onClick={() => change({ ...appearance, hero: id })}>
           <Icon size={17} /><span>{t(label)}</span>

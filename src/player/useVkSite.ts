@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import type { VkBounds, VkSiteAction, VkSiteState } from '../shared/vk-site';
+import type { VkBounds, VkCollection, VkSiteAction, VkSiteState } from '../shared/vk-site';
 
 const initial: VkSiteState = { phase: 'loading', host: '', back: false, signIn: false };
 let nextView = 0;
@@ -68,6 +68,12 @@ export function useVkSite(onClosed: () => void) {
     return api && session && !session.resetting ? api.command(session.id, action, ratio).catch(() => false) : Promise.resolve(false);
   }, [api]);
 
+  /** Starts a VK catalogue entry in the guest; the page may be behind Luma at the time. */
+  const collection = useCallback((kind: VkCollection, name?: string) => {
+    const session = active.current;
+    return api && session && !session.resetting ? api.collection(session.id, kind, name).catch(() => false) : Promise.resolve(false);
+  }, [api]);
+
   const pause = useCallback(() => {
     const session = active.current;
     if (!session?.state.engaged) return;
@@ -92,7 +98,7 @@ export function useVkSite(onClosed: () => void) {
     }
   }, [api, retry, store]);
 
-  return { view, open, close, command, layout, hasSession, pause, retry, reset };
+  return { view, open, close, command, collection, layout, hasSession, pause, retry, reset };
 }
 
 export type VkSiteController = ReturnType<typeof useVkSite>;

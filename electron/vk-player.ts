@@ -88,7 +88,7 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
     // Cheapest signals first: a node without switch vocabulary, a marker or a switch
     // icon cannot answer for one, and skipping it avoids a layout read.
     const vocabulary = /huffle|epeat|ike|нрав|повтор|перемеш|favorit|library|избранн|коллекци|мою музыку/i;
-    const switchIcon = /vkuiIcon--(?:shuffle|repeat|like|dislike|thumbs_down)_/i;
+    const switchIcon = /vkuiIcon--(?:shuffle|repeat|like|heart|thumbs_up|dislike|thumbs_down|thumb_down)(?:_(?:outline|filled|active))?_/i;
     const relevant = (node: Element) => vocabulary.test(`${label(node)} ${node.getAttribute('data-testid') ?? ''} ${[...node.classList].join(' ')}`)
       || [...node.querySelectorAll('svg')].slice(0, 6).some(svg => switchIcon.test(svg.getAttribute('class') ?? ''));
     const add = (node: Element) => {
@@ -186,10 +186,11 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
   const dislikedLabel = /(?:не нрав|не понрав|не рекоменд|дизлайк|dislike|\bhate\b)/i;
   const controls = {
     ...transport,
-    shuffle: findControl(/(?:перемеш|вперемешк|в случайном порядке|случайный порядок|shuffle)/i, /vkuiIcon--shuffle_/i),
-    repeat: findControl(/(?:повтор|зацикл|repeat)/i, /vkuiIcon--repeat_/i),
-    like: findControl(/(?:нравится|понрав|\blike\b|favorite)/i, /vkuiIcon--like_/i, dislikedLabel),
-    dislike: findControl(dislikedLabel, /vkuiIcon--(?:dislike|thumbs_down)_/i),
+    shuffle: findControl(/(?:перемеш|вперемешк|в случайном порядке|случайный порядок|shuffle)/i, /vkuiIcon--shuffle(?:_(?:outline|filled|active))?_/i),
+    repeat: findControl(/(?:повтор|зацикл|repeat)/i, /vkuiIcon--repeat(?:_(?:outline|filled|active))?_/i),
+    like: findControl(/(?:нравится|понрав|\blike\b|favorite|love)/i,
+      /vkuiIcon--(?:like|heart|thumbs_up)(?:_(?:outline|filled|active))?_/i, dislikedLabel),
+    dislike: findControl(dislikedLabel, /vkuiIcon--(?:dislike|thumbs_down|thumb_down)(?:_(?:outline|filled|active))?_/i),
     favorite: pick(roots, '.audio_page_player2_add, [data-testid="audio-player-library"], [data-testid*="library" i]',
       /^(?:(?:добавить|удалить) аудиозапись|добавить в (?:мою (?:музыку|коллекцию)|аудиозаписи)|удалить из (?:моей музыки|моей коллекции|аудиозаписей)|add to (?:my music|library)|remove from (?:my music|library))$/i),
     mute: pick(roots, '', /^(?:(?:выключить|включить) звук|mute|unmute)$/i),
@@ -263,8 +264,10 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
       if (value === 'false') return false;
     }
     const drawn = [...node.querySelectorAll('svg')].map(svg => svg.getAttribute('class') ?? '').join(' ');
-    const kind = icon === 'dislike' ? '(?:dislike|thumbs_down)' : icon;
-    if (new RegExp(`vkuiIcon--${kind}_`, 'i').test(drawn)) return !/outline/i.test(drawn);
+    // The same feedback mark ships as a heart, a thumb or a like glyph depending on
+    // the VK build; all of them are read the same way.
+    const kind = icon === 'dislike' ? '(?:dislike|thumbs_down|thumb_down)' : icon === 'like' ? '(?:like|heart|thumbs_up)' : icon;
+    if (new RegExp(`vkuiIcon--${kind}(?:_(?:outline|filled|active))?_`, 'i').test(drawn)) return !/outline/i.test(drawn);
     if (active(node)) return true;
     return /(?:выключить|отключить|убрать|disable|remove)/i.test(label(node));
   };

@@ -34,7 +34,7 @@ import { saveSharedPlaylist } from './data/playlist-share';
 import { musicLaunchUrl, readMusicLink } from './shared/music-links';
 import { vkMusicSearchUrl, vkSiteEntry } from './shared/vk-site';
 import { rememberVkListen } from './shared/vk-history';
-import type { VkSiteAction } from './shared/vk-site';
+import type { VkCollection, VkSiteAction } from './shared/vk-site';
 import { VK_MUSIC_URL } from './shared/vk';
 import { localLibrary } from './data/library';
 import { useTrackDetails } from './data/track-details';
@@ -98,7 +98,6 @@ export default function App() {
   }, []);
 
   const [localTracks, setLocalTracks] = useState<Track[]>([]);
-  const [discoveredStation, setDiscoveredStation] = useState<Track>();
   const [ready, setReady] = useState(false);
   const [working, setWorking] = useState(false);
   const [page, setPage] = useState<Page>(boot.playback.startPage === 'local' ? 'library' : boot.playback.startPage);
@@ -175,6 +174,7 @@ export default function App() {
   }), [originals, covers, details]);
   const stationIds = useMemo(() => new Set(preferences.stationIds), [preferences.stationIds]);
   const collection = useMemo(() => tracks.filter(({ online, id }) => !online || savedOnline.has(id)), [tracks, savedOnline]);
+  const [discoveredStation, setDiscoveredStation] = useState<Track>();
   const byId = useMemo(() => new Map([...tracks, ...stationTracks, ...(discoveredStation ? [discoveredStation] : [])].map((track) => [track.id, track])), [tracks, discoveredStation]);
   const favoriteIds = useMemo(() => new Set(preferences.favorites), [preferences.favorites]);
   const dislikedIds = useMemo(() => new Set(preferences.disliked), [preferences.disliked]);
@@ -486,10 +486,13 @@ export default function App() {
     returningTop.current = settingsFrom.current.top;
     setPage(settingsFrom.current.page);
   }, []);
-  const openSettings = useCallback(() => {
+  // Opening the page always starts at the section list: a section visited during an
+  // earlier visit must not decide where the next visit lands.
+  const openSettings = useCallback((section?: unknown) => {
     if (page === 'settings') { exitSettings(); return; }
     settingsFrom.current = { page, top: scrollArea.current?.scrollTop ?? 0 };
     if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
+    setSettingsSection(typeof section === 'string' ? section as SettingsSectionId : undefined);
     setPage('settings');
   }, [page, exitSettings]);
 
@@ -811,11 +814,41 @@ export default function App() {
     navigate('player');
     selectHomeTab('radio');
   }, [navigate, selectHomeTab]);
+  const openUpdates = useCallback(() => {
+    navigate('player');
+    selectHomeTab('updates');
+  }, [navigate, selectHomeTab]);
+  const updatesActive = page === 'player' && homeTab === 'updates' && !homeQuery.trim();
+  const radioActive = page === 'player' && homeTab === 'radio' && !homeQuery.trim();
+  // Luma's radio leaves the VK Music section alone; the guest keeps its own music.
+  const radioHidden = page === 'player' && homeTab === 'vk';
+  // The guest's state lives in a ref so the background start can watch it without
+  // re-rendering the whole shell on every poll.
+  const vkViewRef = useRef(vkSite.view);
+  useLayoutEffect(() => { vkViewRef.current = vkSite.view; }, [vkSite.view]);
+  const vkSignedIn = vkSite.view ? !vkSite.view.state.signIn : preferences.vkRecent.length > 0;
+  const startVkCollection = useCallback(async (kind: VkCollection, name?: string) => {
+    if (!window.luma?.vkSite || !connected) return false;
+    // Loading the guest without laying it out keeps the user on Luma's own screen.
+    if (!hasVkSession()) { pause(); openVkSite(VK_MUSIC_URL); }
+    const deadline = Date.now() + 12_000;
+    for (;;) {
+      const session = vkViewRef.current;
+      if (!session) return false;
+      if (session.state.signIn) return false;
+      if (session.state.phase === 'ready' && !session.resetting) break;
+      if (session.state.phase === 'failed' || Date.now() > deadline) return false;
+      await new Promise((resolve) => { setTimeout(resolve, 200); });
+    }
+    const started = await vkSite.collection(kind, name);
+    // The local queue keeps its place; VK is the sound from here.
+    if (started) pause();
+    return started;
+  }, [connected, hasVkSession, openVkSite, pause, vkSite]);
   const searchVk = useCallback((query: string) => {
     const url = vkMusicSearchUrl(query);
     if (url) openVk(url);
   }, [openVk]);
-  const radioActive = page === 'player' && homeTab === 'radio' && !homeQuery.trim();
   const openEqualizer = () => setShowEqualizer(true);
   const toggleQueue = () => setQueueOpen((open) => !open);
   const changeAppearance = (appearance: Appearance) => setPreferences((data) => ({ ...data, appearance }));
@@ -855,20 +888,25 @@ export default function App() {
   const displayControls: PlaybackProps = vkEngaged ? {
     source: 'vk', hasTrack: true, canToggle: vkControllable && vkTrack.toggle, playing: displayPlaying,
     elapsed: vkTrack?.timeline?.position ?? 0, duration: vkTrack?.timeline?.duration ?? 0, seekable: vkControllable && vkTrack.timeline?.seek === true,
-    shuffle: vkTrack?.shuffle ?? false, canShuffle: vkControllable && vkTrack.shuffle !== undefined,
-    repeat: vkTrack?.repeat ?? 'off', canRepeat: vkControllable && vkTrack.repeat !== undefined,
+    // VK renames and moves its switches between builds, so a control that the last
+    // poll could not read is still offered: the card keeps the same set as local
+    // playback, and a press that VK refuses reports it instead of vanishing.
+    shuffle: vkTrack?.shuffle ?? false, canShuffle: vkControllable,
+    repeat: vkTrack?.repeat ?? 'off', canRepeat: vkControllable,
     volume: vkTrack?.volume ?? 0, canVolume: vkControllable && vkTrack.volume !== undefined,
     canMute: vkControllable && vkTrack.canMute === true,
+    // The library button is offered only when VK itself exposes one: the like pair
+    // always is, but a «плюс» that the site cannot answer would only report failure.
     vkFavorite: vkControllable && vkTrack.favorite !== undefined ? { selected: vkTrack.favorite, toggle: () => vkAction('favorite') } : undefined,
-    vkLike: vkControllable && vkTrack.liked !== undefined ? { liked: vkTrack.liked, toggle: () => vkAction('like') } : undefined,
-    vkDislike: vkControllable && vkTrack.disliked !== undefined ? { disliked: vkTrack.disliked, toggle: () => vkAction('dislike') } : undefined,
+    vkLike: vkControllable ? { liked: vkTrack.liked === true, toggle: () => vkAction('like') } : undefined,
+    vkDislike: vkControllable ? { disliked: vkTrack.disliked === true, toggle: () => vkAction('dislike') } : undefined,
     hasPrevious: vkControllable && vkTrack.previous, hasNext: vkControllable && vkTrack.next,
     togglePlay: togglePlayback, previous: () => vkAction('previous'), next: () => vkAction('next'), seek: seekVk,
     toggleRepeat: () => vkAction('repeat'), toggleShuffle: () => vkAction('shuffle'), toggleMute: () => vkAction('mute'), setVolume: (value) => vkAction('volume', value),
   } : localControls;
 
   return (
-    <UiText.Provider value={t}><div data-theme={effectiveAppearance.theme} data-layout={glass ? 'glass' : undefined} data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={!glass ? appearance.compactSidebar ? 'compact' : 'expanded' : undefined} className={`app-shell${widget ? ' widget-mode' : queueOpen ? ' queue-visible' : ''}${!glass && appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
+    <UiText.Provider value={t}><div data-theme={effectiveAppearance.theme} data-layout={glass ? 'glass' : undefined} data-presentation={presentationOpen ? 'open' : undefined} data-sidebar={!glass ? appearance.compactSidebar ? 'compact' : 'expanded' : undefined} data-cover-round={appearance.coverRound ? undefined : 'off'} data-cover-outline={appearance.coverOutline ? undefined : 'off'} className={`app-shell${widget ? ' widget-mode' : queueOpen ? ' queue-visible' : ''}${!glass && appearance.classicDock ? ' classic-dock' : ''}${appearance.tabMotion ? ' tab-motion' : ''}${appearance.motion ? '' : ' motion-off'}${appearance.coverColors ? '' : ' cover-colors-off'}`} style={theme as CSSProperties}
       onDragEnter={(event) => {
         if (modalOpen || presentationOpen || widget || !filesDragged(event)) return;
         event.preventDefault();
@@ -888,21 +926,25 @@ export default function App() {
         setDropActive(false);
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
-      {!widget && <TitleBar glass={glass} openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready} openRadio={openRadio} radioActive={radioActive} />}
-      {!widget && (glass ? <GlassNavigation page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled} openRadio={openRadio} radioActive={radioActive} /> : <Sidebar page={page} navigate={navigate} openRadio={openRadio} radioActive={radioActive} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
+      {!widget && <TitleBar glass={glass} openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready}
+        openRadio={openRadio} radioActive={radioActive} radioHidden={radioHidden || !!widget} />}
+      {!widget && (glass ? <GlassNavigation page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
+        openRadio={openRadio} radioActive={radioActive} radioHidden={radioHidden} /> : <Sidebar page={page} navigate={navigate} openRadio={openRadio} radioActive={radioActive} radioHidden={radioHidden} openUpdates={openUpdates} updatesActive={updatesActive} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
         fullNumbers={appearance.fullNumbers} queued={queued.length} queueOpen={queueOpen} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
         compact={appearance.compactSidebar} toggleCompact={toggleCompact} />)}
       <main className={`main-pane${vkVisible ? ' vk-pane' : ''}`} ref={scrollArea}>
         <div key={basePage} className="page-body" hidden={widget || page === 'settings'}>
         {basePage === 'player' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
           <HomePage tracks={collection} recent={recent} vkRecent={preferences.vkRecent} openRecent={() => navigate('recent')}
-            openVkRecent={window.luma?.vkSite && connected ? openVk : undefined} favorites={favoriteIds} disliked={dislikedIds} saved={savedOnline}
+            openVkRecent={window.luma?.vkSite && connected ? openVk : undefined} favorites={favoriteIds}
+            playVkCollection={vkSignedIn ? startVkCollection : undefined} openVkTopic={vkSignedIn ? startVkCollection : undefined} disliked={dislikedIds} saved={savedOnline}
             tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={homeVisible}
             vkSite={vkVisible ? vkSite : undefined} closeVk={closeVk} searchVk={window.luma?.vkSite ? searchVk : undefined}
-            busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} stationIds={stationIds} saveStation={saveStation} tuneDiscoveredStation={tuneDiscoveredStation} loading={!!player.loading}
+            busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline}
+            stationIds={stationIds} saveStation={saveStation} tuneDiscoveredStation={tuneDiscoveredStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
             openLibrary={goToLibrary} addMusic={choose} openMusicLink={() => setMusicDialog({})}
             sharePlaylist={sharePlaylist} seedFavorites={seedFavorites} openFavorites={() => navigate('favorites')}
@@ -910,9 +952,9 @@ export default function App() {
               playing={vkEngaged ? displayPlaying : player.playing} loading={!vkEngaged && !!player.loading} position={queue.order.indexOf(current?.id ?? '') + 1}
               count={queue.order.length} toggle={togglePlayback} canToggle={displayControls.canToggle} shareTrack={shareTrack} openVk={returnToVk} closeVk={closeVk}
               favorite={!!current && (live ? stationIds : favoriteIds).has(current.id)} toggleFavorite={toggleFavorite} openAppearance={() => setShowAppearance(true)}
-              openPresentation={showPresentation} openKaraoke={showKaraoke} sleepActive={sleepDeadline !== undefined} openSleepTimer={() => { setSettingsSection('playback'); openSettings(); }} sceneVisible={page === 'player' && !widget && !presentationOpen && !modalOpen}
+              openPresentation={showPresentation} openKaraoke={showKaraoke} sleepActive={sleepDeadline !== undefined} openSleepTimer={() => openSettings('playback')} sceneVisible={page === 'player' && !widget && !presentationOpen && !modalOpen}
               readSpectrum={player.readSpectrum} editCover={editTrackCover} editDetails={editTrackDetails} addMusic={choose} />}
-            lyrics={current && canUseLyrics && !presentationOpen && page === 'player' && (!current.demo || lyrics.attached)
+            lyrics={appearance.showLyrics && current && canUseLyrics && !presentationOpen && page === 'player' && (!current.demo || lyrics.attached)
               ? <LyricsPanel key={current.id} state={lyrics} elapsed={player.elapsed} seek={seek} clock={player.playing ? position : undefined} demo={current.demo} /> : undefined} />
           </Suspense> :
           basePage === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :
@@ -990,7 +1032,7 @@ export default function App() {
       {coverTarget && <CoverEditor key={coverTarget.key} target={coverTarget} currentUrl={covers.get(coverTarget.key)} update={saveCover} close={() => setCoverTarget(undefined)} />}
       {detailsTrack && <TrackDetailsEditor key={detailsTrack.id} locale={locale} track={detailsTrack} edited={details.has(detailsTrack.id)} save={saveDetails} close={() => setDetailsId(undefined)} />}
       {showAppearance && <NowPlayingDialog appearance={appearance} tint={tint} track={displayTrack} playing={displayPlaying} sample={player.playing && !vkEngaged && !current?.online ? player.readSpectrum : undefined} change={changeAppearance} close={() => setShowAppearance(false)} />}
-      {showEqualizer && <Equalizer settings={preferences.equalizer} sampleRate={player.sampleRate} spectrum={player.readSpectrum} live={appearance.motion && player.playing && !current?.online} online={!!current?.online} change={(equalizer) => setPreferences((data) => ({ ...data, equalizer }))} close={() => setShowEqualizer(false)} />}
+      {showEqualizer && <Equalizer settings={preferences.equalizer} sampleRate={player.sampleRate} spectrum={player.readSpectrum} live={appearance.motion && player.playing && !current?.online} online={!!current?.online} vk={vkEngaged} change={(equalizer) => setPreferences((data) => ({ ...data, equalizer }))} close={() => setShowEqualizer(false)} />}
     </div></UiText.Provider>
   );
 }

@@ -58,6 +58,13 @@ export interface Appearance {
   dayTheme: ThemeName;
   widgetBackground: WidgetBackground;
   libraryLayout: LibraryLayout;
+  /** The now-playing switches the list asked for; all on by default. */
+  coverRound: boolean;
+  coverOutline: boolean;
+  showVolume: boolean;
+  showTools: boolean;
+  showLyrics: boolean;
+  swipeTracks: boolean;
 }
 
 export interface PlaybackPreferences {
@@ -79,6 +86,7 @@ export const defaultAppearance: Appearance = {
   audioReactive: true, nativeFullscreen: true, fullscreenQueue: true, compactSidebar: false, coverColors: true, motion: true,
   tabMotion: true, fullNumbers: false, classicDock: false, dataLanguage: 'system', autoTheme: false, dayTheme: 'ocean',
   widgetBackground: 'blur', libraryLayout: 'list',
+  coverRound: true, coverOutline: true, showVolume: true, showTools: true, showLyrics: true, swipeTracks: true,
 };
 export const defaultPlayback: PlaybackPreferences = {
   startPage: 'player', seekStep: 5, autoNext: true, autoPlay: false, crossfade: 0,
@@ -114,6 +122,12 @@ export function readAppearance(value: unknown): Appearance {
     dayTheme: typeof data?.dayTheme === 'string' && Object.hasOwn(THEMES, data.dayTheme) ? data.dayTheme : defaultAppearance.dayTheme,
     widgetBackground: typeof data?.widgetBackground === 'string' && Object.hasOwn(WIDGET_BACKGROUNDS, data.widgetBackground) ? data.widgetBackground : 'blur',
     libraryLayout: data?.libraryLayout === 'grid' ? 'grid' : 'list',
+    coverRound: data?.coverRound !== false,
+    coverOutline: data?.coverOutline !== false,
+    showVolume: data?.showVolume !== false,
+    showTools: data?.showTools !== false,
+    showLyrics: data?.showLyrics !== false,
+    swipeTracks: data?.swipeTracks !== false,
   };
 }
 

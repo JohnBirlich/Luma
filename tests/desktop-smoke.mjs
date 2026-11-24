@@ -345,7 +345,7 @@ async function smoke() {
   fixtureNotice('Native fullscreen', `Electron fullscreen reached ${display.bounds.width}×${display.bounds.height} monitor bounds; button, Esc, and host exit passed.`);
   await click('.scene-open');
   await waitFor('scene dialog reopens', () => run(`!!document.querySelector('.scene-dialog[open]')`));
-  for (const [label, effect] of [['Спектр', 'spectrum'], ['Столбцы', 'columns'], ['Ноты', 'notes']]) {
+  for (const [label, effect] of [['Спектр', 'spectrum'], ['Ленты', 'columns'], ['Ноты', 'notes']]) {
     await click(`.scene-choice[aria-label="${label}"]`);
     await waitFor(`${label} previews on a bounded canvas`, () => run(`(() => {
       const backdrop = document.querySelector('.scene-dialog-preview .scene-${effect}');
@@ -480,7 +480,7 @@ async function smoke() {
     await click(radioSidebar);
     await waitFor('sidebar Radio replaces the previous search and opens the built-in station list', () => run(`!!document.querySelector('.radio-shelves')
       && document.querySelector('.hub-search input')?.value === ''
-      && document.querySelector('[data-home-tab="radio"]')?.getAttribute('aria-current') === 'page'
+      && !document.querySelector('[data-home-tab="radio"]')
       && document.querySelector('${radioSidebar}')?.getAttribute('aria-current') === 'page'`));
     assert.equal(await run(`document.querySelector('nav[aria-label="Разделы плеера"] [aria-label="Главная"]')?.getAttribute('aria-current') ?? null`), null);
     window.setSize(640, originalBounds.height);
@@ -1107,8 +1107,10 @@ async function smoke() {
       for (const url of ['https://example.invalid/', VK_MUSIC_URL, 'https://vk.ru/audio?q=jazz', 'https://my.mail.ru/music', 'https://music.yandex.ru/']) {
         assert.equal(await run(`window.luma.openOnlineLink(${JSON.stringify(url)}).then(() => false, () => true)`), true);
       }
+      // «Обновления» moved to Quick access and Radio opens from the sidebar shortcut,
+      // so the strip itself keeps only the music sections.
       assert.deepEqual(await run(`[...document.querySelectorAll('.hub-tabs button')].map(button => button.textContent)`),
-        ['Для вас', 'Моя музыка', 'Радио', 'VK Музыка', 'Обновления']);
+        ['Для вас', 'Моя музыка', 'VK Музыка']);
       failSouthernFixture = false;
       await click('.catalog-request');
       await waitFor('Retry only retries the failed source and keeps the other results', () => run(`
@@ -1387,15 +1389,33 @@ async function smoke() {
       await waitFor('the same signed-in guest is hidden but retained on Now Playing', async () => vkView() === nativeView
         && !nativeView.getVisible() && !guest.isAudioMuted() && await mirrored('.home-now[data-playback-source="vk"] .hero h2', 0)
         && await run(`document.querySelector('.home-now .hero-meta').textContent === ${JSON.stringify(vkFixtureArtist)}`));
-      assert.equal(await run(`!navigator.mediaSession.metadata && [...document.querySelectorAll('audio')].every(audio => audio.paused)
-        && !document.querySelector('.home-now :is(.favorite-toggle,.hero-index,.track-cover-button,.hero-karaoke)')`), true);
+      // The guest owns the system session and Luma's own deck stays silent. A VK
+      // track now carries VK's own like pair in the local feedback slots, while the
+      // local-only controls must stay out of the hero.
+      assert.equal(await run(`!navigator.mediaSession.metadata`), true, 'an audible VK guest keeps the system media session');
+      assert.equal(await run(`[...document.querySelectorAll('audio')].every(audio => audio.paused)`), true, 'Luma leaves its own deck silent while VK plays');
+      assert.equal(await run(`!!document.querySelector('.home-now .hero-actions-row .vk-like')
+        && !!document.querySelector('.home-now .hero-actions-row .vk-dislike')`), true,
+        'VK fills the hero feedback slots with its own like and dislike');
+      assert.equal(await run(`!document.querySelector('.home-now :is(.favorite-toggle,.hero-index,.track-cover-button,.hero-karaoke)')`), true,
+        'local-only hero controls stay hidden for a VK track');
       const beforeBackground = await guestRun('fixtureAudio.currentTime');
       await click('.home-now .play-button');
       await waitFor('Now Playing resumes the actual hidden guest', () => guestRun(`!fixtureAudio.paused && fixtureAudio.currentTime > ${beforeBackground + .1}`));
       await click('.home-now button[aria-label="Развернуть текущий трек"]');
-      await waitFor('fullscreen shows the VK track and supports only delegated controls', async () => await mirrored(`${vkStage} h1`, 0) && await run(`
-        !document.querySelector('${vkStage} :is(.mode-button,.immersive-upcoming,.immersive-karaoke-toggle,.immersive-feedback)')
-        && !!document.querySelector('${vkStage} .volume input:enabled')
+      // Separate waits so a failure names the clause that broke.
+      await waitFor('fullscreen opens on the VK track', async () => await mirrored(`${vkStage} h1`, 0));
+      // Shuffle and repeat belong to the VK card now; only Luma's own surfaces stay out.
+      await waitFor('fullscreen keeps the local-only controls out', () => run(`
+        !document.querySelector('${vkStage} :is(.immersive-upcoming,.immersive-karaoke-toggle,.favorite-toggle)')`));
+      await waitFor('fullscreen offers VK shuffle and repeat like local playback', () => run(`
+        document.querySelector('${vkStage} .mode-button')?.getAttribute('aria-label') === 'Перемешать треки VK'
+        && document.querySelectorAll('${vkStage} .mode-button').length === 2`));
+      await waitFor('fullscreen offers the VK feedback pair', () => run(`
+        !!document.querySelector('${vkStage} .immersive-feedback .vk-like')
+        && !!document.querySelector('${vkStage} .immersive-feedback .vk-dislike')`));
+      await waitFor('fullscreen keeps VK transport and volume', () => run(`
+        !!document.querySelector('${vkStage} .volume input:enabled')
         && document.querySelector('${vkStage} .play-button')?.getAttribute('aria-label') === 'Пауза'`));
       const mediaArt = await waitFor('restored VK track gets its current artwork', guestCover);
       await waitFor('VK cover also decodes in expanded player', () => coverAt(`${vkStage} .immersive-art img`, mediaArt));
@@ -1783,7 +1803,7 @@ async function smoke() {
         return prefs.queue.order.join() === prefs.playlists[0].trackIds.join();
       });
 
-      await click('[data-home-tab="radio"]');
+      await click(radioSidebar);
       await waitFor('radio directory renders in exact order with Record artwork', () => run(`document.querySelectorAll('${stationSection} > .station-grid > .station-tile').length === ${RADIO_DIRECTORY.length}
         && document.querySelector('${stationSection} ${recordTile} .station-logo img')?.naturalWidth > 0`));
       assert.deepEqual(await run(`[...document.querySelectorAll('${stationSection} > .station-grid > .station-tile')].map(tile => tile.dataset.station)`), RADIO_DIRECTORY.map(({ id }) => id));
@@ -1850,7 +1870,10 @@ async function smoke() {
       await waitFor('guest ready for radio handoff', () => guestBeforeRadio.getVisible());
       await guestBeforeRadio.webContents.executeJavaScript(`document.querySelector('#fixture-toggle').click()`);
       await waitFor('VK plays before switching to radio', () => run(`document.querySelector('.player-bar[data-playback-source="vk"] .play-button')?.getAttribute('aria-label') === 'Пауза'`));
-      await click('[data-home-tab="radio"]');
+      assert.equal(await run(`!!document.querySelector('${radioSidebar}')`), false, 'the VK Music section offers no Radio entry');
+      await click('[data-home-tab="home"]');
+      await waitFor('leaving VK Music brings the Radio shortcut back', () => run(`!!document.querySelector('${radioSidebar}')`));
+      await click(radioSidebar);
       await fill('.radio-search input', 'Русское радио');
       const hasRusskoeCover = (selector) => run(`(() => {
         const img = document.querySelector(${JSON.stringify(selector)});
@@ -1883,7 +1906,7 @@ async function smoke() {
       await waitFor('radio fullscreen closes', () => !window.isFullScreen());
       await click('.player-bar .play-button');
       await waitFor('stopping radio unloads the network source', () => run(`document.querySelector('${onlineAudio}').paused && !document.querySelector('${onlineAudio}').hasAttribute('src')`));
-      await click('[data-home-tab="radio"]');
+      await click(radioSidebar);
       await run(`Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }); window.dispatchEvent(new Event('offline'));`);
       await click('[data-radio-view="saved"]');
       await waitFor('offline playback and tuning are unavailable without hiding saved stations', () => run(`document.querySelector('${savedStations} ${recordPlay}')?.disabled

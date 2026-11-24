@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { ArrowUpCircle, Download, FolderOpen, RotateCw, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowUpCircle, Download, FolderOpen, History, RotateCw, X } from 'lucide-react';
 import { useText } from '../i18n/context';
-import type { InstallResult, UpdateDownloadState, UpdateReport } from '../shared/release-updates';
+import type { InstallResult, ReleaseHistoryEntry, UpdateDownloadState, UpdateReport } from '../shared/release-updates';
 import { ReleaseLink } from './About';
 
 const installMessages = {
@@ -39,6 +39,15 @@ export function UpdatesPanel() {
   const [requestingDownload, setRequestingDownload] = useState(false);
   const [download, setDownload] = useState<UpdateDownloadState>({ state: 'idle' });
   const [error, setError] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<ReleaseHistoryEntry[]>();
+  useEffect(() => {
+    if (!historyOpen || history || !updates) return;
+    let active = true;
+    void updates.history().then((rows) => { if (active) setHistory(rows); }, () => { if (active) setHistory([]); });
+    return () => { active = false; };
+  }, [historyOpen, history, updates]);
+  const day = useMemo(() => new Intl.DateTimeFormat(t.language, { day: '2-digit', month: 'short', year: 'numeric' }), [t.language]);
   useEffect(() => {
     if (!updates) return;
     let active = true;
@@ -97,7 +106,18 @@ export function UpdatesPanel() {
       {updates && <button type="button" className="button outline-button" disabled={!report || busy} onClick={() => {
         setReport(undefined); setStatus(undefined); setError(''); setAttempt((n) => n + 1);
       }}><RotateCw size={15} />{t('Проверить обновления')}</button>}
+      {updates && <button type="button" className="button outline-button" aria-expanded={historyOpen} aria-controls={historyOpen ? 'update-history' : undefined}
+        onClick={() => setHistoryOpen(!historyOpen)}><History size={15} />{t('История обновлений')}</button>}
       <ReleaseLink className="button outline-button" />
     </div>
+    {historyOpen && <div className="update-history" id="update-history">
+      {!history ? <p role="status">{t('Читаем историю релизов…')}</p>
+        : !history.length ? <p role="status">{t('Не удалось получить историю. Откройте релизы Luma.')}</p>
+        : <ol className="update-history-list">{history.map((entry) => <li key={entry.version}>
+          <div className="update-history-head"><strong>{t('Версия {0}', entry.version)}</strong>
+            {entry.publishedAt && <time dateTime={entry.publishedAt}>{day.format(new Date(entry.publishedAt))}</time>}</div>
+          {entry.notes && <p>{entry.notes}</p>}
+        </li>)}</ol>}
+    </div>}
   </div>;
 }

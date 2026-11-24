@@ -3,7 +3,7 @@ import { initialBeat, sampleBeat } from '../shared/beat';
 import type { ReadSpectrum } from '../player/useAudio';
 import { compactScene, sceneBufferSize, sceneFps } from '../shared/scene-budget';
 
-import { advanceColumns, advanceSpectrum, columnPalettes, drawColumns, drawAurora, drawNotes, drawOrbits, drawPrism, drawSpectrum, drawStars, flattenSpectrum, seeded, spectrumColumns, spectrumFrames } from './scene-art';
+import { advanceColumns, advanceSpectrum, drawAurora, drawNotes, drawOrbits, drawPrism, drawRibbons, drawSpectrum, drawStars, flattenSpectrum, ribbonPalettes, seeded, spectrumColumns, spectrumFrames } from './scene-art';
 import { CANVAS_EFFECTS, coastSpeed, isAmbientEffect } from '../shared/scene-motion';
 import type { CanvasEffect } from '../shared/scene-motion';
 
@@ -194,7 +194,7 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
     const onsets: number[] = [];
     const terrain = effect === 'spectrum' ? spectrumFrames() : undefined;
     const bars = effect === 'columns' ? spectrumColumns() : undefined;
-    let barColors: ReturnType<typeof columnPalettes> | undefined;
+    let barColors: ReturnType<typeof ribbonPalettes> | undefined;
     const reactive = !!(bars || terrain) || effect === 'pulse';
     const ambient = isAmbientEffect(effect);
     const coast = !ambient && CANVAS_EFFECTS[effect];
@@ -218,7 +218,7 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
       } else if (bars && barColors) {
         if (!canMove || (!active && !velocity)) bars.fill(0);
         else if (dt > 0) advanceColumns(bars, dt, live ? { time: t, bins } : active && !read ? { time: t } : undefined);
-        drawColumns(ctx, w, h, bars, barColors);
+        drawRibbons(ctx, w, h, bars, barColors, t);
       } else if (effect === 'pulse' && pulseHalo) {
         if (onset || (!live && runtime.current.playing && Math.floor(t / 1.25) !== Math.floor((t - dt * velocity / runtime.current.tempo) / 1.25))) onsets.push(t);
         while (onsets.length && (t - onsets[0] >= 1.22 || !velocity)) onsets.shift();
@@ -266,7 +266,7 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
       if (width === surface.width && height === surface.height) return;
       surface.width = width;
       surface.height = height;
-      if (bars && width && height) barColors = columnPalettes(ctx, height);
+      if (bars && width && height) barColors = ribbonPalettes(ctx, width);
       if (effect === 'pulse' && width && height) {
         pulseHalo = ctx.createRadialGradient(width * .65, height * .49, 0, width * .65, height * .49, .45 * Math.min(width, height));
         pulseHalo.addColorStop(0, '#f1c9face'); pulseHalo.addColorStop(.28, '#b883e371'); pulseHalo.addColorStop(1, '#853ae500');

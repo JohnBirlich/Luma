@@ -23,6 +23,8 @@ import { isGeniusPage } from '../src/shared/genius.js';
 import { isOpenwhydSourceLink } from '../src/shared/openwhyd.js';
 import { isRadioBrowserPage } from '../src/shared/radio-browser.js';
 import { LISTENBRAINZ_ABOUT, MUSIC_SERVICE_GUIDES } from '../src/shared/music-services.js';
+import { probeNetwork } from './system.js';
+import { DesktopLabs, storages } from './labs.js';
 import { createOnlineExporter } from './online-export.js';
 import { MAIN_MINIMUM, widgetController } from './desktop-widget.js';
 import { createMetadataService, validAcoustidClient } from '../src/shared/metadata-service.js';
@@ -65,7 +67,8 @@ const floatOutput = new DesktopFloatOutput(process.platform === 'win32' ? (app.i
   ? join(process.resourcesPath, 'audio', 'LumaFloat.exe') : join(app.getAppPath(), 'dist-native', 'LumaFloat.exe')) : undefined);
 const discord = new DesktopDiscord(process.platform === 'win32');
 const vkCovers = new VkCoverCache(() => join(app.getPath('userData'), 'vk-listen-covers'));
-const vkSite = new VkSite(vkCovers);
+const labs = new DesktopLabs(() => join(app.getPath('userData'), 'labs.json'));
+const vkSite = new VkSite(vkCovers, labs);
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -109,6 +112,9 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   let t = textFor('ru');
   ipcMain.handle('ui:language', (event, language: unknown) => { appWindow(event); t = textFor(readUiLanguage(language)); });
   ipcMain.handle('app:info', (event) => { appWindow(event); return info; });
+  ipcMain.handle('system:network', async (event) => { appWindow(event); return probeNetwork(); });
+  ipcMain.handle('labs:read', (event) => { appWindow(event); return labs.value; });
+  ipcMain.handle('labs:update', (event, patch: unknown) => { appWindow(event); return labs.update(patch); });
   lastfm.onChange = (status) => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('lastfm:changed', status);
   };
@@ -172,6 +178,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('vk-site:layout', (event, id, bounds, foreground) => vkSite.layout(appWindow(event), id, bounds, foreground));
   ipcMain.handle('vk-site:close', (event, id) => vkSite.close(appWindow(event), id));
   ipcMain.handle('vk-site:command', (event, id, action, fraction) => vkSite.command(appWindow(event), id, action, fraction));
+  ipcMain.handle('vk-site:collection', (event, id, kind, name) => vkSite.collection(appWindow(event), id, kind, name));
   ipcMain.handle('vk-site:reset', (event, id) => vkSite.clear(appWindow(event), id, {
     type: 'warning', title: t('Сессия VK'), message: t('Сбросить данные входа VK в Luma?'),
     detail: t('Вход в обычном браузере и сохранённые плейлисты Luma останутся.'),
@@ -252,6 +259,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
     return updates?.download(version, app.getPath('downloads'), () => canUpdate(owner)) ?? 'unavailable';
   });
   ipcMain.handle('updates:cancel-download', (event) => { appWindow(event); return updates?.cancelDownload() ?? false; });
+  ipcMain.handle('updates:history', (event) => { appWindow(event); return updates?.history() ?? []; });
   ipcMain.handle('updates:reveal-download', (event) => {
     const owner = appWindow(event);
     return updates?.revealDownload((path) => { if (canUpdate(owner)) shell.showItemInFolder(path); }) ?? false;
@@ -454,9 +462,11 @@ if (!app.requestSingleInstanceLock()) {
     protocol.handle('luma', createProtocolHandler(join(app.getAppPath(), 'dist'), library, devUrl?.origin, cache, audiusFetch,
       (id) => vkSite.artwork(id), (key) => vkCovers.get(key)));
     journal.main('desktop.protocol');
+    await labs.load();
+    const secretStore = storages(safeStorage, labs.value.unencryptedStorage);
     const lastfm = await DesktopLastFm.open(lastFmConfig(process.env.LUMA_LASTFM_API_KEY, process.env.LUMA_LASTFM_SECRET), net.fetch,
-      join(app.getPath('userData'), 'lastfm-session.bin'), safeStorage);
-    const music = await DesktopMusicServices.open(join(app.getPath('userData'), 'music-services.bin'), safeStorage, net.fetch, info.version);
+      join(app.getPath('userData'), 'lastfm-session.bin'), secretStore);
+    const music = await DesktopMusicServices.open(join(app.getPath('userData'), 'music-services.bin'), secretStore, net.fetch, info.version);
     bindIpc(library, journal, info, lastfm, cache, music);
     powerMonitor.on('resume', () => {
       if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('player:resume');

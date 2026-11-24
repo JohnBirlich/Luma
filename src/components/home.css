@@ -274,3 +274,6 @@
   .home-now .artwork[data-reveal] > img:not([data-loaded]) { opacity: 0; }
   .home-now .artwork[data-reveal] > img[data-loaded] { animation: current-track-appear 280ms ease-out; }
 }
+
+.hub-updates-head { display: flex; align-items: center; margin: 2px 0 10px; }
+.hub-updates-head .text-button { display: inline-flex; align-items: center; gap: 4px; }

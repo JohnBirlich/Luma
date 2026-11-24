@@ -12,6 +12,11 @@ import type { VkSiteState } from '../src/shared/vk-site.js';
 const bridge: DesktopBridge = {
   setUiLanguage: (language) => ipcRenderer.invoke('ui:language', language),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
+  probeNetwork: () => ipcRenderer.invoke('system:network'),
+  labs: {
+    read: () => ipcRenderer.invoke('labs:read'),
+    update: (patch) => ipcRenderer.invoke('labs:update', patch),
+  },
   searchCommunity: (id, query, source) => ipcRenderer.invoke('online:search-community', id, query, source),
   cancelCatalogSearch: (id) => ipcRenderer.invoke('online:cancel-search', id),
   openOnlineLink: (url: string) => ipcRenderer.invoke('online:open-link', url),
@@ -22,6 +27,7 @@ const bridge: DesktopBridge = {
     download: (version) => ipcRenderer.invoke('updates:download', version),
     downloadState: () => ipcRenderer.invoke('updates:download-state'),
     cancelDownload: () => ipcRenderer.invoke('updates:cancel-download'),
+    history: () => ipcRenderer.invoke('updates:history'),
     revealDownload: () => ipcRenderer.invoke('updates:reveal-download'),
     onDownloadState: (callback) => {
       const listener = (_event: IpcRendererEvent, state: UpdateDownloadState) => callback(state);
@@ -59,6 +65,7 @@ const bridge: DesktopBridge = {
     layout: (id, bounds, foreground) => ipcRenderer.invoke('vk-site:layout', id, bounds, foreground),
     close: (id) => ipcRenderer.invoke('vk-site:close', id),
     command: (id, action, fraction) => ipcRenderer.invoke('vk-site:command', id, action, fraction),
+    collection: (id, kind, name) => ipcRenderer.invoke('vk-site:collection', id, kind, name),
     reset: (id) => ipcRenderer.invoke('vk-site:reset', id),
     onState: (callback) => {
       const listener = (_event: IpcRendererEvent, id: number, state: VkSiteState) => callback(id, state);

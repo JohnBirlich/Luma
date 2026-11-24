@@ -16,12 +16,15 @@ interface DiscoveryProps extends Rows {
   favorites: ReadonlySet<string>; disliked: ReadonlySet<string>;
   busy: boolean; connected: boolean; visible: boolean;
   playAll(tracks: Track[], id?: string): boolean;
+  /** Starts the same shelf inside VK Music when the account is signed in there. */
+  openVkTopic?(kind: 'genre' | 'mood', name: string): Promise<boolean>;
   save(title: string, tracks: readonly Track[]): boolean;
 }
 
-function TopicShelf({ name, detail, topics, selected, counts, open, children, limit = 6 }: {
+function TopicShelf({ name, detail, topics, selected, counts, open, start, children, limit = 6 }: {
   name: string; detail?: string; topics: readonly DiscoveryCard[]; selected?: DiscoveryCard;
-  counts: ReadonlyMap<string, Track[]>; open(topic?: DiscoveryCard): void; children: ReactNode; limit?: number;
+  counts: ReadonlyMap<string, Track[]>; open(topic?: DiscoveryCard): void; start?(topic: DiscoveryCard): void;
+  children: ReactNode; limit?: number;
 }) {
   const t = useText();
   const [all, setAll] = useState(false);
@@ -37,7 +40,12 @@ function TopicShelf({ name, detail, topics, selected, counts, open, children, li
       const active = selected?.id === item.id;
       return <Tile key={item.id} open title={t(item.title)} description={item.detail ? t(item.detail) : matches.length ? t('Треков: {0}', matches.length) : t('Найти в каталоге')}
         symbol={item.mark} color={item.color} image={item.detail ? matches[0] : undefined} expanded={active}
-        className={active ? 'topic-selected' : ''} onClick={() => open(active ? undefined : item)} />;
+        className={active ? 'topic-selected' : ''} onClick={() => {
+          // A VK user gets VK's own genre or mood playing right away; Luma's shelf
+          // still opens underneath so the local tracks stay reachable.
+          if (!active) start?.(item);
+          open(active ? undefined : item);
+        }} />;
     })}</div>
     {onShelf && children}
   </Shelf>;
@@ -117,9 +125,10 @@ export function Discovery(props: DiscoveryProps) {
     return (related.length ? related : starred.length ? starred : recent).slice(0, 9);
   }, [tracks, recent, related, favorites]);
   const selection = { counts, selected: topic, open: (item?: DiscoveryCard) => setSelected(item?.id) };
+  const vkStart = (kind: 'genre' | 'mood') => props.openVkTopic ? (card: DiscoveryCard) => { void props.openVkTopic?.(kind, card.title); } : undefined;
   return <>
-    <TopicShelf name="Жанры" topics={genres} {...selection}>{detail}</TopicShelf>
-    <TopicShelf name="Настроения и занятия" topics={MOODS} {...selection}>{detail}</TopicShelf>
+    <TopicShelf name="Жанры" topics={genres} {...selection} start={vkStart('genre')}>{detail}</TopicShelf>
+    <TopicShelf name="Настроения и занятия" topics={MOODS} {...selection} start={vkStart('mood')}>{detail}</TopicShelf>
     <TopicShelf name="Подборки Luma" detail="Подборки по тегам из медиатеки." topics={EDITORIAL} {...selection}>{detail}</TopicShelf>
     {picks.length > 0 && <Shelf title={related.length && seed ? t('Похоже на «{0}»', seed.title) : t('Из вашей коллекции')}
       detail={t('По вашим прослушиваниям и отметкам в Luma.')}>

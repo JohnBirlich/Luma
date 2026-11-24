@@ -187,27 +187,72 @@ export function advanceColumns(bars: Float32Array, dt: number, sample?: ColumnSa
   }
 }
 
-export function columnPalettes(ctx: CanvasRenderingContext2D, height: number) {
-  return ['#ab9dff', '#6ad9f7', '#e09abf'].map((color) => {
-    const gradient = ctx.createLinearGradient(0, height, 0, height * .09);
-    gradient.addColorStop(0, `${color}09`);
-    gradient.addColorStop(.69, `${color}bf`);
-    gradient.addColorStop(1, '#fff5eb');
-    return { gradient, color };
+export function ribbonPalettes(ctx: CanvasRenderingContext2D, width: number) {
+  return [
+    ['#2fd0ff', '#37f0c4', '#c9ffe4'],
+    ['#ffb03a', '#ff3d7f', '#9b7cff'],
+    ['#8f9dff', '#5fe6ff', '#b2ffe9'],
+  ].map(([from, through, to]) => {
+    const gradient = ctx.createLinearGradient(0, 0, width, 0);
+    gradient.addColorStop(0, from);
+    gradient.addColorStop(.52, through);
+    gradient.addColorStop(1, to);
+    return { gradient, color: through };
   });
 }
 
-export function drawColumns(ctx: CanvasRenderingContext2D, w: number, h: number, bars: Float32Array, palette: ReturnType<typeof columnPalettes>) {
-  const slot = w * .89 / bars.length, base = h * .92;
-  const tip = Math.max(1, h * .0035);
+/**
+ * «Ленты»: the same band levels, read as three mirrored ribbons that travel
+ * sideways, pinch at both ends and light up where the track has energy.
+ */
+export function drawRibbons(ctx: CanvasRenderingContext2D, w: number, h: number, bars: Float32Array, palette: ReturnType<typeof ribbonPalettes>, t: number) {
+  const midY = h * .5, steps = 128;
+  // Smooth the 17 bands into one continuous envelope instead of 17 hard steps.
+  const level = (u: number) => {
+    const at = u * (bars.length - 1), index = Math.min(bars.length - 2, Math.floor(at)), f = at - index;
+    const a = bars[index] || 0, b = bars[index + 1] || 0;
+    return .1 + .9 * (a + (b - a) * (f * f * (3 - 2 * f)));
+  };
   ctx.save();
-  for (let i = 0; i < bars.length; i++) {
-    const { color, gradient } = palette[i % palette.length];
-    const x = w * .055 + i * slot, bar = Math.max(tip, (bars[i] + .025) * base);
-    ctx.fillStyle = gradient; ctx.fillRect(x, base - bar, slot * .70, bar);
-    ctx.globalAlpha = .56 + .40 * Math.min(1, bars[i] * 3);
-    ctx.fillStyle = color; ctx.fillRect(x, base - bar, slot * .70, tip);
-    ctx.globalAlpha = 1;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let ribbon = 0; ribbon < palette.length; ribbon++) {
+    const { gradient, color } = palette[ribbon];
+    const phase = t * (.62 + ribbon * .17) + ribbon * 2.2;
+    const span = h * (.24 - ribbon * .045);
+    const shift = (ribbon - 1) * h * .21;
+    const tops: number[][] = [], bottoms: number[][] = [];
+    for (let step = 0; step <= steps; step++) {
+      const u = step / steps;
+      const wave = Math.sin(u * Math.PI * (2.1 + ribbon * .45) + phase) * .5
+        + Math.sin(u * Math.PI * 5.3 - phase * 1.25) * .21;
+      const taper = Math.sin(Math.PI * u) ** .72;
+      const amp = Math.max(h * .004, span * level(u) * (.42 + .58 * (wave + 1) / 2) * taper);
+      const x = u * w;
+      tops.push([x, midY + shift - amp]);
+      bottoms.push([x, midY + shift + amp * .82]);
+    }
+    ctx.beginPath();
+    ctx.moveTo(tops[0][0], tops[0][1]);
+    for (let i = 1; i < tops.length; i++) ctx.lineTo(tops[i][0], tops[i][1]);
+    for (let i = bottoms.length - 1; i >= 0; i--) ctx.lineTo(bottoms[i][0], bottoms[i][1]);
+    ctx.closePath();
+    ctx.globalAlpha = .30 - ribbon * .05;
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    ctx.globalAlpha = .9 - ribbon * .16;
+    ctx.strokeStyle = gradient;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = Math.max(4, h * .03);
+    ctx.lineWidth = Math.max(1, h * (.0045 - ribbon * .0008));
+    ctx.beginPath();
+    ctx.moveTo(tops[0][0], tops[0][1]);
+    for (let i = 1; i < tops.length; i++) ctx.lineTo(tops[i][0], tops[i][1]);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(bottoms[0][0], bottoms[0][1]);
+    for (let i = 1; i < bottoms.length; i++) ctx.lineTo(bottoms[i][0], bottoms[i][1]);
+    ctx.stroke();
   }
   ctx.restore();
 }

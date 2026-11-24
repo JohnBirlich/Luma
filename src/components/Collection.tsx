@@ -165,7 +165,7 @@ export function NowPlayingCard(props: NowPlayingProps) {
               </>}
               <button type="button" className="icon-button hero-fullscreen" onClick={props.openPresentation} aria-label={t("Развернуть текущий трек")} title={t("Во весь экран (F)")} aria-haspopup="dialog"><Maximize2 size={17} /></button>
             </>}
-            {props.vkControls && <VolumeControl {...props.vkControls} />}
+            {props.vkControls && appearance.showVolume && <VolumeControl {...props.vkControls} />}
           </div>
         </div>
         {featured && <Artwork track={track} className="hero-featured-cover" reveal={reveal} />}

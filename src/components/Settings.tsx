@@ -2,7 +2,7 @@ import { APP_NAME } from '../shared/app-info';
 import { useText } from '../i18n/context';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { ArrowLeft, ArrowUpCircle, AudioLines, Bell, Bug, Check, HardDrive, Headphones, Keyboard, Monitor, Music2, Palette, Play, Plug, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpCircle, AudioLines, Bell, Bug, Check, Globe2, HardDrive, Headphones, Keyboard, Monitor, Music2, Palette, Play, Plug, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
 import { ACCENTS, accentFor, CROSSFADE_TIMES, DATA_LANGUAGES, EFFECT_TEMPOS, formatCount, SEEK_STEPS, THEMES, WIDGET_BACKGROUNDS, WIDGET_SHORTCUT } from '../shared/customization';
 import type { Appearance, CrossfadeTime, DataLanguage, EffectTempo, LibraryLayout, PlaybackPreferences, SeekStep, StartPage, ThemeName, WidgetBackground } from '../shared/customization';
 import { describeAudioFormat, describeStream, NETWORK_MODES, STREAM_QUALITIES } from '../shared/audio-quality';
@@ -30,6 +30,8 @@ import type { DiscordPreferences } from '../shared/discord-presence';
 import { SleepTimer } from './SleepTimer';
 import type { SleepMinutes } from '../shared/sleep-timer';
 import { VinylRecord } from './VinylRecord';
+import { mergeLabSettings, validProxyHost, validProxyPort } from '../shared/labs';
+import type { LabSettings } from '../shared/labs';
 
 
 function ReleaseSettings() {
@@ -159,7 +161,8 @@ const APP_SECTIONS = [
   { id: 'notices', label: 'Уведомления', detail: 'Подсказки в интерфейсе и ошибки', icon: Bell },
   { id: 'integrations', label: 'Интеграции', detail: 'Виджет, тексты песен и музыкальные сервисы', icon: Plug },
   { id: 'storage', label: 'Хранилище', detail: 'Локальная коллекция, история и журнал', icon: HardDrive },
-  { id: 'labs', label: 'Экспериментальные настройки', detail: 'Реакция фонов на звук и доступность распознавания', icon: Bug },
+  { id: 'proxy', label: 'Прокси', detail: 'Соединение с VK через прокси-сервер', icon: Globe2 },
+  { id: 'labs', label: 'Экспериментальные настройки', detail: 'Ранний доступ, домен VK и хранение данных входа', icon: Bug },
   { id: 'keys', label: 'Горячие клавиши', detail: 'Управление плеером с клавиатуры', icon: Keyboard },
   { id: 'updates', label: 'Обновления приложения', detail: 'Версия сборки и переход к релизам', icon: ArrowUpCircle },
 ] as const;
@@ -172,11 +175,61 @@ const shortcuts = [
   [WIDGET_SHORTCUT.label, 'Открыть или закрыть виджет (в фокусе Luma, Windows)'],
 ];
 
+function useLabSettings() {
+  const api = window.luma?.labs;
+  const [labs, setLabs] = useState<LabSettings>();
+  useEffect(() => {
+    if (!api) return;
+    let active = true;
+    void api.read().then((value) => { if (active) setLabs(value); }, () => {});
+    return () => { active = false; };
+  }, [api]);
+  const update = (patch: Parameters<NonNullable<typeof api>['update']>[0]) => {
+    setLabs((current) => current ? mergeLabSettings(current, patch) : current);
+    if (api) void api.update(patch).then(setLabs, () => {});
+  };
+  return [labs, update] as const;
+}
+
+function ProxySettings({ labs, update }: { labs?: LabSettings; update(patch: Partial<LabSettings> | { proxy?: Partial<LabSettings['proxy']> }): void }) {
+  const t = useText();
+  const proxy = labs?.proxy;
+  const [draft, setDraft] = useState<{ host: string; port: string }>();
+  const host = draft?.host ?? proxy?.host ?? '';
+  const port = draft?.port ?? proxy?.port ?? '';
+  const hostValid = !host || validProxyHost(host);
+  const portValid = !port || validProxyPort(port);
+  return <SettingCard title={t("Прокси")}>
+    <div className="proxy-status">
+      <span>{t(proxy?.enabled ? 'Включено' : 'Выключено')}</span>
+      <button type="button" className="settings-switch" role="switch" aria-label={t("Прокси")} aria-checked={proxy?.enabled === true}
+        disabled={!proxy} onClick={() => update({ proxy: { enabled: proxy?.enabled !== true } })}><i aria-hidden="true" /></button>
+    </div>
+    <div className="proxy-art" aria-hidden="true"><Globe2 size={44} /><ArrowRight size={20} /><span><Globe2 size={32} /></span></div>
+    <p className="proxy-note">{t("Отправляйте запросы к ВК через прокси для обхода геоблокировки треков или ограничений со стороны правительства.")}</p>
+    <p className="proxy-note">{t("Учтите, что VK блокирует прослушку некоторых лицензионных треков без подписки, если ваш прокси-сервер находится за пределами России, Украины, Казахстана или стран СНГ.")}</p>
+    {proxy?.enabled && <div className="proxy-form">
+      <label><span>{t("Сервер или IP")}</span>
+        <input value={host} inputMode="url" autoComplete="off" spellCheck={false} placeholder="127.0.0.1" aria-invalid={!hostValid}
+          onChange={(event) => setDraft({ host: event.currentTarget.value.slice(0, 253), port })} /></label>
+      <label><span>{t("Порт")}</span>
+        <input value={port} inputMode="numeric" autoComplete="off" placeholder="1080" aria-invalid={!portValid}
+          onChange={(event) => setDraft({ host, port: event.currentTarget.value.replace(/\D/g, '').slice(0, 5) })} /></label>
+      <button type="button" className="button primary-button" disabled={!validProxyHost(host) || !validProxyPort(port)}
+        onClick={() => { update({ proxy: { host, port } }); setDraft(undefined); }}>{t("Сохранить прокси")}</button>
+    </div>}
+    {proxy?.enabled && !proxy.host && <p className="proxy-hint" role="status">{t("Пока адрес не сохранён, запросы к VK идут напрямую.")}</p>}
+    {!hostValid && <p className="proxy-hint is-error" role="status">{t("Адрес должен быть доменом или IP без http:// и пробелов.")}</p>}
+    {!portValid && <p className="proxy-hint is-error" role="status">{t("Порт — число от 1 до 65535.")}</p>}
+  </SettingCard>;
+}
+
 export function SettingsPage(props: SettingsProps) {
   const t = useText();
   const { appearance, playback, changeAppearance, changePlayback } = props;
   const section = allSections.find(({ id }) => id === props.sectionId);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [labs, updateLabs] = useLabSettings();
   const root = useRef<HTMLDivElement>(null);
   const formatId = section?.id === 'sound' && props.previewTrack && !props.previewTrack.format && !props.previewTrack.online && !props.previewTrack.demo ? props.previewTrack.id : undefined;
   const [formatProbe, setFormatProbe] = useState<{ id: string; result: Awaited<ReturnType<typeof localLibrary.audioFormat>> }>();
@@ -265,13 +318,34 @@ export function SettingsPage(props: SettingsProps) {
           {section?.id === 'now' && <>
             <SettingCard title={t("Экран «Сейчас играет»")}>
               <NowPlayingOptions appearance={appearance} change={changeAppearance} />
-              <ToggleRow title={t("Цвет фона из обложки")} detail={t("Если выключено, фон использует акцент темы.")} enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
+              <ToggleRow title={t("Адаптивный цвет контента")} detail={t("Фон и подсветка берут цвет обложки. Если выключено, используется акцент темы.")} enabled={appearance.coverColors} change={() => changeAppearance({ ...appearance, coverColors: !appearance.coverColors })} />
               <ToggleRow title={t("Реакция на музыку")} detail={t("Спектр и свет в некоторых фонах откликаются на локальный трек. При отключении остаётся обычная анимация.")} enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
               <label className="setting-row select-row"><span><strong>{t("Темп фона")}</strong><small>{t("Скорость анимации, не скорость песни.")}</small></span>
                 <select value={appearance.effectTempo} disabled={appearance.effect === 'off'} onChange={(event) => changeAppearance({ ...appearance, effectTempo: event.currentTarget.value as EffectTempo })}>
                   {Object.entries(EFFECT_TEMPOS).map(([id, { label }]) => <option key={id} value={id}>{t(label)}</option>)}
                 </select>
               </label>
+            </SettingCard>
+            <SettingCard title={t("Обложка")}>
+              <ToggleRow title={t("Отображать обложку на весь экран")} detail={t("Обложка занимает фон экрана «Сейчас играет» на компоновках «Обложка» и «Размытие».")}
+                enabled={appearance.hero === 'cover' || appearance.hero === 'blur'}
+                change={() => changeAppearance({ ...appearance, hero: appearance.hero === 'cover' ? 'center' : 'cover' })} />
+              <ToggleRow title={t("Закруглить обложку альбома")} detail={t("Выключите, если нужна строгая квадратная обложка.")}
+                enabled={appearance.coverRound} change={() => changeAppearance({ ...appearance, coverRound: !appearance.coverRound })} />
+              <ToggleRow title={t("Скрыть обводку у обложки")} detail={t("Тонкая светлая рамка отделяет обложку от фона.")}
+                enabled={!appearance.coverOutline} change={() => changeAppearance({ ...appearance, coverOutline: !appearance.coverOutline })} />
+            </SettingCard>
+            <SettingCard title={t("Пункт управления")}>
+              <ToggleRow title={t("Пункт управления")} detail={t("Оформление, эквалайзер и очередь под обложкой. Здесь же его можно скрыть.")}
+                enabled={appearance.showTools} change={() => changeAppearance({ ...appearance, showTools: !appearance.showTools })} />
+              <ToggleRow title={t("Показывать панель громкости")} detail={t("Ползунок громкости в большом плеере и на главной.")}
+                enabled={appearance.showVolume} change={() => changeAppearance({ ...appearance, showVolume: !appearance.showVolume })} />
+              <ToggleRow title={t("Текст песни")} detail={t("Карточка с текстом под обложкой на главной.")}
+                enabled={appearance.showLyrics} change={() => changeAppearance({ ...appearance, showLyrics: !appearance.showLyrics })} />
+            </SettingCard>
+            <SettingCard title={t("Жесты")} detail={t("Работают мышью и касанием в экране «Сейчас играет».")}>
+              <ToggleRow title={t("Переключение треков в «Сейчас играет»")} detail={t("Смахните по экрану влево или вправо, чтобы перейти к следующему или предыдущему треку.")}
+                enabled={appearance.swipeTracks} change={() => changeAppearance({ ...appearance, swipeTracks: !appearance.swipeTracks })} />
             </SettingCard>
             <SettingCard title={t("Полноэкранный плеер")}>
               <ToggleRow title={t("Разворачивать на весь монитор")} detail={t("Если выключено, большой плеер открывается внутри окна Luma.")} enabled={appearance.nativeFullscreen} change={() => changeAppearance({ ...appearance, nativeFullscreen: !appearance.nativeFullscreen })} />
@@ -386,7 +460,16 @@ export function SettingsPage(props: SettingsProps) {
               <div className="settings-actions"><button type="button" className="button outline-button" onClick={props.openDiagnostics}>{t("Открыть диагностику")}</button></div>
             </SettingCard>
           </>}
+          {section?.id === 'proxy' && <ProxySettings labs={labs} update={updateLabs} />}
           {section?.id === 'labs' && <>
+            <SettingCard title={t("Ранний доступ")} detail={t("Эти настройки находятся в очень раннем доступе и могут негативно повлиять на работу приложения. Их могут позже или убрать из этой секции, или совсем убрать из приложения.")}>
+              <ToggleRow title={t("Использовать домен vk.ru")} detail={t("Может помочь если в белых списках нет vk.com")} disabled={!labs}
+                enabled={labs?.vkDomain !== 'vk.com'} change={() => updateLabs({ vkDomain: labs?.vkDomain === 'vk.com' ? 'vk.ru' : 'vk.com' })} />
+              <ToggleRow title={t("Отключить шифрование данных")} disabled={!labs} enabled={labs?.unencryptedStorage === true}
+                detail={t("Ваши данные входа будут сохранены без шифрования. Уменьшает безопасность, но исправляет выходы из аккаунта на устройствах с проблемным хранилищем.")}
+                change={() => updateLabs({ unencryptedStorage: labs?.unencryptedStorage !== true })} />
+              <p className="settings-labs-note">{t("Для применения изменений полностью перезапустите приложение.")}</p>
+            </SettingCard>
             <SettingCard title={t("Аудиореактивные фоны")} detail={t("Экспериментальный спектр и подсветка для файлов в Luma.")}>
               <ToggleRow title={t("Реакция на музыку")} detail={t("Выключите, если нужен более спокойный фон или меньше нагрузки.")} enabled={appearance.audioReactive} change={() => changeAppearance({ ...appearance, audioReactive: !appearance.audioReactive })} />
             </SettingCard>

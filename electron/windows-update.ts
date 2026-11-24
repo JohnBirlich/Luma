@@ -6,8 +6,8 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import { readLimitedBody } from '../src/shared/metadata-service.js';
-import { installerName, LATEST_RELEASE_API, newerStableVersion, readWindowsRelease, RELEASE_REPO_ID, windowsArtifactName } from '../src/shared/release-updates.js';
-import type { DownloadResult, InstallResult, UpdateDownloadState, UpdateMode, UpdateReport, WindowsRelease } from '../src/shared/release-updates.js';
+import { installerName, LATEST_RELEASE_API, newerStableVersion, readReleaseHistory, readWindowsRelease, RELEASE_REPO_ID, RELEASES_API, windowsArtifactName } from '../src/shared/release-updates.js';
+import type { DownloadResult, InstallResult, ReleaseHistoryEntry, UpdateDownloadState, UpdateMode, UpdateReport, WindowsRelease } from '../src/shared/release-updates.js';
 
 const fetchOptions = { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', redirect: 'error' } as const;
 const UPDATE_RECHECK_MS = 5 * 60_000;
@@ -132,6 +132,17 @@ export class WindowsUpdates {
     return this.pending;
   }
   getDownloadState(): UpdateDownloadState { return this.downloadState; }
+
+  /** The published releases, read once per request — never affects update decisions. */
+  async history(): Promise<ReleaseHistoryEntry[]> {
+    try {
+      const signal = AbortSignal.any([this.stopped.signal, AbortSignal.timeout(12_000)]);
+      const response = await this.fetcher(RELEASES_API, { ...fetchOptions, signal, headers: githubApiHeaders('application/vnd.github+json') });
+      if (!response.ok) { await response.body?.cancel().catch(() => {}); return []; }
+      const body = await readLimitedBody(response, 1024 * 1024, signal);
+      return readReleaseHistory(JSON.parse(new TextDecoder().decode(body)));
+    } catch { return []; }
+  }
 
   private publishDownload(state: UpdateDownloadState) {
     this.downloadState = state;

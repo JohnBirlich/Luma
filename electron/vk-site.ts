@@ -3,11 +3,14 @@ import type { BrowserWindow } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../src/shared/vk.js';
-import { VK_SITE_PARTITION, VK_TRANSPORT, readVkNowPlaying, vkArtworkPixels, vkArtworkUrl, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds } from '../src/shared/vk-site.js';
+import { LEGACY_VK_SESSION } from '../src/shared/vk.js';
+import { proxyRules, vkMusicUrlFor } from '../src/shared/labs.js';
+import type { LabSettings } from '../src/shared/labs.js';
+import { VK_SITE_PARTITION, VK_TRANSPORT, readVkCollection, readVkCollectionName, readVkNowPlaying, vkArtworkPixels, vkArtworkUrl, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds, withVkDomain } from '../src/shared/vk-site.js';
 import type { VkNowPlaying, VkPlaybackAction, VkSiteState } from '../src/shared/vk-site.js';
 import { vkAppearanceScript } from './vk-appearance.js';
 import { inspectVkPlayer } from './vk-player.js';
+import { inspectVkCollection } from './vk-collection.js';
 import { fetchVkArtwork } from './vk-artwork.js';
 import type { VkArtwork } from './vk-artwork.js';
 import { vkCoverKey } from './vk-cover-cache.js';
@@ -35,7 +38,17 @@ export class VkSite {
   /** Cover keys already written to disk and therefore safe to publish. */
   private readonly cached = new Set<string>();
 
-  constructor(private readonly covers?: VkCoverCache) {}
+  constructor(private readonly covers?: VkCoverCache, private readonly lab?: { readonly value: LabSettings }) {}
+
+  private get settings(): LabSettings {
+    return this.lab?.value ?? { vkDomain: 'vk.ru', unencryptedStorage: false, proxy: { enabled: false, host: '', port: '' } };
+  }
+
+  /** The experimental proxy applies to the VK profile only, never to Luma's own requests. */
+  private applyProxy() {
+    const rules = proxyRules(this.settings.proxy);
+    void this.partition().setProxy(rules ? { proxyRules: rules } : { mode: 'direct' }).catch(() => {});
+  }
 
   artwork(id: string) {
     const active = this.active;
@@ -65,6 +78,9 @@ export class VkSite {
       }
     }
     this.publish(active, { track, engaged, cover: active.cover?.image ? `luma://app/media/vk-cover/${active.cover.id}` : undefined });
+    // A page that starts playing outside its native slot is still silent until the
+    // audio is unmuted again, and only engagement can move it out of that state.
+    if (engaged) this.visibility(active);
   }
 
   private async loadCover(active: VkView, cover: CurrentCover, urls: string[]) {
@@ -174,7 +190,7 @@ export class VkSite {
 
   private navigate(active: VkView, url: string) {
     if (this.active !== active || !vkSiteUrl(url) || active.view.webContents.isDestroyed()) return;
-    void active.view.webContents.loadURL(url).catch((error: unknown) => {
+    void active.view.webContents.loadURL(withVkDomain(url, this.settings.vkDomain) ?? url).catch((error: unknown) => {
       if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ERR_ABORTED')) this.fail(active);
     });
   }
@@ -182,6 +198,9 @@ export class VkSite {
   open(owner: BrowserWindow, id: unknown, url: unknown, bounds: unknown) {
     if (this.resetting || typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || !vkSiteEntry(url) || owner.isMinimized()) throw new Error('VK view is unavailable');
     this.close();
+    // The experimental domain switch and proxy are applied before the first request.
+    const entry = withVkDomain(url, this.settings.vkDomain) ?? url;
+    this.applyProxy();
     const view = new WebContentsView({ webPreferences: { preload, session: this.partition(), nodeIntegration: false, nodeIntegrationInSubFrames: false,
       contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, disableHtmlFullscreenWindowResize: true } });
     view.setBackgroundColor('#171820');
@@ -198,7 +217,7 @@ export class VkSite {
     const restore = () => { active.minimized = false; syncWindow(); };
     const hide = () => { active.windowVisible = false; syncWindow(); };
     const show = () => { active.windowVisible = true; syncWindow(); };
-    const active: VkView = { id, owner, view, entry: url, shown: false, foreground: true, revision: 0, reading: false, confirming: false, qrStarted: false, returnToEntry: false,
+    const active: VkView = { id, owner, view, entry, shown: false, foreground: true, revision: 0, reading: false, confirming: false, qrStarted: false, returnToEntry: false,
       windowVisible: owner.isVisible(), minimized: false,
       state: { host: '', phase: 'loading', back: false, signIn: false }, unbind() {
         owner.removeListener('minimize', minimize);
@@ -375,12 +394,60 @@ export class VkSite {
     finally { active.reading = false; }
   }
 
+  /**
+   * Starts one of VK's own catalogue entries in the loaded music page. Unlike the
+   * transport commands this is allowed while the page is not on screen: the point
+   * of the control is to play VK music from Luma's own screens.
+   */
+  async collection(owner: BrowserWindow, id: unknown, kind: unknown, name?: unknown) {
+    const active = this.active, contents = active?.view.webContents;
+    const action = readVkCollection(kind);
+    if (!action || !active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) return false;
+    const literal = action === 'genre' || action === 'mood' ? readVkCollectionName(name) : undefined;
+    if ((action === 'genre' || action === 'mood') && !literal) return false;
+    if (!active.windowVisible || active.minimized) return false;
+    // Any page of the guest can be the one on screen; the catalogue only exists on
+    // the music page, so the guest is sent there and given time to load it.
+    if (!this.musicReady(active)) {
+      this.navigate(active, vkMusicUrlFor(this.settings.vkDomain));
+      const deadline = Date.now() + 12_000;
+      while (!this.musicReady(active) && this.active === active && !contents.isDestroyed() && Date.now() < deadline) {
+        await new Promise((resolve) => { setTimeout(resolve, 250); });
+      }
+      if (!this.musicReady(active)) return false;
+    }
+    const revision = active.revision;
+    const wasForeground = active.foreground;
+    try {
+      const result: unknown = await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkCollection(action, literal) }], true);
+      const point = result && typeof result === 'object' ? (result as { point?: { x?: unknown; y?: unknown } }).point : undefined;
+      const x = Math.round(Number(point?.x)), y = Math.round(Number(point?.y));
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x <= 0 || y <= 0) return false;
+      if (active.revision !== revision || contents.isDestroyed()) return false;
+      // The press has to be read back: only a reported playing track may keep the
+      // guest alive after Luma's window stops laying it out.
+      active.foreground = true;
+      contents.sendInputEvent({ type: 'mouseMove', x, y });
+      contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+      contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+      for (let attempt = 0; attempt < 10 && !active.state.engaged; attempt++) {
+        await new Promise((resolve) => { setTimeout(resolve, 500); });
+        if (this.active !== active || active.revision !== revision) return false;
+        active.foreground = true;
+        await this.readTrack(active);
+      }
+      const started = active.state.engaged === true;
+      if (!started) { active.foreground = wasForeground; this.visibility(active); }
+      return started;
+    } catch { return false; }
+  }
+
   async command(owner: BrowserWindow, id: unknown, action: unknown, fraction?: unknown) {
     const active = this.active, contents = active?.view.webContents;
     if (this.resetting || !active || active.owner !== owner || active.id !== id || !contents || contents.isDestroyed()) return false;
     const foreground = this.inForeground(active) && active.shown;
     if (action === 'back' && foreground && contents.navigationHistory.canGoBack()) { contents.navigationHistory.goBack(); return true; }
-    if (action === 'music' && foreground && !active.state.signIn) { this.navigate(active, VK_MUSIC_URL); return true; }
+    if (action === 'music' && foreground && !active.state.signIn) { this.navigate(active, vkMusicUrlFor(this.settings.vkDomain)); return true; }
     if (action === 'reload' && foreground) {
       if (vkSiteUrl(contents.getURL())) contents.reload();
       else this.navigate(active, active.entry);
