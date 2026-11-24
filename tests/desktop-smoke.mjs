@@ -1405,8 +1405,12 @@ async function smoke() {
       await click('.home-now button[aria-label="Развернуть текущий трек"]');
       // Separate waits so a failure names the clause that broke.
       await waitFor('fullscreen opens on the VK track', async () => await mirrored(`${vkStage} h1`, 0));
+      // Shuffle and repeat belong to the VK card now; only Luma's own surfaces stay out.
       await waitFor('fullscreen keeps the local-only controls out', () => run(`
-        !document.querySelector('${vkStage} :is(.mode-button,.immersive-upcoming,.immersive-karaoke-toggle,.favorite-toggle)')`));
+        !document.querySelector('${vkStage} :is(.immersive-upcoming,.immersive-karaoke-toggle,.favorite-toggle)')`));
+      await waitFor('fullscreen offers VK shuffle and repeat like local playback', () => run(`
+        document.querySelector('${vkStage} .mode-button')?.getAttribute('aria-label') === 'Перемешать треки VK'
+        && document.querySelectorAll('${vkStage} .mode-button').length === 2`));
       await waitFor('fullscreen offers the VK feedback pair', () => run(`
         !!document.querySelector('${vkStage} .immersive-feedback .vk-like')
         && !!document.querySelector('${vkStage} .immersive-feedback .vk-dislike')`));
