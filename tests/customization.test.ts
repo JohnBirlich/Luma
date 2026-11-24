@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { accentFor, artworkTone, contrastRatio, defaultAppearance, defaultPlayback, formatCount, scheduledTheme, shouldAdvanceAfterEnd, THEMES, themeVariables, WIDGET_BACKGROUNDS } from '../src/shared/customization.js';
 import { defaultKaraokeStyle } from '../src/shared/karaoke-style.js';
 import { defaultAudioQuality } from '../src/shared/audio-quality.js';
-import { decodePreferences, encodePreferences, RECENT_LIMIT, rememberTrack } from '../src/player/preferences.js';
+import { decodePreferences, encodePreferences, readListeningStats, RECENT_LIMIT, rememberTrack } from '../src/player/preferences.js';
 
 test('customization reads old profiles without altering queue, volume or equalizer', () => {
   const previous = {
@@ -13,7 +13,7 @@ test('customization reads old profiles without altering queue, volume or equaliz
   };
   const { equalizer, ...rest } = decodePreferences(JSON.stringify(previous));
   const { equalizer: oldEqualizer, ...old } = previous;
-  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: '', enabled: false }, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [] });
+  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: '', enabled: false }, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [], stats: { localListens: 0, vkListens: 0, seconds: 0, since: '' } });
   assert.equal(equalizer.enabled, oldEqualizer.enabled);
   assert.equal(equalizer.preset, oldEqualizer.preset);
   assert.equal(equalizer.preamp, oldEqualizer.preamp);
@@ -137,4 +137,15 @@ test('MacOS and every widget material round-trip while preserving artwork and mo
     assert.equal(appearance.widgetBackground, widgetBackground);
     assert.equal(appearance.motion, false);
   }
+});
+
+test('listening statistics stay local, monotonic and bounded', () => {
+  assert.deepEqual(readListeningStats({ localListens: 12, vkListens: 3.9, seconds: -5, since: '2026-02-03T10:00:00.000Z' }),
+    { localListens: 12, vkListens: 3, seconds: 0, since: '2026-02-03T10:00:00.000Z' });
+  assert.deepEqual(readListeningStats({ localListens: '9', vkListens: Infinity, seconds: 1e12, since: 'yesterday' }),
+    { localListens: 0, vkListens: 0, seconds: 10_000_000_000, since: '' });
+  assert.deepEqual(readListeningStats(null), { localListens: 0, vkListens: 0, seconds: 0, since: '' });
+  const restored = decodePreferences(JSON.stringify({ stats: { localListens: 4, vkListens: 2, seconds: 91, since: '2026-01-02' } }));
+  assert.deepEqual(restored.stats, { localListens: 4, vkListens: 2, seconds: 91, since: '2026-01-02' });
+  assert.deepEqual(decodePreferences(null).stats, { localListens: 0, vkListens: 0, seconds: 0, since: '' });
 });

@@ -8,10 +8,10 @@ import { useConnectionPhase } from '../data/network';
 
 export type Page = 'player' | 'search' | 'library' | 'favorites' | 'menu' | 'settings' | 'diagnostics' | 'recent' | 'mixes';
 
-interface RadioShortcutProps { openRadio(): void; radioActive: boolean; radioHidden?: boolean }
+interface RadioShortcutProps { openRadio(): void; radioActive: boolean }
 
-// Radio exists everywhere in Luma except the VK Music section, which stays the
-// site's own music and nothing else.
+// Luma's own radio is offered in every section, the VK Music pane included; only
+// the guest's own «Радио» entry is hidden inside the embedded site.
 function RadioShortcut({ place, openRadio, radioActive }: RadioShortcutProps & { place: 'sidebar' | 'dock' | 'title' }) {
   const t = useText();
   const label = t('Радио');
@@ -31,7 +31,7 @@ interface TitleBarProps extends RadioShortcutProps {
   busy: boolean;
 }
 
-export function TitleBar({ openSettings, settingsActive, glass, addMusic, busy, openRadio, radioActive, radioHidden }: TitleBarProps) {
+export function TitleBar({ openSettings, settingsActive, glass, addMusic, busy, openRadio, radioActive }: TitleBarProps) {
   const t = useText();
   const api = window.luma?.window;
   const [maximized, setMaximized] = useState(false);
@@ -55,7 +55,7 @@ export function TitleBar({ openSettings, settingsActive, glass, addMusic, busy, 
         <strong>{APP_NAME}</strong>
       </div>
       <div className="title-actions">
-        {!glass && !radioHidden && <RadioShortcut place="title" openRadio={openRadio} radioActive={radioActive} />}
+        {!glass && <RadioShortcut place="title" openRadio={openRadio} radioActive={radioActive} />}
         <button type="button" className="icon-button title-import" onClick={addMusic} disabled={busy}
           aria-label={busy ? t("Добавляем музыку") : t("Добавить музыку")} title={t("Добавить музыку (Ctrl+O)")}><Plus size={19} /></button>
         <button type="button" className="icon-button title-settings" onClick={openSettings} aria-current={settingsActive ? 'page' : undefined}
@@ -92,11 +92,12 @@ interface SidebarProps extends RadioShortcutProps {
   toggleCompact(): void;
   openUpdates(): void;
   updatesActive: boolean;
+  updateAvailable: boolean;
 }
 
 export function Sidebar(props: SidebarProps) {
   const t = useText();
-  const { page, navigate, addMusic, busy, count, favoriteCount, queued, queueOpen, toggleQueue, openEqualizer, compact, toggleCompact, openRadio, radioActive, radioHidden } = props;
+  const { page, navigate, addMusic, busy, count, favoriteCount, queued, queueOpen, toggleQueue, openEqualizer, compact, toggleCompact, openRadio, radioActive } = props;
   const connection = useConnectionPhase();
   const active = page === 'settings' || page === 'diagnostics' || page === 'favorites' || page === 'recent' ? 'menu' : page === 'mixes' ? 'library' : page;
   const expandLabel = compact ? t("Развернуть боковую панель") : t("Свернуть боковую панель");
@@ -129,9 +130,12 @@ export function Sidebar(props: SidebarProps) {
           <button type="button" className="nav-item" title={t("Эквалайзер")} aria-label={t("Эквалайзер из боковой панели")} aria-haspopup="dialog" onClick={openEqualizer}>
             <SlidersHorizontal className="nav-glyph" size={17} /><span className="nav-copy">{t("Эквалайзер")}</span>{props.eqEnabled && <i className="enabled-dot" />}
           </button>
-          {!radioHidden && <RadioShortcut place="sidebar" openRadio={openRadio} radioActive={radioActive} />}
-          <button type="button" className="nav-item" title={t("Обновления")} aria-label={t("Обновления приложения")} aria-current={props.updatesActive ? 'page' : undefined} onClick={props.openUpdates}>
+          <RadioShortcut place="sidebar" openRadio={openRadio} radioActive={radioActive} />
+          <button type="button" className="nav-item" title={props.updateAvailable ? t("Доступно обновление Luma") : t("Обновления")}
+            aria-label={props.updateAvailable ? t("Обновления приложения: доступна новая версия") : t("Обновления приложения")}
+            aria-current={props.updatesActive ? 'page' : undefined} onClick={props.openUpdates}>
             <ArrowUpCircle className="nav-glyph" size={17} /><span className="nav-copy">{t("Обновления")}</span>
+            {props.updateAvailable && <i className="update-dot" aria-hidden="true" />}
           </button>
         </section>
       </div>
@@ -148,7 +152,7 @@ export function Sidebar(props: SidebarProps) {
   );
 }
 
-export function GlassNavigation({ page, navigate, openEqualizer, eqEnabled, openRadio, radioActive, radioHidden }:
+export function GlassNavigation({ page, navigate, openEqualizer, eqEnabled, openRadio, radioActive }:
   Pick<SidebarProps, 'page' | 'navigate' | 'openEqualizer' | 'eqEnabled'> & RadioShortcutProps) {
   const t = useText();
   const active = page === 'settings' || page === 'diagnostics' || page === 'recent' ? 'menu' : page === 'mixes' ? 'library' : page;
@@ -159,6 +163,6 @@ export function GlassNavigation({ page, navigate, openEqualizer, eqEnabled, open
         <i className="glass-dock-icon" aria-hidden="true"><Icon size={21} strokeWidth={2.15} /></i><span>{t(label)}</span></button>)}
     <button type="button" className="glass-sound" aria-label={t('Эквалайзер')} title={t('Эквалайзер')} aria-haspopup="dialog" onClick={openEqualizer}>
       <i className="glass-dock-icon" aria-hidden="true"><SlidersHorizontal size={21} /></i><span>EQ</span>{eqEnabled && <i className="enabled-dot" />}
-    </button>{!radioHidden && <RadioShortcut place="dock" openRadio={openRadio} radioActive={radioActive} />}</nav>
+    </button><RadioShortcut place="dock" openRadio={openRadio} radioActive={radioActive} /></nav>
   </div>;
 }

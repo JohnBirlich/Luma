@@ -49,6 +49,34 @@ export interface Preferences {
   playlists: LumaPlaylist[];
   onlineTracks: OnlineTrack[];
   onlineRefs: OnlineTrack[];
+  /** Plain counters for the Statistics screen; they never leave the device. */
+  stats: ListeningStats;
+}
+
+export interface ListeningStats {
+  /** Tracks started from the local library. */
+  localListens: number;
+  /** Tracks started inside the VK guest. */
+  vkListens: number;
+  /** Seconds the deck actually played, local and VK together. */
+  seconds: number;
+  /** ISO date of the first counted listen. */
+  since: string;
+}
+
+export const emptyStats: ListeningStats = { localListens: 0, vkListens: 0, seconds: 0, since: '' };
+const readCount = (value: unknown, max: number) =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.min(Math.floor(value), max) : 0;
+export function readListeningStats(value: unknown): ListeningStats {
+  if (!value || typeof value !== 'object') return { ...emptyStats };
+  const data = value as Partial<ListeningStats>;
+  const since = typeof data.since === 'string' && /^\d{4}-\d{2}-\d{2}/.test(data.since) ? data.since.slice(0, 24) : '';
+  return {
+    localListens: readCount(data.localListens, 10_000_000),
+    vkListens: readCount(data.vkListens, 10_000_000),
+    seconds: readCount(data.seconds, 10_000_000_000),
+    since,
+  };
 }
 
 const KEY = 'luma-player:v1';
@@ -57,6 +85,7 @@ const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
   playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: '', enabled: false }, exportLyrics: false,
   resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
+  stats: emptyStats,
 };
 const persistentIds = (ids: readonly string[]) => ids.filter((id) => !sessionCatalogId(id));
 const persistentShelf = (tracks: unknown) => readOnlineShelf(tracks).filter(({ id }) => !sessionCatalogId(id));
@@ -92,6 +121,7 @@ export function decodePreferences(value: string | null): Preferences {
       favorites: readFavorites(data.favorites).filter((id) => !excluded.has(id)), disliked,
       recent: readFavorites(data.recent).slice(0, RECENT_LIMIT),
       vkRecent: readVkHistory(data.vkRecent),
+      stats: readListeningStats(data.stats),
       stationIds: readStationIds(data.stationIds),
       playlists: readLumaPlaylists(data.playlists),
       onlineTracks: persistentShelf(data.onlineTracks),

@@ -1870,9 +1870,14 @@ async function smoke() {
       await waitFor('guest ready for radio handoff', () => guestBeforeRadio.getVisible());
       await guestBeforeRadio.webContents.executeJavaScript(`document.querySelector('#fixture-toggle').click()`);
       await waitFor('VK plays before switching to radio', () => run(`document.querySelector('.player-bar[data-playback-source="vk"] .play-button')?.getAttribute('aria-label') === 'Пауза'`));
-      assert.equal(await run(`!!document.querySelector('${radioSidebar}')`), false, 'the VK Music section offers no Radio entry');
+      // Luma's own Radio entry stays put in every section; only the guest site hides
+      // its built-in radio.
+      assert.equal(await run(`!!document.querySelector('${radioSidebar}')`), true, 'Luma keeps its Radio entry beside the VK guest');
+      assert.equal(await run(`document.querySelector('${radioSidebar}')?.getAttribute('aria-current') ?? null`), null,
+        'the Radio shortcut stays idle while the VK guest is open');
       await click('[data-home-tab="home"]');
-      await waitFor('leaving VK Music brings the Radio shortcut back', () => run(`!!document.querySelector('${radioSidebar}')`));
+      await waitFor('the Radio shortcut follows back to Home', () => run(`!!document.querySelector('${radioSidebar}')
+        && (document.querySelector('${radioSidebar}').getAttribute('aria-current') ?? null) === null`));
       await click(radioSidebar);
       await fill('.radio-search input', 'Русское радио');
       const hasRusskoeCover = (selector) => run(`(() => {

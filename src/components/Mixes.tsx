@@ -46,7 +46,7 @@ export function MixesPage({ tracks, favorites, favoriteTracks, disliked, recent,
 
   return <div className="page mixes-page">
     <header className="page-header"><div><p className="overline page-kicker"><span />{t("Коллекция Luma")}</p><h1>{t("Миксы")}</h1></div>
-      <button type="button" className="button outline-button" onClick={goToLibrary}><ArrowLeft size={16} />{" "}{t("В медиатеку")}</button></header>
+      <button type="button" className="icon-button hub-back" onClick={goToLibrary} aria-label={t("В медиатеку")} title={t("В медиатеку")}><ArrowLeft size={18} /></button></header>
     <section className="mix-hero" aria-labelledby="mix-title">
       <div className={`mix-art${items.length >= 4 ? ' mix-art-grid' : ''}`} aria-hidden="true">
         {items.length ? items.slice(0, items.length >= 4 ? 4 : 1).map((track) => <Artwork key={track.id} track={track} />) : <AudioLines size={46} />}

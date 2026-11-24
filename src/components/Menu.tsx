@@ -2,10 +2,12 @@ import { APP_NAME } from '../shared/app-info';
 import { useText } from '../i18n/context';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, AudioLines, Bug, ChevronRight, Heart, History, Info, Music2, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { ArrowLeft, AudioLines, BarChart3, Bug, ChevronRight, Heart, History, Info, Music2, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { trackCount } from '../shared/media';
 import { About } from './About';
+import { Statistics } from './Statistics';
+import type { StatisticsData } from './Statistics';
 
 interface MenuItemProps {
   icon: LucideIcon;
@@ -41,19 +43,22 @@ interface MenuPageProps {
   openMixes(): void;
   openDiagnostics(): void;
   openEqualizer(): void;
+  statistics: StatisticsData;
 }
 
 export function MenuPage(props: MenuPageProps) {
   const t = useText();
   const [about, setAbout] = useState(false);
+  const [statistics, setStatistics] = useState(false);
   return (
     <div className="page menu-page">
       <header className="page-header">
-        <div><p className="overline page-kicker"><span />{APP_NAME}</p><h1>{about ? t("О приложении") : t("Меню")}</h1></div>
-        {about && <button type="button" className="button outline-button" onClick={() => setAbout(false)}><ArrowLeft size={16} />{" "}{t("В меню")}</button>}
+        <div><p className="overline page-kicker"><span />{APP_NAME}</p><h1>{about ? t("О приложении") : statistics ? t("Статистика") : t("Меню")}</h1></div>
+        {(about || statistics) && <button type="button" className="icon-button hub-back" onClick={() => { setAbout(false); setStatistics(false); }}
+          aria-label={t("В меню")} title={t("В меню")}><ArrowLeft size={18} /></button>}
       </header>
       <div className="menu-body">
-        {about ? <About /> : <>
+        {about ? <About /> : statistics ? <Statistics data={props.statistics} /> : <>
           <section className="menu-profile" aria-label={t("Профиль Luma")}>
             <div className="menu-profile-logo"><AudioLines size={27} strokeWidth={1.85} /></div>
             <div><h2>{APP_NAME}</h2><p>{trackCount(props.localCount, props.fullNumbers, t.language)}{" "}{t("с устройства")}</p></div>
@@ -69,6 +74,7 @@ export function MenuPage(props: MenuPageProps) {
             <MenuItem icon={Settings2} title={t("Настройки")} detail={t("Внешний вид, медиатека и воспроизведение")} select={props.openSettings} />
             <MenuItem icon={Bug} title={t("Диагностика")} detail={t("Журнал событий, подключение и сведения о системе")} select={props.openDiagnostics} />
             <MenuItem icon={SlidersHorizontal} title={t('Эквалайзер')} detail={t('Настройте частоты и предусиление')} select={props.openEqualizer} dialog />
+            <MenuItem icon={BarChart3} title={t("Статистика")} detail={t("Прослушано треков, время в плеере и размер медиатеки")} select={() => setStatistics(true)} />
             <MenuItem icon={Info} title={t("О приложении")} detail={t("Версия Luma, возможности и релизы")} select={() => setAbout(true)} />
           </MenuGroup>
         </>}
