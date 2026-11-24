@@ -345,7 +345,7 @@ async function smoke() {
   fixtureNotice('Native fullscreen', `Electron fullscreen reached ${display.bounds.width}×${display.bounds.height} monitor bounds; button, Esc, and host exit passed.`);
   await click('.scene-open');
   await waitFor('scene dialog reopens', () => run(`!!document.querySelector('.scene-dialog[open]')`));
-  for (const [label, effect] of [['Спектр', 'spectrum'], ['Столбцы', 'columns'], ['Ноты', 'notes']]) {
+  for (const [label, effect] of [['Спектр', 'spectrum'], ['Ленты', 'columns'], ['Ноты', 'notes']]) {
     await click(`.scene-choice[aria-label="${label}"]`);
     await waitFor(`${label} previews on a bounded canvas`, () => run(`(() => {
       const backdrop = document.querySelector('.scene-dialog-preview .scene-${effect}');
