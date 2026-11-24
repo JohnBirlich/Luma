@@ -57,6 +57,8 @@ import { defaultAudioQuality, isMetered } from './shared/audio-quality';
 import { dataLocale } from './shared/app-info';
 import { AUDIO_ACCEPT, trackCount } from './shared/media';
 import { adjacentStationId, stationTracks, STATION_IDS, tuneStation } from './shared/radio';
+import { radioBrowserTrack } from './shared/radio-browser';
+import type { RadioBrowserStation } from './shared/radio-browser';
 import { MAX_PLAYLISTS, playlistTitle, playlistTrackIds } from './shared/luma-playlists';
 import { rememberSearch } from './shared/search-history';
 import { MAX_ONLINE_TRACKS, readOnlineTrack, sessionCatalogId } from './shared/online';
@@ -172,7 +174,8 @@ export default function App() {
   }), [originals, covers, details]);
   const stationIds = useMemo(() => new Set(preferences.stationIds), [preferences.stationIds]);
   const collection = useMemo(() => tracks.filter(({ online, id }) => !online || savedOnline.has(id)), [tracks, savedOnline]);
-  const byId = useMemo(() => new Map([...tracks, ...stationTracks].map((track) => [track.id, track])), [tracks]);
+  const [discoveredStation, setDiscoveredStation] = useState<Track>();
+  const byId = useMemo(() => new Map([...tracks, ...stationTracks, ...(discoveredStation ? [discoveredStation] : [])].map((track) => [track.id, track])), [tracks, discoveredStation]);
   const favoriteIds = useMemo(() => new Set(preferences.favorites), [preferences.favorites]);
   const dislikedIds = useMemo(() => new Set(preferences.disliked), [preferences.disliked]);
   const favorites = useMemo(() => tracks.filter(({ id }) => favoriteIds.has(id)), [tracks, favoriteIds]);
@@ -341,6 +344,22 @@ export default function App() {
     } else commit({ ...appendToQueue(state, [id]), currentId: id });
     load(track, true);
   }, [byId, commit, connected, load, toggle]);
+
+  const tuneDiscoveredStation = useCallback((station: RadioBrowserStation) => {
+    if (!ready || busy.current) return;
+    const track = radioBrowserTrack(station);
+    if (!track) return;
+    const state = queueRef.current;
+    if (state.currentId === track.id) { toggle(); return; }
+    if (!connected) return;
+    const previous = discoveredStation?.id;
+    // Keep only one dynamic radio reference in the session, even after a new search.
+    const queue = previous && previous !== state.currentId && previous !== track.id ? removeFromQueue(state, previous) : state;
+    setDiscoveredStation(track);
+    commit(tuneStation(queue, track.id));
+    load(track, true);
+    void window.luma?.radioBrowser?.click(track.id).catch(() => {});
+  }, [ready, connected, discoveredStation, commit, load, toggle]);
 
   const next = useCallback((finished = false) => {
     const state = queueRef.current;
@@ -791,11 +810,18 @@ export default function App() {
     scrollArea.current?.scrollTo({ top: 0 });
     if (tab === 'vk') returnToVk();
   }, [returnToVk, vkVisible]);
+  const openRadio = useCallback(() => {
+    navigate('player');
+    selectHomeTab('radio');
+  }, [navigate, selectHomeTab]);
   const openUpdates = useCallback(() => {
     navigate('player');
     selectHomeTab('updates');
   }, [navigate, selectHomeTab]);
   const updatesActive = page === 'player' && homeTab === 'updates' && !homeQuery.trim();
+  const radioActive = page === 'player' && homeTab === 'radio' && !homeQuery.trim();
+  // Luma's radio leaves the VK Music section alone; the guest keeps its own music.
+  const radioHidden = page === 'player' && homeTab === 'vk';
   // The guest's state lives in a ref so the background start can watch it without
   // re-rendering the whole shell on every poll.
   const vkViewRef = useRef(vkSite.view);
@@ -898,8 +924,10 @@ export default function App() {
         setDropActive(false);
         handleFiles(Array.from(event.dataTransfer.files));
       }}>
-      {!widget && <TitleBar glass={glass} openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready} />}
-      {!widget && (glass ? <GlassNavigation page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled} /> : <Sidebar page={page} navigate={navigate} openUpdates={openUpdates} updatesActive={updatesActive} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
+      {!widget && <TitleBar glass={glass} openSettings={openSettings} settingsActive={page === 'settings'} addMusic={choose} busy={working || !ready}
+        openRadio={openRadio} radioActive={radioActive} radioHidden={radioHidden || !!widget} />}
+      {!widget && (glass ? <GlassNavigation page={page} navigate={navigate} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
+        openRadio={openRadio} radioActive={radioActive} radioHidden={radioHidden} /> : <Sidebar page={page} navigate={navigate} openRadio={openRadio} radioActive={radioActive} radioHidden={radioHidden} openUpdates={openUpdates} updatesActive={updatesActive} addMusic={choose} busy={working || !ready} count={collection.length} favoriteCount={favorites.length}
         fullNumbers={appearance.fullNumbers} queued={queued.length} queueOpen={queueOpen} toggleQueue={toggleQueue} openEqualizer={openEqualizer} eqEnabled={preferences.equalizer.enabled}
         compact={appearance.compactSidebar} toggleCompact={toggleCompact} />)}
       <main className={`main-pane${vkVisible ? ' vk-pane' : ''}`} ref={scrollArea}>
@@ -913,7 +941,8 @@ export default function App() {
             searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
             currentId={queue.currentId} playing={transportPlaying} connected={connected} motion={appearance.motion} visible={homeVisible}
             vkSite={vkVisible ? vkSite : undefined} closeVk={closeVk} searchVk={window.luma?.vkSite ? searchVk : undefined}
-            busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline} 
+            busy={working || !ready} play={playTrack} playMix={playAll} playCatalog={playCatalog} chooseOnline={chooseOnline}
+            stationIds={stationIds} saveStation={saveStation} tuneDiscoveredStation={tuneDiscoveredStation} loading={!!player.loading}
             playlists={preferences.playlists} playlistTracks={byId} savePlaylist={savePlaylist} removePlaylist={removePlaylist} openPlaylistImport={() => setImportPlaylist(true)}
             openLibrary={goToLibrary} addMusic={choose} openMusicLink={() => setMusicDialog({})}
             sharePlaylist={sharePlaylist} seedFavorites={seedFavorites} openFavorites={() => navigate('favorites')}

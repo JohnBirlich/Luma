@@ -794,6 +794,11 @@ h1 { font: 800 clamp(29px, 2.8vw, 43px)/1.07 var(--display); letter-spacing: -.0
 .sidebar-shortcuts .nav-item { width: 100%; height: 36px; }
 .sidebar-shortcuts .nav-item[aria-pressed='true'] { background: var(--raised-bg); color: var(--accent-light); }
 .sidebar-shortcuts .nav-item .enabled-dot { margin-left: auto; }
+.icon-button.radio-title { display: none; -webkit-app-region: no-drag; app-region: no-drag; }
+.icon-button.radio-title[aria-current='page'] { border-color: var(--accent-border); color: var(--accent-light); }
+@media (max-width: 700px) {
+  .icon-button.radio-title { display: inline-grid; }
+}
 .sidebar-footer { gap: 8px; }
 .sidebar-diagnostic { width: 100%; min-height: 46px; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 9px; text-align: left; border: 1px solid #ffffff19; border-radius: 8px; background: var(--panel-bg); color: var(--muted); }
 .sidebar-diagnostic:hover, .sidebar-diagnostic[aria-current='page'] { border-color: var(--accent-border); background: var(--accent-fill); color: var(--accent-light); }

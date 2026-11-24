@@ -24,15 +24,17 @@ import { MyPlaylists } from './MyPlaylists';
 import type { LumaPlaylist } from '../shared/luma-playlists';
 import { SceneBackground } from './SceneBackground';
 
+import { RadioStations } from './RadioStations';
+import type { RadioBrowserStation } from '../shared/radio-browser';
 import { VkSitePanel } from './VkSitePanel';
 import { VkHistoryRows } from './VkHistory';
 import type { VkHistoryEntry } from '../shared/vk-history';
 import type { VkSiteController } from '../player/useVkSite';
 
-// The strip only keeps music: updates live in Quick access, and radio is gone
-// from Luma entirely, on the guest's own pages as well as in Luma's chrome.
+// The strip only keeps music: updates live in Quick access and radio opens from
+// the sidebar shortcut. Both stay reachable as tabs, just not as strip buttons.
 const TABS = { home: 'Для вас', mine: 'Моя музыка', vk: 'VK Музыка' } as const;
-export type HomeTab = keyof typeof TABS | 'updates';
+export type HomeTab = keyof typeof TABS | 'radio' | 'updates';
 interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   tab: HomeTab;
   query: string;
@@ -47,6 +49,10 @@ interface HomeProps extends CatalogSearchPreferences, SearchHistoryProps {
   openVkRecent?(url: string): void;
   /** VK Music playback for the mix and «Собрано в Luma» tiles, once the VK account is signed in. */
   playVkCollection?(kind: VkCollection, name?: string): Promise<boolean>;
+  stationIds: ReadonlySet<string>;
+  saveStation(id: string): void;
+  tuneDiscoveredStation(station: RadioBrowserStation): void;
+  loading: boolean;
   openVkTopic?(kind: VkCollection, name?: string): Promise<boolean>;
   favorites: ReadonlySet<string>;
   disliked: ReadonlySet<string>;
@@ -213,6 +219,8 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         </Shelf>
         {!mine.length && data.demos.length > 0 && <Shelf title={t('Демоколлекция')}><TrackRows {...rows} tracks={data.demos} strip /></Shelf>}
       </>}
+      {tab === 'radio' && <RadioStations saved={props.stationIds} activeId={currentId} loading={props.loading} playing={playing} busy={props.busy}
+        connected={connected} toggleSave={props.saveStation} play={play} tuneDiscovered={props.tuneDiscoveredStation} />}
       {tab === 'vk' && <VkSitePanel controller={vkSite} connected={connected} close={closeVk} />}
       {tab === 'updates' && <Updates back={() => selectTab('home')} />}
     </>}
