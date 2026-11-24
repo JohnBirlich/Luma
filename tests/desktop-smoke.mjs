@@ -1403,11 +1403,15 @@ async function smoke() {
       await click('.home-now .play-button');
       await waitFor('Now Playing resumes the actual hidden guest', () => guestRun(`!fixtureAudio.paused && fixtureAudio.currentTime > ${beforeBackground + .1}`));
       await click('.home-now button[aria-label="Развернуть текущий трек"]');
-      await waitFor('fullscreen shows the VK track with its own feedback pair', async () => await mirrored(`${vkStage} h1`, 0) && await run(`
-        !document.querySelector('${vkStage} :is(.mode-button,.immersive-upcoming,.immersive-karaoke-toggle,.favorite-toggle)')
-        && !!document.querySelector('${vkStage} .immersive-feedback .vk-like')
-        && !!document.querySelector('${vkStage} .immersive-feedback .vk-dislike')
-        && !!document.querySelector('${vkStage} .volume input:enabled')
+      // Separate waits so a failure names the clause that broke.
+      await waitFor('fullscreen opens on the VK track', async () => await mirrored(`${vkStage} h1`, 0));
+      await waitFor('fullscreen keeps the local-only controls out', () => run(`
+        !document.querySelector('${vkStage} :is(.mode-button,.immersive-upcoming,.immersive-karaoke-toggle,.favorite-toggle)')`));
+      await waitFor('fullscreen offers the VK feedback pair', () => run(`
+        !!document.querySelector('${vkStage} .immersive-feedback .vk-like')
+        && !!document.querySelector('${vkStage} .immersive-feedback .vk-dislike')`));
+      await waitFor('fullscreen keeps VK transport and volume', () => run(`
+        !!document.querySelector('${vkStage} .volume input:enabled')
         && document.querySelector('${vkStage} .play-button')?.getAttribute('aria-label') === 'Пауза'`));
       const mediaArt = await waitFor('restored VK track gets its current artwork', guestCover);
       await waitFor('VK cover also decodes in expanded player', () => coverAt(`${vkStage} .immersive-art img`, mediaArt));
