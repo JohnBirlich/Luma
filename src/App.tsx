@@ -895,7 +895,9 @@ export default function App() {
     repeat: vkTrack?.repeat ?? 'off', canRepeat: vkControllable,
     volume: vkTrack?.volume ?? 0, canVolume: vkControllable && vkTrack.volume !== undefined,
     canMute: vkControllable && vkTrack.canMute === true,
-    vkFavorite: vkControllable ? { selected: vkTrack.favorite === true, toggle: () => vkAction('favorite') } : undefined,
+    // The library button is offered only when VK itself exposes one: the like pair
+    // always is, but a «плюс» that the site cannot answer would only report failure.
+    vkFavorite: vkControllable && vkTrack.favorite !== undefined ? { selected: vkTrack.favorite, toggle: () => vkAction('favorite') } : undefined,
     vkLike: vkControllable ? { liked: vkTrack.liked === true, toggle: () => vkAction('like') } : undefined,
     vkDislike: vkControllable ? { disliked: vkTrack.disliked === true, toggle: () => vkAction('dislike') } : undefined,
     hasPrevious: vkControllable && vkTrack.previous, hasNext: vkControllable && vkTrack.next,

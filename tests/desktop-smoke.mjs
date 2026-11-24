@@ -1389,22 +1389,24 @@ async function smoke() {
       await waitFor('the same signed-in guest is hidden but retained on Now Playing', async () => vkView() === nativeView
         && !nativeView.getVisible() && !guest.isAudioMuted() && await mirrored('.home-now[data-playback-source="vk"] .hero h2', 0)
         && await run(`document.querySelector('.home-now .hero-meta').textContent === ${JSON.stringify(vkFixtureArtist)}`));
-      // The guest owns the system session and Luma's own deck stays silent. The
-      // feedback slots now belong to VK — its like, dislike and «Моя музыка» — so
-      // only the local-only controls may not appear.
+      // The guest owns the system session and Luma's own deck stays silent. A VK
+      // track now carries VK's own like pair in the local feedback slots, while the
+      // local-only controls must stay out of the hero.
       assert.equal(await run(`!navigator.mediaSession.metadata`), true, 'an audible VK guest keeps the system media session');
       assert.equal(await run(`[...document.querySelectorAll('audio')].every(audio => audio.paused)`), true, 'Luma leaves its own deck silent while VK plays');
-      assert.equal(await run(`!!document.querySelector('.home-now .hero-actions-row .favorite-toggle[aria-label^="Добавить в Мою музыку VK"]')
-        || !!document.querySelector('.home-now .hero-actions-row .favorite-toggle[aria-label^="Удалить из Моей музыки VK"]')`), true,
-        'the VK library control occupies the slot the local heart would use');
-      assert.equal(await run(`!document.querySelector('.home-now :is(.hero-index,.track-cover-button,.hero-karaoke)')`), true,
+      assert.equal(await run(`!!document.querySelector('.home-now .hero-actions-row .vk-like')
+        && !!document.querySelector('.home-now .hero-actions-row .vk-dislike')`), true,
+        'VK fills the hero feedback slots with its own like and dislike');
+      assert.equal(await run(`!document.querySelector('.home-now :is(.favorite-toggle,.hero-index,.track-cover-button,.hero-karaoke)')`), true,
         'local-only hero controls stay hidden for a VK track');
       const beforeBackground = await guestRun('fixtureAudio.currentTime');
       await click('.home-now .play-button');
       await waitFor('Now Playing resumes the actual hidden guest', () => guestRun(`!fixtureAudio.paused && fixtureAudio.currentTime > ${beforeBackground + .1}`));
       await click('.home-now button[aria-label="Развернуть текущий трек"]');
-      await waitFor('fullscreen shows the VK track and supports only delegated controls', async () => await mirrored(`${vkStage} h1`, 0) && await run(`
-        !document.querySelector('${vkStage} :is(.mode-button,.immersive-upcoming,.immersive-karaoke-toggle,.immersive-feedback)')
+      await waitFor('fullscreen shows the VK track with its own feedback pair', async () => await mirrored(`${vkStage} h1`, 0) && await run(`
+        !document.querySelector('${vkStage} :is(.mode-button,.immersive-upcoming,.immersive-karaoke-toggle,.favorite-toggle)')
+        && !!document.querySelector('${vkStage} .immersive-feedback .vk-like')
+        && !!document.querySelector('${vkStage} .immersive-feedback .vk-dislike')
         && !!document.querySelector('${vkStage} .volume input:enabled')
         && document.querySelector('${vkStage} .play-button')?.getAttribute('aria-label') === 'Пауза'`));
       const mediaArt = await waitFor('restored VK track gets its current artwork', guestCover);
