@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, clipboard, dialog, powerMonitor, screen, session, shell } from 'electron';
 import { APP_ORIGIN, DesktopLibrary } from '../dist-electron/electron/library.js';
 import { AUDIUS_MEDIA_PARTITION } from '../dist-electron/electron/audius-network.js';
-import { RADIO_DIRECTORY, RADIO_LISTINGS, STATIONS, stationTracks } from '../dist-electron/src/shared/radio.js';
+import { RADIO_LISTINGS, STATIONS } from '../dist-electron/src/shared/radio.js';
 import { APP_NAME, APP_PROFILE_DIR } from '../dist-electron/src/shared/app-info.js';
 import { LEGACY_VK_SESSION, VK_MUSIC_URL } from '../dist-electron/src/shared/vk.js';
 import { VK_SITE_PARTITION, vkMusicSearchUrl, vkSignInUrl } from '../dist-electron/src/shared/vk-site.js';
@@ -345,7 +345,7 @@ async function smoke() {
   fixtureNotice('Native fullscreen', `Electron fullscreen reached ${display.bounds.width}×${display.bounds.height} monitor bounds; button, Esc, and host exit passed.`);
   await click('.scene-open');
   await waitFor('scene dialog reopens', () => run(`!!document.querySelector('.scene-dialog[open]')`));
-  for (const [label, effect] of [['Спектр', 'spectrum'], ['Столбцы', 'columns'], ['Ноты', 'notes']]) {
+  for (const [label, effect] of [['Спектр', 'spectrum'], ['Ленты', 'columns'], ['Ноты', 'notes']]) {
     await click(`.scene-choice[aria-label="${label}"]`);
     await waitFor(`${label} previews on a bounded canvas`, () => run(`(() => {
       const backdrop = document.querySelector('.scene-dialog-preview .scene-${effect}');
@@ -464,40 +464,25 @@ async function smoke() {
     assert.equal(updateLookups, 1, 'settings and an explicit check reuse the same release request');
   } finally { session.defaultSession.protocol.unhandle('https'); }
   await go('Меню');
-  const radioSidebar = '.sidebar-shortcuts [aria-label="Эквалайзер из боковой панели"] + button.radio-sidebar';
-  const radioTitle = '.title-bar button.radio-title';
   const externalOpens = [];
   const systemBrowser = shell.openExternal;
   shell.openExternal = async (url) => { externalOpens.push(url); };
-  const originalBounds = window.getBounds();
   const originalUrl = window.webContents.getURL();
   try {
-    assert.equal(await run(`document.querySelector('${radioSidebar}')?.getAttribute('aria-label')`), 'Радио');
+    assert.equal(await run(`!!document.querySelector('.radio-shortcut, .radio-title, .radio-sidebar, .radio-dock, [data-home-tab="radio"]')`), false,
+      'Radio left Luma entirely: sidebar, dock, title bar and the home strip all lost it');
+    assert.equal(await run(`!!document.querySelector('[aria-label="Радио"], [title="Радио"]')`), false, 'nothing in Luma is labelled Radio');
     assert.equal(await run(`!!document.querySelector('[aria-label="Зайти в VK"], [aria-label="Музыка онлайн"]') || 'openVkMusic' in window.luma`), false);
     await go('Главная');
     await waitFor('home search field', () => run(`!!document.querySelector('.hub-search input')`));
-    await fill('.hub-search input', 'local search to clear');
-    await click(radioSidebar);
-    await waitFor('sidebar Radio replaces the previous search and opens the built-in station list', () => run(`!!document.querySelector('.radio-shelves')
-      && document.querySelector('.hub-search input')?.value === ''
-      && document.querySelector('[data-home-tab="radio"]')?.getAttribute('aria-current') === 'page'
-      && document.querySelector('${radioSidebar}')?.getAttribute('aria-current') === 'page'`));
-    assert.equal(await run(`document.querySelector('nav[aria-label="Разделы плеера"] [aria-label="Главная"]')?.getAttribute('aria-current') ?? null`), null);
-    window.setSize(640, originalBounds.height);
-    await waitFor('narrow native window shows the Radio button in the title bar', () => run(`innerWidth <= 700
-      && getComputedStyle(document.querySelector('${radioTitle}')).display !== 'none'`));
-    await go('Меню');
-    await click(radioTitle);
-    await waitFor('title-bar Radio selects the same station list', () => run(`!!document.querySelector('.radio-shelves')
-      && document.querySelector('${radioTitle}')?.getAttribute('aria-current') === 'page'`));
-    assert.deepEqual(externalOpens, [], 'navigating to Radio does not open the browser');
+    await fill('.hub-search input', 'search that stays put');
+    await waitFor('a typed search is not replaced by a radio section', () => run(`document.querySelector('.hub-search input')?.value === 'search that stays put'`));
+    assert.deepEqual(externalOpens, []);
     assert.equal(window.webContents.getURL(), originalUrl);
     assert.equal(BrowserWindow.getAllWindows().length, 1);
-    assert.equal(await run(`window.testAudio === document.querySelector('audio') && window.testAudio.paused
-      && !document.querySelector('audio[data-online-audio]').getAttribute('src')`), true, 'Radio does not start or replace the paused track');
-  } finally { window.setBounds(originalBounds); shell.openExternal = systemBrowser; }
+  } finally { shell.openExternal = systemBrowser; }
   await go('Меню');
-  fixtureNotice('Radio shortcut', 'Sidebar and narrow title bar open the station list without autoplay or external handoff.');
+  fixtureNotice('Radio removal', 'No Radio entry survives in Luma chrome or the home strip.');
   assert.equal(await run(`!!document.querySelector('.menu-page [aria-label="Импортировать треки"]')`), false);
   assert.ok(await run(`!!document.querySelector('.title-bar [aria-label="Добавить музыку"]')`), 'file import remains in the main toolbar');
   assert.equal(await run(`document.querySelector('.title-caption') === null && getComputedStyle(document.querySelector('.sidebar')).userSelect === 'none'`), true);
@@ -638,18 +623,9 @@ async function smoke() {
   const recordStation = STATIONS.find(({ id }) => id === 'radio-record-record');
   const piStation = STATIONS.find(({ id }) => id === 'radio-ru-pi-fm');
   const russkoeStation = STATIONS.find(({ id }) => id === 'radio-ru-russkoe');
-  const remixStation = STATIONS.find(({ id }) => id === 'radio-ru-remix');
   const missingLogoStation = STATIONS.find(({ id }) => id === 'radio-record-rus');
   const radioFixtureUrls = new Set([recordStation.stream, piStation.stream, russkoeStation.stream, discoveryStation.url_resolved]);
   const directorySearches = [];
-  const recordTrack = stationTracks.find(({ id }) => id === recordStation.id);
-  const webStation = RADIO_DIRECTORY.find(({ id }) => id === 'radio-ru-mir-far-east');
-  const stationSection = '[aria-labelledby="radio-stations"]';
-  const savedStations = '[aria-labelledby="radio-added"]';
-  const recordTile = `[data-station=${JSON.stringify(recordStation.id)}]`;
-  const russkoeTile = `[data-station=${JSON.stringify(russkoeStation.id)}]`;
-  const webTile = `[data-station=${JSON.stringify(webStation.id)}]`;
-  const recordPlay = `${recordTile} .station-play`;
   const titleQueries = [];
   const musicBrainzQueries = [];
   const audioDbQueries = [];
@@ -1108,7 +1084,7 @@ async function smoke() {
         assert.equal(await run(`window.luma.openOnlineLink(${JSON.stringify(url)}).then(() => false, () => true)`), true);
       }
       assert.deepEqual(await run(`[...document.querySelectorAll('.hub-tabs button')].map(button => button.textContent)`),
-        ['Для вас', 'Моя музыка', 'Радио', 'VK Музыка', 'Обновления']);
+        ['Для вас', 'Моя музыка', 'VK Музыка'], 'the strip keeps only music sections');
       failSouthernFixture = false;
       await click('.catalog-request');
       await waitFor('Retry only retries the failed source and keeps the other results', () => run(`
@@ -1783,138 +1759,11 @@ async function smoke() {
         return prefs.queue.order.join() === prefs.playlists[0].trackIds.join();
       });
 
-      await click('[data-home-tab="radio"]');
-      await waitFor('radio directory renders in exact order with Record artwork', () => run(`document.querySelectorAll('${stationSection} > .station-grid > .station-tile').length === ${RADIO_DIRECTORY.length}
-        && document.querySelector('${stationSection} ${recordTile} .station-logo img')?.naturalWidth > 0`));
-      assert.deepEqual(await run(`[...document.querySelectorAll('${stationSection} > .station-grid > .station-tile')].map(tile => tile.dataset.station)`), RADIO_DIRECTORY.map(({ id }) => id));
-      assert.equal(radioCalls.length, 0);
-      await fill('.radio-search input', missingLogoStation.name);
-      const deadArt = `[data-station="${missingLogoStation.id}"] .station-logo img`;
-      await waitFor('a missing station logo falls back to its own local cover, not headphones', () => run(`(() => {
-        const image = document.querySelector('${deadArt}');
-        return image?.naturalWidth === 360 && image.src.startsWith('data:image/svg+xml,');
-      })()`));
-      await fill('.radio-search input', 'МИР Дальний');
-      await waitFor('radio search finds the exact regional feed as a browser listing', () => run(`document.querySelectorAll('${stationSection} .station-tile').length === 1
-        && document.querySelector('${stationSection} ${webTile}[data-mode="browser"]:not(:has(.station-play))') !== null`));
-      await click(`${stationSection} ${webTile} .station-link`);
-      await waitFor('unresolved radio is handed to the exact external station page', () => opened.at(-1) === webStation.page);
-      assert.equal(radioCalls.length, 0);
-      await click('.radio-search button');
-      await click(`${stationSection} ${recordTile} .station-add`);
-      await waitFor('Record is saved without adding a second tile', () => run(`document.querySelector('${stationSection} ${recordTile} .station-add')?.getAttribute('aria-pressed') === 'true'`));
-      assert.equal(await run(`document.querySelectorAll('.radio-shelves ${recordTile}').length`), 1);
-      await click('[data-radio-view="saved"]');
-      await waitFor('Saved shows only the bookmarked station', () => run(`document.querySelectorAll('.radio-shelves .station-tile').length === 1
-        && !!document.querySelector('${savedStations} ${recordTile}')`));
-      assert.equal(radioCalls.length, 0);
-      assert.deepEqual((await preferences()).stationIds, [recordStation.id]);
-      const beforeRadio = await preferences();
-      const beforeRadioLyrics = lyricQueries.length;
-      await click(`${savedStations} ${recordPlay}`);
-      await waitFor('station decodes audio bytes and switches to live controls', () => run(`document.querySelector('${onlineAudio}').currentTime > .12
-        && !!document.querySelector('.player-bar .live-timeline') && !document.querySelector('.player-bar .timeline')`));
-      assert.ok(radioCalls.includes(recordStation.stream));
-      assert.equal(await run(`navigator.mediaSession.metadata.title`), recordStation.name);
-      const nextStation = '.player-bar [aria-label="Следующая станция"]';
-      const previousStation = '.player-bar [aria-label="Предыдущая станция"]';
-      const waitForStation = ({ name, stream }) => waitFor(`playing ${name}`, () => run(`(() => {
-        const audio = document.querySelector('${onlineAudio}');
-        return audio.src === ${JSON.stringify(stream)} && audio.currentTime > .12 && !audio.paused
-          && !document.querySelector('.player-bar .timeline') && navigator.mediaSession.metadata?.title === ${JSON.stringify(name)};
-      })()`));
-      assert.equal(await run(`document.querySelectorAll('.player-bar .mode-button:disabled').length`), 2);
-      assert.equal(await run(`document.querySelector('${nextStation}').disabled || document.querySelector('${previousStation}').disabled`), false);
-      await click(nextStation);
-      await waitForStation(piStation);
-      assert.ok(radioCalls.includes(piStation.stream));
-      await click(previousStation);
-      await waitForStation(recordStation);
-      await run(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight' }));`);
-      await waitForStation(piStation);
-      await run(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }));`);
-      await waitForStation(recordStation);
-      assert.deepEqual((await preferences()).queue.order, [...beforeRadio.queue.order, recordStation.id], 'tuning does not accumulate stations or reorder songs');
-      assert.deepEqual((await preferences()).stationIds, [recordStation.id]);
-      assert.deepEqual((await preferences()).onlineTracks, beforeRadio.onlineTracks);
-      assert.ok(!(await preferences()).recent.includes(recordStation.id));
-      assert.equal(lyricQueries.length, beforeRadioLyrics);
-      assert.equal(await run(`window.luma.streamCache.save(${JSON.stringify(recordTrack)}).catch(() => false)`), false);
-      assert.equal(await run(`window.luma.exportMp3(${JSON.stringify(recordTrack)}, true).then(({ saved }) => saved, () => false)`), false);
-      await click('[data-home-tab="home"]');
-      await waitFor('Home omits lyrics and disables karaoke for a station', () => run(`document.querySelector('.hero h2')?.textContent === ${JSON.stringify(recordStation.name)}
-        && document.querySelector('.hero-karaoke')?.disabled && !document.querySelector('.home-page .lyrics-card')`));
-      await isolatedVk.cookies.set(authCookie);
-      await click('[data-home-tab="vk"]');
-      const guestBeforeRadio = await waitVk(VK_MUSIC_URL);
-      await waitFor('guest ready for radio handoff', () => guestBeforeRadio.getVisible());
-      await guestBeforeRadio.webContents.executeJavaScript(`document.querySelector('#fixture-toggle').click()`);
-      await waitFor('VK plays before switching to radio', () => run(`document.querySelector('.player-bar[data-playback-source="vk"] .play-button')?.getAttribute('aria-label') === 'Пауза'`));
-      await click('[data-home-tab="radio"]');
-      await fill('.radio-search input', 'Русское радио');
-      const hasRusskoeCover = (selector) => run(`(() => {
-        const img = document.querySelector(${JSON.stringify(selector)});
-        return img?.naturalWidth > 0 && img.src === ${JSON.stringify(russkoeStation.logo)} && img.parentElement.classList.contains('artwork-logo');
-      })()`);
-      await waitFor('the Russian Radio tile loads its official logo through the app CSP', () => hasRusskoeCover(`${russkoeTile} .station-logo img`));
-      await fill('.radio-search input', 'Remix FM');
-      await waitFor('the Remix FM tile has the published station logo, not a song cover', () => run(`(() => {
-        const art = document.querySelector('[data-station="${remixStation.id}"] .artwork-logo img');
-        return art?.naturalWidth > 0 && art.src === ${JSON.stringify(remixStation.logo)} && getComputedStyle(art).objectFit === 'contain';
-      })()`));
-      await fill('.radio-search input', 'Русское радио');
-      await waitFor('Russian Radio tile returns after filtering', () => hasRusskoeCover(`${russkoeTile} .station-logo img`));
-      assert.equal(vkView(), guestBeforeRadio, 'opening Radio alone does not stop VK');
-      assert.equal(guestBeforeRadio.getVisible(), false);
-      await click(`${russkoeTile} .station-play`);
-      await waitForStation(russkoeStation);
-      assert.equal(vkView(), undefined, 'choosing a station hands off from VK before radio plays');
-      await isolatedVk.cookies.remove(authCookie.url, authCookie.name);
-      await click('.player-bar .playing-mini');
-      await waitFor('Russian Radio cover shows in Now Playing over the active visual scene', async () => await hasRusskoeCover('.home-now .hero-featured-cover img')
-        && await hasRusskoeCover('.player-bar .playing-mini img'));
-      await withArt(russkoeStation.name);
-      await expand();
-      await waitForDialog();
-      await waitFor('radio fullscreen uses the same art and wraps the complete station name', async () => await hasRusskoeCover('.immersive-art img')
-        && await run(`document.querySelector('#immersive-title').textContent === ${JSON.stringify(russkoeStation.name)}
-          && getComputedStyle(document.querySelector('#immersive-title')).whiteSpace !== 'nowrap'`));
-      await click('.immersive-collapse');
-      await waitFor('radio fullscreen closes', () => !window.isFullScreen());
-      await click('.player-bar .play-button');
-      await waitFor('stopping radio unloads the network source', () => run(`document.querySelector('${onlineAudio}').paused && !document.querySelector('${onlineAudio}').hasAttribute('src')`));
-      await click('[data-home-tab="radio"]');
-      await run(`Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }); window.dispatchEvent(new Event('offline'));`);
-      await click('[data-radio-view="saved"]');
-      await waitFor('offline playback and tuning are unavailable without hiding saved stations', () => run(`document.querySelector('${savedStations} ${recordPlay}')?.disabled
-        && document.querySelector('${nextStation}')?.disabled && document.querySelector('${previousStation}')?.disabled`));
-      await run(`delete navigator.onLine; window.dispatchEvent(new Event('online'));`);
-      await click('[data-radio-view="browser"]');
-      await fill('.radio-browser-form input[placeholder="Например, SomaFM"]', 'Radio Record');
-      await fill('.radio-browser-form input[placeholder="Например, DE"]', 'RU');
-      await fill('.radio-browser-form input[placeholder="Например, german"]', 'russian');
-      await fill('.radio-browser-form input[placeholder="Например, jazz"]', 'house');
-      await click('.radio-browser-form button');
-      const direct = '.radio-browser-tile[data-mode=native]';
-      await waitFor('directory separates native and browser-only streams', () => run(`!!document.querySelector('${direct} .station-play')
-        && !!document.querySelector('.radio-browser-tile[data-mode=browser] .station-link')
-        && !document.querySelector('.radio-browser-tile[data-mode=browser] .station-play')`));
-      assert.equal(directorySearches.length, 1);
-      assert.equal(directorySearches[0].countrycode, 'RU');
-      assert.equal(directorySearches[0].language, 'russian');
-      assert.equal(directorySearches[0].tag, 'house');
-      await click('.radio-browser-tile[data-mode=browser] .station-link');
-      await waitFor('safe station fallback leaves the app', () => opened.at(-1) === `https://www.radio-browser.info/history/${browserStation.stationuuid}`);
-      await click(`${direct} .station-play`);
-      await waitForStation({ name: discoveryStation.name, stream: discoveryStation.url_resolved });
-      await waitFor('Radio Browser covers are shared between search and player without fetching favicons', () => run(`(() => {
-        const result = document.querySelector('${direct} .station-logo img');
-        const player = document.querySelector('.playing-mini img');
-        return result?.naturalWidth === 360 && player?.naturalWidth === 360 && result.src === player.src;
-      })()`));
-      assert.ok(!(await preferences()).queue.order.includes(`radio-browser-${discoveryStation.stationuuid}`));
-      await click(`${direct} .station-play`);
-      await waitFor('stopping a discovered station also unloads its source', () => run(`!document.querySelector('${onlineAudio}').hasAttribute('src')`));
+      // Radio and its station directory were removed from Luma, so the directory,
+      // saved stations, Radio Browser search and the VK-to-station handoff are gone.
+      assert.equal(await run(`!!document.querySelector('.radio-shelves, .radio-search, .radio-browser-form, [data-radio-view], .station-grid, .station-tile')`), false,
+        'no station directory, search or saved-station surface is reachable');
+      assert.equal(await run(`[...document.querySelectorAll('.sidebar-shortcuts .nav-item')].some(item => item.textContent.includes('Радио'))`), false);
     } finally { shell.openExternal = openExternal; }
     await go('Поиск');
     await waitFor('MP3 catalog query', () => run(`!!document.querySelector('main input[type="search"]')`));
@@ -2013,8 +1862,9 @@ async function smoke() {
     assert.equal(palettes.size, 5);
     assert.equal(await run(`document.querySelector('.app-shell').dataset.layout === 'glass' && !document.querySelector('.sidebar')
       && !!document.querySelector('.glass-navigation') && getComputedStyle(document.querySelector('.app-shell')).colorScheme === 'light'`), true);
-    assert.equal(await run(`document.querySelectorAll('.glass-dock-icon').length`), 7);
-    assert.equal(await run(`document.querySelector('.glass-navigation button.radio-dock')?.getAttribute('aria-label')`), 'Радио');
+    assert.equal(await run(`document.querySelectorAll('.glass-dock-icon').length`), 6);
+    assert.equal(await run(`!!document.querySelector('.glass-navigation .radio-dock, .title-bar .radio-title')`), false,
+      'the glass dock and the title bar carry no Radio entry');
     await click('.glass-sound');
     await waitFor('the glass Dock opens the same EQ', () => run(`!!document.querySelector('.equalizer-dialog[open] .eq-response-path')`));
     await click('.equalizer-content .dialog-footer .primary-button');
@@ -2051,17 +1901,15 @@ async function smoke() {
     await click('.title-settings');
     await waitFor('settings index reopens after using the back arrow', () => run(`!!document.querySelector('.settings-reset') && !!document.querySelector('.settings-page [aria-label="Appearance"]')`));
     await closeSettings();
-    await click('.glass-navigation button.radio-dock[aria-label="Radio"]');
-    await waitFor('glass Dock Radio opens the native station list in English', () => run(`!!document.querySelector('.radio-shelves')
-      && document.querySelector('.glass-navigation button.radio-dock')?.getAttribute('aria-current') === 'page'
-      && document.querySelector('${onlineAudio}').paused`));
+    assert.equal(await run(`!!document.querySelector('.glass-navigation .radio-dock, .radio-shelves')`), false,
+      'English chrome has no Radio destination left to open');
     const reloaded = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
     window.webContents.reload();
     await reloaded;
     await waitFor('English and MacOS survive a renderer restart', () => run(`document.documentElement.lang === 'en' && !!document.querySelector('[aria-label="Home"]') && document.querySelector('.app-shell').dataset.theme === 'macos'`));
     assert.equal((await preferences()).appearance.effect, 'mix-flow', 'the selected scene restores after a renderer restart');
     assert.deepEqual((await preferences()).equalizer, editedEq, 'parametric filters restore after a renderer restart');
-    assert.deepEqual((await preferences()).stationIds, [recordStation.id], 'saved radio restores after a renderer restart');
+    assert.deepEqual((await preferences()).stationIds, [], 'no station is saved without the removed Radio surface');
     assert.ok((await preferences()).playlists.some(({ title }) => title === 'Джаз'), 'playlist restores after a renderer restart');
     assert.ok((await preferences()).playlists.some(({ title, trackIds }) => title === 'Очередь из файла' && trackIds.length === 2));
     assert.deepEqual((await preferences()).karaokeStyle, { size: 47, weight: 750, spacing: 20, align: 'center' });

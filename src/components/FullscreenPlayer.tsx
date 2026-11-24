@@ -56,6 +56,7 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   const artworkBackdrop = track.backdropUrl ?? track.artworkUrl;
   const ref = useRef<HTMLDialogElement>(null);
   const [karaokeQueue, setKaraokeQueue] = useState(false);
+  const swipe = useRef<{ x: number; y: number } | undefined>(undefined);
   const [karaokeTools, setKaraokeTools] = useState<HTMLDivElement | null>(null);
   const queueVisible = !vk && (karaoke ? karaokeQueue : appearance.fullscreenQueue);
   function jumpToQueue() {
@@ -70,7 +71,24 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
   }, []);
 
   return <dialog ref={ref} className="immersive-player" data-playback-source={props.source} aria-labelledby="immersive-title" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <div ref={props.stage} data-effect={scene} data-ambient={ambient || undefined} className={`immersive-stage ${karaoke ? 'karaoke-stage' : `immersive-${hero}`}`} style={{ '--immersive-tone': tint } as CSSProperties}>
+    <div ref={props.stage} data-effect={scene} data-ambient={ambient || undefined} className={`immersive-stage ${karaoke ? 'karaoke-stage' : `immersive-${hero}`}`}
+      style={{ '--immersive-tone': tint } as CSSProperties}
+      onPointerDown={(event) => {
+        // A slide across the stage moves the queue; controls keep their own gestures.
+        if (!appearance.swipeTracks || karaoke || event.button !== 0) return;
+        if (event.target instanceof Element && event.target.closest('button, input, select, a, textarea, [role="slider"]')) return;
+        swipe.current = { x: event.clientX, y: event.clientY };
+      }}
+      onPointerUp={(event) => {
+        const start = swipe.current;
+        swipe.current = undefined;
+        if (!start || !appearance.swipeTracks) return;
+        const dx = event.clientX - start.x, dy = event.clientY - start.y;
+        if (Math.abs(dx) < 64 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+        if (dx < 0 && props.hasNext) props.next();
+        else if (dx > 0 && props.hasPrevious) props.previous();
+      }}
+      onPointerCancel={() => { swipe.current = undefined; }}>
       {!ambient && scene === 'off' && artworkBackdrop && (hero === 'cover' || appearance.coverColors) &&
         <Artwork track={track} className="immersive-backdrop" imageUrl={artworkBackdrop} />}
       <SceneBackground effect={scene} tone={tint} strength={effectStrength * (karaoke ? .62 : 1)} tempo={appearance.effectTempo}
@@ -98,12 +116,14 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
                 {track.online && <OnlineCredit track={{ online: track.online }} />}</div>
             </div>
             <div className="immersive-content karaoke-controls"><SeekTimeline {...props} /><TransportControls {...props} />
-              <div className="immersive-tools karaoke-tools">
-                <button type="button" className="icon-button" onClick={props.openEqualizer} aria-label={t('Эквалайзер')} title={t('Эквалайзер')} aria-haspopup="dialog"><SlidersHorizontal size={19} /></button>
-                <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />
-                {queueVisible && <button type="button" className="icon-button immersive-queue-jump" aria-label={t('Перейти к следующим трекам')} onClick={jumpToQueue}><ListMusic size={20} /></button>}
-                <VolumeControl {...props} />
-              </div>
+              {(appearance.showTools || appearance.showVolume) && <div className="immersive-tools karaoke-tools">
+                {appearance.showTools && <>
+                  <button type="button" className="icon-button" onClick={props.openEqualizer} aria-label={t('Эквалайзер')} title={t('Эквалайзер')} aria-haspopup="dialog"><SlidersHorizontal size={19} /></button>
+                  <FavoriteButton track={track} selected={favorite} toggle={props.toggleFavorite} immersive />
+                  {queueVisible && <button type="button" className="icon-button immersive-queue-jump" aria-label={t('Перейти к следующим трекам')} onClick={jumpToQueue}><ListMusic size={20} /></button>}
+                </>}
+                {appearance.showVolume && <VolumeControl {...props} />}
+              </div>}
             </div>
           </div>
           <LyricsPanel key={track.id} state={props.lyrics} elapsed={props.elapsed} clock={props.clock} seek={props.seek} karaoke={{ style: props.karaokeStyle, change: props.changeKaraokeStyle, tools: karaokeTools }} demo={track.demo} />
@@ -127,12 +147,14 @@ export function FullscreenPlayer(props: FullscreenPlayerProps) {
           </div>
           <SeekTimeline {...props} />
           <TransportControls {...props} />
-          <div className="immersive-tools">
-            <button type="button" className="icon-button" onClick={props.openAppearance} aria-label={t("Оформление полноэкранного плеера")} title={t("Оформление")} aria-haspopup="dialog"><Palette size={20} /></button>
-            {!vk && <button type="button" className="icon-button" onClick={props.openEqualizer} aria-label={t("Эквалайзер")} title={t("Эквалайзер")} aria-haspopup="dialog"><SlidersHorizontal size={20} /></button>}
-            {queueVisible && <button type="button" className="icon-button immersive-queue-jump" aria-label={t("Перейти к следующим трекам")} title={t("Перейти к следующим трекам")} onClick={jumpToQueue}><ListMusic size={20} /></button>}
-            <VolumeControl {...props} />
-          </div>
+          {(appearance.showTools || appearance.showVolume) && <div className="immersive-tools">
+            {appearance.showTools && <>
+              <button type="button" className="icon-button" onClick={props.openAppearance} aria-label={t("Оформление полноэкранного плеера")} title={t("Оформление")} aria-haspopup="dialog"><Palette size={20} /></button>
+              <button type="button" className="icon-button" onClick={props.openEqualizer} aria-label={t("Эквалайзер")} title={t("Эквалайзер")} aria-haspopup="dialog"><SlidersHorizontal size={20} /></button>
+              {queueVisible && <button type="button" className="icon-button immersive-queue-jump" aria-label={t("Перейти к следующим трекам")} title={t("Перейти к следующим трекам")} onClick={jumpToQueue}><ListMusic size={20} /></button>}
+            </>}
+            {appearance.showVolume && <VolumeControl {...props} />}
+          </div>}
         </div>
         {queueVisible && <UpcomingTracks tracks={props.upcoming} repeat={props.repeat} autoNext={props.autoNext} fullNumbers={appearance.fullNumbers} play={props.playUpcoming} />}
       </div>}</div>

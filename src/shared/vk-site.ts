@@ -1,6 +1,7 @@
 import { serviceQuery } from './music-services.js';
 import { readMusicLink } from './music-links.js';
 import { VK_MUSIC_URL } from './vk.js';
+import type { VkDomainName } from './labs.js';
 import type { Repeat } from './queue.js';
 
 // A separate Chromium profile. Never reuse cookies from Luma's old VK modes or the system browser.
@@ -11,6 +12,14 @@ export const VK_TRANSPORT = ['previous', 'toggle', 'next'] as const;
 export type VkTransport = typeof VK_TRANSPORT[number];
 export type VkPlaybackAction = VkTransport | 'pause' | 'shuffle' | 'repeat' | 'favorite' | 'like' | 'dislike' | 'volume' | 'mute';
 export type VkSiteAction = VkPlaybackAction | 'seek' | 'back' | 'reload' | 'music';
+/** VK's own catalogue entries Luma can start in the guest, in place, without leaving Home. */
+export const VK_COLLECTIONS = ['mix', 'for-you', 'new', 'recent', 'favorites', 'genre', 'mood'] as const;
+export type VkCollection = typeof VK_COLLECTIONS[number];
+export const readVkCollection = (value: unknown): VkCollection | undefined =>
+  typeof value === 'string' && (VK_COLLECTIONS as readonly string[]).includes(value) ? value as VkCollection : undefined;
+/** A genre or mood is only ever a short literal name, never markup or a URL. */
+export const readVkCollectionName = (value: unknown) =>
+  typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 64 ? value.trim().replace(/\s+/gu, ' ') : undefined;
 export interface VkBounds { x: number; y: number; width: number; height: number }
 export interface VkPosition { position: number; duration: number; seek: boolean }
 export interface VkNowPlaying {
@@ -75,6 +84,16 @@ export function vkArtworkPixels(value: unknown) {
 export function vkSiteUrl(value: unknown) {
   const url = https(value);
   return url && siteHosts.has(url.hostname) && !/^\/away(?:\.php|\/|$)/i.test(url.pathname) ? url : undefined;
+}
+
+/** Rewrites a validated VK address onto the domain the experimental switch picks. */
+export function withVkDomain(value: unknown, domain: VkDomainName) {
+  const url = vkSiteUrl(value);
+  if (!url) return;
+  if (url.hostname === domain || url.hostname === `m.${domain}` || url.hostname === `music.${domain}`) return url.href;
+  const target = url.hostname.startsWith('login.') ? `login.${domain}` : url.hostname.startsWith('id.') ? `id.${domain}` : url.hostname;
+  url.hostname = target === url.hostname ? domain : target;
+  return url.href;
 }
 
 export function vkMusicSearchUrl(value: unknown) {

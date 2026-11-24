@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, FileText, FileUp, Link2, ListMusic, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { MAX_PLAYLIST_TRACKS, playlistTitle } from '../shared/luma-playlists';
@@ -21,18 +22,18 @@ import yandexMusic from '../assets/playlist-sources/yandex-music.png';
 import './playlist-import.css';
 
 const sources = [
-  { id: 'luma', name: 'Luma', icon: ListMusic, hint: '.luma.json' },
-  { id: 'unison', name: 'Unison', icon: FileText, hint: 'JSON' },
-  { id: 'openwhyd', name: 'Openwhyd', icon: Link2, hint: 'https://openwhyd.org/…' },
-  { id: 'spotify', name: 'Spotify', logo: spotify, hint: 'Playlist*.json / CSV / TXT' },
-  { id: 'apple', name: 'Apple Music', logo: appleMusic, hint: 'TXT / CSV' },
-  { id: 'deezer', name: 'Deezer', logo: deezer, hint: 'CSV / TXT' },
-  { id: 'soundcloud', name: 'SoundCloud', logo: soundcloud, hint: 'CSV / TXT' },
-  { id: 'tidal', name: 'Tidal', logo: tidal, hint: 'CSV / TXT' },
-  { id: 'yandex', name: 'Яндекс Музыка', logo: yandexMusic, hint: 'CSV / TXT' },
-  { id: 'vk', name: 'VK Музыка', icon: FileText, hint: 'CSV / TXT' },
-  { id: 'file', name: 'Другой сервис или список', icon: FileText, hint: 'CSV / TXT' },
-  { id: 'm3u', name: 'Плейлист из M3U', icon: ListMusic, hint: 'M3U / M3U8' },
+  { id: 'luma', name: 'Luma', icon: ListMusic, hint: '.luma.json', tint: '#8b7bf7' },
+  { id: 'unison', name: 'Unison', icon: FileText, hint: 'JSON', tint: '#5fa8ff' },
+  { id: 'openwhyd', name: 'Openwhyd', icon: Link2, hint: 'https://openwhyd.org/…', tint: '#37c5a8' },
+  { id: 'spotify', name: 'Spotify', logo: spotify, hint: 'Playlist*.json / CSV / TXT', tint: '#1ed760' },
+  { id: 'apple', name: 'Apple Music', logo: appleMusic, hint: 'TXT / CSV', tint: '#fa2d48' },
+  { id: 'deezer', name: 'Deezer', logo: deezer, hint: 'CSV / TXT', tint: '#a238ff' },
+  { id: 'soundcloud', name: 'SoundCloud', logo: soundcloud, hint: 'CSV / TXT', tint: '#ff5500' },
+  { id: 'tidal', name: 'Tidal', logo: tidal, hint: 'CSV / TXT', tint: '#8f9bb3' },
+  { id: 'yandex', name: 'Яндекс Музыка', logo: yandexMusic, hint: 'CSV / TXT', tint: '#ffcc00' },
+  { id: 'vk', name: 'VK Музыка', icon: FileText, hint: 'CSV / TXT', tint: '#4c8bf5' },
+  { id: 'file', name: 'Другой сервис или список', icon: FileText, hint: 'CSV / TXT', tint: '#9aa3b5' },
+  { id: 'm3u', name: 'Плейлист из M3U', icon: ListMusic, hint: 'M3U / M3U8', tint: '#c58bff' },
 ] as const;
 type ImportSource = typeof sources[number];
 const PAGE_SIZE = 10;
@@ -154,23 +155,26 @@ export function PlaylistImport({ collection, save, close }: {
   }
 
   return <dialog ref={dialog} className="playlist-import" aria-labelledby={id} onCancel={(event) => { event.preventDefault(); close(); }}>
-    <header className="dialog-header playlist-import-head">
-      <div className="online-mark" aria-hidden="true"><ListMusic size={20} /></div>
-      <div><p className="overline">{t('Мои плейлисты')} · {t('Шаг {0} из 3', step)}</p>
-        <h2 id={id} ref={heading} tabIndex={-1}>{t('Импорт плейлиста')}</h2></div>
+    <header className={`playlist-import-head${step === 1 ? ' is-first-step' : ''}`}>
+      {step > 1 && <div className="online-mark" aria-hidden="true"><ListMusic size={20} /></div>}
+      <div className="playlist-import-title">
+        <h2 id={id} ref={heading} tabIndex={-1}>{t('Импорт плейлистов')}</h2>
+        {step === 1 && <p>{t('С какого сервиса переносим?')}</p>}
+      </div>
       <button type="button" className="icon-button" aria-label={t('Закрыть')} onClick={close}><X size={20} /></button>
     </header>
     <div className="playlist-import-progress" aria-hidden="true">{[1, 2, 3].map((item) => <span key={item} data-complete={item <= step || undefined} />)}</div>
     <div className="playlist-import-body" ref={body}>
       {step === 1 && <>
-        <h3>{t('Из какого сервиса переносим?')}</h3>
+        <div className="playlist-import-card">
+          <ul className="playlist-import-sources">{sources.map((item) => <li key={item.id}>
+            <button type="button" data-source={item.id} onClick={() => setSource(item)}>
+              <span className="playlist-source-mark" style={{ '--source-tint': item.tint } as CSSProperties} aria-hidden="true">{'logo' in item
+                ? <img src={item.logo} width={24} height={24} alt="" draggable={false} /> : <item.icon size={18} />}</span>
+              <span><strong>{t(item.name)}</strong><small>{item.hint}</small></span><ChevronRight size={16} aria-hidden="true" />
+            </button></li>)}</ul>
+        </div>
         <p>{t('Выберите источник. Luma сопоставит список с вашими локальными треками.')}</p>
-        <ul className="playlist-import-sources">{sources.map((item) => <li key={item.id}>
-          <button type="button" data-source={item.id} onClick={() => setSource(item)}>
-            <span className="playlist-source-mark" aria-hidden="true">{'logo' in item
-              ? <img src={item.logo} width={24} height={24} alt="" draggable={false} /> : <item.icon size={19} />}</span>
-            <span><strong>{t(item.name)}</strong><small>{item.hint}</small></span><ChevronRight size={17} aria-hidden="true" />
-          </button></li>)}</ul>
       </>}
       {step === 2 && source?.id === 'openwhyd' && <>
         <h3>Openwhyd</h3>

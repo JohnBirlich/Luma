@@ -16,6 +16,8 @@ interface EqualizerProps {
   spectrum: ReadSpectrum;
   live: boolean;
   online: boolean;
+  /** VK plays its own audio, outside this graph — say so instead of pretending. */
+  vk?: boolean;
   change(settings: EqualizerSettings): void;
   close(): void;
 }
@@ -104,7 +106,7 @@ function NumberField({ label, value, min, max, step, set, disabled }: {
     }} /></label>;
 }
 
-export function Equalizer({ settings, sampleRate, spectrum, live, online, change, close }: EqualizerProps) {
+export function Equalizer({ settings, sampleRate, spectrum, live, online, vk, change, close }: EqualizerProps) {
   const t = useText();
   const [selected, setSelected] = useState(0);
   const ref = useRef<HTMLDialogElement>(null);
@@ -173,7 +175,7 @@ export function Equalizer({ settings, sampleRate, spectrum, live, online, change
           style={{ '--filled': `${(settings.preamp - EQ_MIN_PREAMP) / (EQ_MAX_GAIN - EQ_MIN_PREAMP) * 100}%` } as CSSProperties} />
         <output htmlFor="preamp">{db(settings.preamp)}</output>
       </div>
-      <p className="eq-note">{online ? t('Онлайн-поток воспроизводится без обработки.') : !settings.enabled ? t('Обработка выключена. Настройки сохранены.')
+      <p className="eq-note">{vk ? t('Треки VK воспроизводит сам VK — эквалайзер к ним не применяется, настройки действуют на локальные треки.') : online ? t('Онлайн-поток воспроизводится без обработки.') : !settings.enabled ? t('Обработка выключена. Настройки сохранены.')
         : preamp < settings.preamp - 0.05 ? t('Автозапас снижает предусиление до {0}.', db(preamp)) : t('Применяется к файлам и демотрекам.')}</p>
       <footer className="dialog-footer">
         <button type="button" className="button ghost-button" onClick={() => { change(equalizerPreset('flat', settings.enabled, settings.autoHeadroom)); setSelected(0); }}><RotateCcw size={15} />{t('Сбросить')}</button>

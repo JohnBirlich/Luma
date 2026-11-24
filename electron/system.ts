@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { net } from 'electron';
 import { release, type } from 'node:os';
 import { join } from 'node:path';
 import { windowsSystem } from '../src/shared/system.js';
@@ -22,4 +23,21 @@ export async function systemName(): Promise<string> {
   }
   if (process.platform === 'darwin') return `macOS ${process.getSystemVersion()} · приложение ${arch}`;
   return `${type()} · ядро ${release()} · приложение ${arch}`;
+}
+
+/**
+ * Connectivity as the app experiences it: a short request to a host that answers
+ * with no body. The browser's online flag only reports a network interface, not a
+ * working route, so the diagnostics card asks twice before it calls the app offline.
+ */
+export async function probeNetwork(): Promise<boolean> {
+  if (!net.isOnline()) return false;
+  for (const url of ['https://www.gstatic.com/generate_204', 'https://api.github.com/zen']) {
+    try {
+      const response = await net.fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(4_000) });
+      void response.body?.cancel().catch(() => {});
+      if (response.ok || response.status === 204) return true;
+    } catch { /* an unreachable host says nothing about the next one */ }
+  }
+  return false;
 }

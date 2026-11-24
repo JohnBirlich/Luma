@@ -107,7 +107,6 @@
   width: auto; border-radius: 0; box-shadow: none; backdrop-filter: none; }
 .glass-sound .enabled-dot { position: absolute; top: 1px; right: 1px; background: #5fffd2; }
 .glass-navigation .glass-sound .glass-dock-icon { --dock-high:#4fa994; --dock-low:#15685d; }
-.glass-navigation .radio-dock .glass-dock-icon { --dock-high:#e5a150; --dock-low:#a84c2b; }
 
 /* Dedicated glass cards, cohesive styling for every tab, popover and preference panel. */
 [data-layout='glass'] :is(.home-now,.hub-shelf,.setting-card,.settings-preview,.menu-items,.menu-profile,.menu-about,.online-surface,.online-panel,.journal,.diagnostic-system > div,.mix-control,.mix-card,.track-card,.track-list-item,.lyrics-card) {

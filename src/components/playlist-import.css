@@ -5,21 +5,33 @@
 }
 .playlist-import::backdrop { background: #0a0818a6; backdrop-filter: blur(8px); }
 .playlist-import[open] { display: flex; flex-direction: column; }
-.playlist-import-head { margin-bottom: 12px; }
-.playlist-import-progress { display: flex; flex: none; gap: 5px; margin: 0 0 14px; }
-.playlist-import-progress span { width: 26px; height: 3px; border-radius: 3px; background: var(--line); }
+/* One card, like the reference: title and step dashes centred, the service list
+   is a single panel with hairlines instead of a stack of separate boxes. */
+.playlist-import-head { position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 6px; padding-inline: 38px; }
+.playlist-import-head.is-first-step .playlist-import-title { justify-items: center; text-align: center; }
+.playlist-import-title { display: grid; gap: 5px; min-width: 0; }
+.playlist-import-head h2 { font: 800 clamp(19px, 4vw, 24px)/1.15 var(--display); letter-spacing: -.02em; outline: 0; }
+.playlist-import-head p { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.playlist-import-head > .icon-button { position: absolute; inset-inline-end: 0; top: 50%; transform: translateY(-50%); }
+.playlist-import-head .online-mark { flex: none; }
+.playlist-import-progress { display: flex; flex: none; justify-content: center; gap: 5px; margin: 0 0 14px; }
+.playlist-import-progress span { width: 20px; height: 3px; border-radius: 3px; background: var(--line); }
 .playlist-import-progress [data-complete] { background: var(--accent); }
-.playlist-import-head .icon-button, .playlist-import-head .online-mark { flex: none; }
-.playlist-import-head h2 { font-size: clamp(19px, 4vw, 25px); outline: 0; }
+.playlist-import-card { width: 100%; min-width: 0; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-bg); overflow: hidden; }
 .playlist-import-body { display: grid; justify-items: start; gap: 10px; min-height: 0; overflow: auto; padding: 2px 4px; scrollbar-width: thin; }
 .playlist-import-body > h3 { font: 780 16px/1.2 var(--display); }
 .playlist-import-body > p { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .playlist-import-sources, .playlist-import-preview { width: 100%; min-width: 0; display: grid; gap: 4px; padding: 0; margin: 0; list-style: none; }
-.playlist-import-sources > li > button { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 7px 9px;
-  border-radius: 10px; border: 1px solid var(--line); background: var(--panel-bg); text-align: start; min-width: 0; }
-.playlist-import-sources > li > button:hover { border-color: var(--accent-border); background: var(--accent-fill); }
-.playlist-source-mark { width: 34px; height: 34px; display: grid; place-items: center; flex: none;
-  color: var(--accent-light); background: var(--raised-bg); border: 1px solid var(--line); border-radius: 9px; }
+.playlist-import-sources { gap: 0; }
+.playlist-import-sources > li + li > button { border-top: 1px solid #ffffff12; }
+.playlist-import-sources > li > button { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; width: 100%;
+  padding: 9px 12px; border: 0; border-radius: 0; background: transparent; color: var(--text); text-align: start; min-width: 0; }
+.playlist-import-sources > li > button:hover { background: var(--accent-fill); }
+.playlist-import-sources > li > button > svg { color: var(--muted); }
+.playlist-source-mark { width: 32px; height: 32px; display: grid; place-items: center; flex: none;
+  color: #fff; background: color-mix(in srgb, var(--source-tint, var(--accent)) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--source-tint, var(--accent)) 40%, transparent); border-radius: 9px; }
+.playlist-source-mark > svg { color: var(--source-tint, var(--accent-light)); }
 .playlist-source-mark img { display: block; object-fit: contain; }
 .playlist-import-sources :is(strong,small), .playlist-import-preview :is(strong,small) { display: block; overflow-wrap: anywhere; }
 .playlist-import-sources strong, .playlist-import-preview strong { font-size: 13px; line-height: 1.25; }

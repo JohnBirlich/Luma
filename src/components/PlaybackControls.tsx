@@ -3,6 +3,7 @@ import { Check, Heart, Plus, Pause, Play, Radio, Repeat, Repeat1, Shuffle, SkipB
 import type { CSSProperties } from 'react';
 import { formatTime } from '../shared/media';
 import type { Repeat as RepeatMode } from '../shared/queue';
+import { popFeedback } from './FavoriteButton';
 
 export interface TransportProps {
   hasTrack: boolean;
@@ -83,16 +84,18 @@ export function VolumeControl({ source, volume, canVolume, canMute, setVolume, t
 export function VkLikeControl({ liked, toggle }: VkLikeProps) {
   const t = useText();
   const label = t(liked ? 'Убрать лайк в VK' : 'Нравится в VK');
-  return <button type="button" className="icon-button like-button vk-like" aria-pressed={liked === true} aria-label={label} title={label} onClick={toggle}>
-    <Heart size={16} fill={liked ? 'currentColor' : 'none'} aria-hidden="true" />
+  return <button type="button" className="icon-button like-button immersive-favorite vk-like" aria-pressed={liked === true} aria-label={label} title={label}
+    onClick={({ currentTarget }) => { toggle(); popFeedback(currentTarget, liked === true); }}>
+    <Heart size={23} fill={liked ? 'currentColor' : 'none'} aria-hidden="true" />
+    <span className="like-sparks" aria-hidden="true" />
   </button>;
 }
 
 export function VkDislikeControl({ disliked, toggle }: VkDislikeProps) {
   const t = useText();
   const label = t(disliked ? 'Убрать дизлайк в VK' : 'Не нравится в VK');
-  return <button type="button" className="icon-button dislike-toggle vk-dislike" aria-pressed={disliked === true} aria-label={label} title={label} onClick={toggle}>
-    <ThumbsDown size={16} fill={disliked ? 'currentColor' : 'none'} aria-hidden="true" />
+  return <button type="button" className="icon-button dislike-toggle immersive-favorite vk-dislike" aria-pressed={disliked === true} aria-label={label} title={label} onClick={toggle}>
+    <ThumbsDown size={21} fill={disliked ? 'currentColor' : 'none'} aria-hidden="true" />
   </button>;
 }
 
