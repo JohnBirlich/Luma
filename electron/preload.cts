@@ -68,6 +68,7 @@ const bridge: DesktopBridge = {
     collection: (id, kind, name) => ipcRenderer.invoke('vk-site:collection', id, kind, name),
     playTrack: (id, url) => ipcRenderer.invoke('vk-site:play-track', id, url),
     album: (id) => ipcRenderer.invoke('vk-site:album', id),
+    cover: (link) => ipcRenderer.invoke('vk-site:cover', link),
     reset: (id) => ipcRenderer.invoke('vk-site:reset', id),
     onState: (callback) => {
       const listener = (_event: IpcRendererEvent, id: number, state: VkSiteState) => callback(id, state);

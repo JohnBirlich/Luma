@@ -14,7 +14,8 @@ export function vkDesktopPage(content, { player = '', signedOut = false, legacy 
     ${player ? `<li${legacy ? '' : ' class="TopNavigation__player--test"'}>${player}</li>` : ''}
     <li><button id="fixture-vk-account">Аккаунт</button></li>
   </ul></div></div>`;
-  const profile = '<a href="/id42">Профиль</a>';
+  // The account name Luma reads for the statistics screen; the link stays VK's own.
+  const profile = '<a href="/id42"><span class="l_pr_row_name">Даниил Ефремов</span></a>';
   const sidebar = `<div id="${legacy ? 'side_bar' : 'layout_sidebar'}"><div class="LeftMenu__root--test"><nav><ol>
     <li id="l_pr">${legacy ? `<span>${profile}</span>` : profile}<button id="fixture-profile-more">Ещё</button></li>
     <li id="l_feed"><a href="/feed">Лента</a></li><li><a href="/audio">Музыка</a></li>

@@ -126,6 +126,8 @@ export interface DesktopBridge {
     collection(id: number, kind: VkCollection, name?: string): Promise<boolean>;
     playTrack(id: number, url: string): Promise<boolean>;
     album(id: number): Promise<boolean>;
+    /** The opaque cover key of a saved VK listen, read from its own track page. */
+    cover(link: string): Promise<string | undefined>;
     reset(id: number): Promise<boolean>;
     onState(callback: (id: number, state: VkSiteState) => void): () => void;
   };

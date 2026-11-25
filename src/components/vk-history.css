@@ -2,25 +2,28 @@
 .vk-history-section { margin-block-start: 20px; }
 .vk-history-section h2 { margin: 0 0 9px; font-size: 17px; }
 .vk-history-rows { margin: 0; padding: 0; display: grid; gap: 6px; list-style: none; }
-.vk-history-track { display: grid; width: 100%; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center;
-  gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 5px 9px; text-align: start;
-  color: var(--text); background: var(--raised-bg); }
-.vk-history-track:hover:enabled { background: var(--hover-bg); border-color: var(--accent-border); }
+/* The row owns the frame, so the track, its actions and the play button share one line. */
+.vk-history-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 4px;
+  border: 1px solid var(--line); border-radius: 10px; padding: 4px 6px 4px 5px; background: var(--raised-bg); }
+.vk-history-row:hover { background: var(--hover-bg); border-color: var(--accent-border); }
+.vk-history-track { display: grid; width: 100%; min-width: 0; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
+  gap: 10px; border: 0; border-radius: 8px; padding: 3px 5px; text-align: start; color: var(--text); background: transparent; }
+.vk-history-track:hover:enabled { background: transparent; }
+.vk-history-track:disabled { opacity: .6; }
 .vk-history-track .artwork { width: 34px; height: 34px; border-radius: 6px; }
 .vk-history-text { display: grid; min-width: 0; gap: 2px; }
 .vk-history-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vk-history-text small, .vk-history-track > svg { color: var(--muted); }
+.vk-history-text small { color: var(--muted); }
 .vk-history-badge { border-radius: 5px; padding: 1px 5px; font-size: 10px; font-weight: 750; color: var(--accent-light); background: var(--accent-fill); }
 
-/* A row keeps VK's play button and gains its own action menu. */
-.vk-history-rows > li { position: relative; }
-.vk-history-row-menu .vk-history-track { padding-inline-end: 44px; }
-.vk-history-more { position: absolute; inset-inline-end: 34px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; color: var(--muted); }
-.vk-history-more:hover:not(:disabled) { color: var(--text); }
-.vk-history-menu { position: absolute; z-index: 30; inset-inline-end: 42px; top: calc(50% + 16px); min-width: 218px;
-  display: grid; gap: 2px; padding: 5px; border-radius: 11px; border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel-bg) 94%, #000); box-shadow: 0 18px 42px #00000073; }
-.vk-history-menu > button { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 9px; border: 0; border-radius: 7px;
-  background: transparent; color: var(--text); font-size: 12px; font-weight: 560; text-align: start; }
-.vk-history-menu > button:hover { background: var(--accent-fill); color: var(--accent-light); }
-.vk-history-menu > button > svg { color: var(--accent); flex: none; }
+/* Actions sit inline next to the play button instead of behind a three-dot menu. */
+.vk-history-actions { display: flex; align-items: center; gap: 1px; }
+.vk-history-action { width: 28px; height: 28px; color: var(--muted); }
+.vk-history-action:hover:not(:disabled) { color: var(--accent-light); background: var(--accent-fill); }
+.vk-history-play { width: 30px; height: 30px; color: var(--muted); }
+.vk-history-row:hover .vk-history-play { color: var(--accent-light); }
+.vk-history-play:disabled { opacity: .45; }
+@media (max-width: 560px) {
+  .vk-history-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .vk-history-actions { grid-column: 1 / -1; justify-content: flex-end; padding-inline: 6px 2px; }
+}

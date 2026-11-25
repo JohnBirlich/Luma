@@ -40,3 +40,19 @@ export async function fetchVkArtwork(fetcher: (url: string, init: RequestInit) =
     } finally { void reader.cancel().catch(() => {}); }
   } catch { /* Missing, private or invalid artwork keeps the branded fallback. */ }
 }
+
+/**
+ * A saved track page carries the same public cover in its link preview. Only a VK
+ * artwork host is accepted, so the value is the same kind of address the player
+ * would have shown — never an arbitrary URL from the page.
+ */
+export function readVkPageCover(html: string) {
+  if (html.length > 512 * 1024) return;
+  const tag = /<meta\b[^>]*>/gi;
+  for (const [meta] of html.matchAll(tag)) {
+    if (!/(?:property|name)\s*=\s*["\']og:image["\']/i.test(meta)) continue;
+    const content = /content\s*=\s*["\']([^"\']{8,2048})["\']/i.exec(meta)?.[1];
+    const url = content && vkArtworkUrl(content.replaceAll('&amp;', '&'));
+    if (url) return url;
+  }
+}

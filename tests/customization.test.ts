@@ -14,7 +14,7 @@ test('customization reads old profiles without altering queue, volume or equaliz
   };
   const { equalizer, ...rest } = decodePreferences(JSON.stringify(previous));
   const { equalizer: oldEqualizer, ...old } = previous;
-  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: DISCORD_APP_ID, enabled: true }, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [], stats: { localListens: 0, vkListens: 0, seconds: 0, since: '' } });
+  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: DISCORD_APP_ID, enabled: true }, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], vkAccount: '', playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [], stats: { localListens: 0, vkListens: 0, seconds: 0, since: '' } });
   assert.equal(equalizer.enabled, oldEqualizer.enabled);
   assert.equal(equalizer.preset, oldEqualizer.preset);
   assert.equal(equalizer.preamp, oldEqualizer.preamp);

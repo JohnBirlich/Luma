@@ -386,3 +386,32 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
 
 export const inspectVkPlayer = (action: VkPlaybackAction | 'seek' | null = null, ratio?: number, gesture: 'click' | 'pointer' | 'trusted' = 'click') =>
   `(${visibleMusicPlayer.toString()})(...${JSON.stringify([action, ratio ?? null, VK_ARTWORK_HOST.source, gesture])})`;
+
+// Serialized into the guest's isolated world. Only the visible name of the signed-in
+// profile is read, from the blocks VK itself renders, so the statistics screen can show
+// who is connected. Nothing else about the account is touched.
+function profileName() {
+  if (window.top !== window || location.protocol !== 'https:' || location.port) return '';
+  if (!/(?:^|\.)vk\.(?:ru|com)$/.test(location.hostname)) return '';
+  const generic = /^(?:профиль|моя страница|profile|my page|меню|menu|настройки|settings|фото|photos?|назад|back|выйти|log ?out|войти|log ?in)$/i;
+  const clean = (value: string) => value.replace(/[\p{Cc}\p{Cf}\s]+/gu, ' ').trim();
+  const selectors = [
+    '#l_pr .l_pr_row_name', '#l_pr .l_pr_row > span', '#l_pr a[href^="/"] span',
+    '#top_profile_link .top_profile_name', '#l_pr a[href^="/"]', '#top_profile_link',
+    '[class*="ProfileCard"] :is(h1, h2, [class*="Name"])',
+    '[class*="LeftMenu"] [class*="Profile"] [class*="Name"]',
+    '[class*="ProfileMenu"] [class*="Name"]', '[class*="AccountMenu"] :is([class*="Name"], [class*="Title"])',
+  ];
+  for (const selector of selectors) {
+    for (const node of [...document.querySelectorAll(selector)].slice(0, 4)) {
+      const text = clean(node.getAttribute('aria-label') || node.textContent || '');
+      // A display name is short prose, not a menu label and not an identifier.
+      if (!text || text.length > 60 || generic.test(text) || /\d{4,}/.test(text)) continue;
+      if (text.split(' ').length > 4) continue;
+      return text;
+    }
+  }
+  return '';
+}
+
+export const inspectVkProfile = () => `(${profileName.toString()})()`;

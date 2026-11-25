@@ -277,3 +277,17 @@
 
 .hub-updates-head { display: flex; align-items: center; margin: 2px 0 10px; }
 .hub-updates-head .text-button { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Placeholders for the services that are not wired yet: a card, a name and a badge. */
+.hub-service-rail { grid-auto-columns: minmax(210px, 33%); }
+.service-stub { display: flex; align-items: center; gap: 11px; padding: 12px 13px; border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--line), var(--muted) 45%); background: var(--raised-bg); }
+.service-stub-mark { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 10px; color: #08130b; }
+.service-spotify .service-stub-mark { background: #1ed760; }
+.service-yandex .service-stub-mark { background: #ffcc00; color: #3a2c00; }
+.service-stub-copy { display: grid; gap: 3px; min-width: 0; }
+.service-stub-copy strong { font: 780 14px/1.2 var(--display); letter-spacing: -.02em; }
+.service-stub-copy small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.service-stub-badge { margin-left: auto; flex: none; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--accent-border);
+  background: var(--accent-fill); color: var(--accent-light); font-size: 10px; font-weight: 700; letter-spacing: .02em; }
+@media (max-width: 700px) { .hub-service-rail { grid-auto-columns: minmax(190px, 78%); } }

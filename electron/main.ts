@@ -69,6 +69,8 @@ const discord = new DesktopDiscord(process.platform === 'win32');
 const vkCovers = new VkCoverCache(() => join(app.getPath('userData'), 'vk-listen-covers'));
 const labs = new DesktopLabs(() => join(app.getPath('userData'), 'labs.json'));
 const vkSite = new VkSite(vkCovers, labs);
+// Covers saved by earlier launches are published without another request.
+void vkSite.warmCovers().catch(() => {});
 const started = performance.now();
 
 function getDevUrl(): URL | undefined {
@@ -181,6 +183,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('vk-site:collection', (event, id, kind, name) => vkSite.collection(appWindow(event), id, kind, name));
   ipcMain.handle('vk-site:play-track', (event, id, url) => vkSite.playTrack(appWindow(event), id, url));
   ipcMain.handle('vk-site:album', (event, id) => vkSite.album(appWindow(event), id));
+  ipcMain.handle('vk-site:cover', (event, link) => vkSite.coverFor(appWindow(event), link));
   ipcMain.handle('vk-site:reset', (event, id) => vkSite.clear(appWindow(event), id, {
     type: 'warning', title: t('Сессия VK'), message: t('Сбросить данные входа VK в Luma?'),
     detail: t('Вход в обычном браузере и сохранённые плейлисты Luma останутся.'),
