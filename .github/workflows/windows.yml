@@ -55,7 +55,7 @@ jobs:
           set -o pipefail
           npm run test:desktop 2>&1 | tee smoke.log || {
             status=$?
-            grep -aE 'Timed out|AssertionError|not ok|^Error' smoke.log | tail -n 8 | while IFS= read -r line; do
+            grep -aA3 -E 'Timed out|AssertionError|not ok ' smoke.log | tr -d '\r' | tail -n 40 | while IFS= read -r line; do
               echo "::error::${line//'%'/'%25'}"
             done
             exit $status
