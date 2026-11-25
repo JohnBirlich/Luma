@@ -56,7 +56,7 @@ jobs:
           npm run test:desktop *>&1 | Tee-Object -FilePath $log
           $result = $LASTEXITCODE
           if ($result -ne 0) {
-            $tail = (Get-Content $log -Tail 120) -join "`n"
+            $tail = (Get-Content $log -Tail 200) -join "`n"
             if ($env:PR_NUMBER) { gh pr comment $env:PR_NUMBER --body ("Smoke failure:`n``````" + "`n" + $tail + "`n``````") }
             $tail
           }

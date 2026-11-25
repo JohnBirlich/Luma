@@ -457,10 +457,10 @@ export class VkSite {
    */
   async playTrack(owner: BrowserWindow, id: unknown, url: unknown) {
     const active = this.active, contents = active?.view.webContents;
-    if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) { console.log('[probe] playTrack no session'); return false; }
-    if (!active.windowVisible || active.minimized || !vkSiteEntry(url)) { console.log('[probe] playTrack guarded', active.windowVisible, active.minimized, !!vkSiteEntry(url)); return false; }
+    if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) { console.error('[probe] playTrack no session'); return false; }
+    if (!active.windowVisible || active.minimized || !vkSiteEntry(url)) { console.error('[probe] playTrack guarded', active.windowVisible, active.minimized, !!vkSiteEntry(url)); return false; }
     const onPage = contents.getURL() === url;
-    console.log('[probe] playTrack start', contents.getURL(), 'onPage', onPage, 'shown', active.shown, 'fg', active.foreground);
+    console.error('[probe] playTrack start', contents.getURL(), 'onPage', onPage, 'shown', active.shown, 'fg', active.foreground);
     if (onPage && active.state.track?.playing) return true;
     if (!active.shown) {
       const [w, h] = active.owner.getContentSize();
@@ -472,7 +472,7 @@ export class VkSite {
     // needs the same state, and the read-back is what keeps it alive afterwards.
     active.foreground = true;
     const finish = (started: boolean) => {
-      console.log('[probe] playTrack finish', contents.getURL(), started);
+      console.error('[probe] playTrack finish', contents.getURL(), started);
       if (!started) active.foreground = wasForeground;
       if (this.active === active) this.visibility(active);
       return started;
@@ -484,13 +484,14 @@ export class VkSite {
         await new Promise((resolve) => { setTimeout(resolve, 250); });
       }
       if (this.active !== active || contents.isDestroyed() || !this.musicPageReady(active)) {
-        console.log('[probe] playTrack nav failed', contents.isDestroyed(), active.state.phase, contents.getURL());
+        console.error('[probe] playTrack nav failed', contents.isDestroyed(), active.state.phase, contents.getURL());
         return finish(false);
       }
-      console.log('[probe] playTrack page ready', contents.getURL());
+      console.error('[probe] playTrack page ready', contents.getURL(), active.state.phase);
     }
     // The press is replayed like a catalogue card's: VK only reacts to a real input event.
     for (let attempt = 0; attempt < 5; attempt++) {
+      console.error('[probe] playTrack press attempt', attempt, contents.getURL(), 'playing', active.state.track?.playing, 'rev', active.revision, revision);
       if (active.revision !== revision && active.state.track?.playing) break;
       const result: unknown = await contents.executeJavaScriptInIsolatedWorld(world,
         [{ code: inspectVkPlayer('toggle', undefined, 'trusted') }], true).catch(() => undefined);
