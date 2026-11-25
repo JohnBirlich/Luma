@@ -1260,7 +1260,19 @@ async function smoke() {
           && headerStyle.position === 'fixed';
       })()`);
       assert.equal(await noLayoutChoice(), true);
-      await waitFor('signed-in VK opens without the general panels by default', () => shellIs('minimal'));
+      const shellDump = await guestRun(`(() => {
+        const header = document.querySelector('#page_header_cont'), body = document.querySelector('#page_body');
+        const player = header && header.querySelector('#top_audio_layer_place'), bar = header && header.getBoundingClientRect();
+        const style = header && getComputedStyle(header), bodyRect = body.getBoundingClientRect();
+        const viewport = document.documentElement.clientWidth;
+        const width = (el) => el ? Math.round(el.getBoundingClientRect().width) : null;
+        return JSON.stringify({ opacity: style?.opacity, position: style?.position, width: style?.width,
+          ul: header?.querySelector('ul') ? getComputedStyle(header.querySelector('ul')).getPropertyValue('interactivity') : 'no-ul',
+          barWidth: Math.round(bar?.width ?? 0), barHeight: Math.round(bar?.height ?? 0), barTop: Math.round(bar?.top ?? 0),
+          player: width(player), bodyTop: Math.round(bodyRect.top), gutter: viewport - Math.round(bodyRect.width), viewport,
+          scrollWidth: document.documentElement.scrollWidth, right: Math.round(bodyRect.right) });
+      })()`);
+      await waitFor(`signed-in VK opens without the general panels by default ${shellDump}`, () => shellIs('minimal'));
       await waitFor('the profile name comes from VK’s own block, not from a link', () => run(`window.vkFixtureStates.at(-1)?.state.user === 'Даниил Ефремов'`));
       assert.equal(await guestRun(`(() => {
         const search = document.querySelector('#fixture-vk-search'); search.focus(); return document.activeElement === search;
