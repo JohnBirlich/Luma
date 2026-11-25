@@ -33,7 +33,7 @@ import { connectionState, recordDiagnostic, subscribeConnection } from './data/d
 import { saveSharedPlaylist } from './data/playlist-share';
 import { musicLaunchUrl, readMusicLink } from './shared/music-links';
 import { vkMusicSearchUrl, vkSiteEntry } from './shared/vk-site';
-import { rememberVkListen, vkHistoryDestination } from './shared/vk-history';
+import { rememberVkListen, vkHistoryDestination, vkHistoryKey } from './shared/vk-history';
 import type { VkHistoryActions } from './components/VkHistory';
 import type { VkHistoryEntry } from './shared/vk-history';
 import type { VkCollection, VkSiteAction } from './shared/vk-site';
@@ -935,13 +935,28 @@ export default function App() {
     if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(url).then(done, () => setNotice({ message: 'Не удалось скопировать ссылку.', error: true }));
     else setNotice({ message: 'Буфер обмена недоступен.', error: true });
   }, [setNotice]);
+  const keepVkArtwork = useCallback((entry: VkHistoryEntry, artwork: string) => {
+    setPreferences((data) => {
+      const found = data.vkRecent.some((other) => vkHistoryKey(other) === vkHistoryKey(entry) && other.artwork !== artwork);
+      if (!found) return data;
+      return { ...data, vkRecent: data.vkRecent.map((other) => vkHistoryKey(other) === vkHistoryKey(entry) ? { ...other, artwork } : other) };
+    });
+  }, []);
+  // The name VK renders for the profile is remembered locally, so Statistics can show it
+  // after a restart without opening the site again.
+  const vkAccount = vkSite.view?.state.user;
+  useEffect(() => {
+    if (!vkAccount || preferences.vkAccount === vkAccount) return;
+    setPreferences((data) => data.vkAccount === vkAccount ? data : { ...data, vkAccount });
+  }, [vkAccount, preferences.vkAccount]);
   const vkActions = useMemo<VkHistoryActions>(() => ({
     play: playVkRecent,
     addToLibrary: (entry) => vkRecentAction(entry, 'favorite'),
     dislike: (entry) => vkRecentAction(entry, 'dislike'),
     openAlbum: openVkAlbum,
     copyLink: copyVkLink,
-  }), [copyVkLink, openVkAlbum, playVkRecent, vkRecentAction]);
+    artwork: keepVkArtwork,
+  }), [copyVkLink, keepVkArtwork, openVkAlbum, playVkRecent, vkRecentAction]);
   const searchVk = useCallback((query: string) => {
     const url = vkMusicSearchUrl(query);
     if (url) openVk(url);
@@ -1091,7 +1106,7 @@ export default function App() {
             openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={openMixes} openDiagnostics={() => navigate('diagnostics')} openEqualizer={openEqualizer}
             statistics={{ stats: preferences.stats, ticking: player.playing || listeningToVk, localCount: localTracks.length, onlineCount: onlineTracks.length, playlistCount: preferences.playlists.length,
               favoriteCount: preferences.favorites.length, recentCount: preferences.recent.length, vkRecentCount: preferences.vkRecent.length, fullNumbers: appearance.fullNumbers,
-              accounts: { vk: vkSignedIn } }} /> :
+              accounts: { vk: vkSignedIn, vkName: vkSite.view?.state.user || preferences.vkAccount } }} /> :
           basePage === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} disliked={dislikedIds} recent={recent} fullNumbers={appearance.fullNumbers}
             playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :
           <LibraryPage key={`${basePage}:${libraryScope}`} initialScope={basePage === 'library' ? libraryScope : 'all'} fullNumbers={appearance.fullNumbers} tracks={basePage === 'favorites' ? favorites : basePage === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}

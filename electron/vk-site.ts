@@ -6,12 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { LEGACY_VK_SESSION } from '../src/shared/vk.js';
 import { proxyRules, vkMusicUrlFor } from '../src/shared/labs.js';
 import type { LabSettings } from '../src/shared/labs.js';
-import { VK_SITE_PARTITION, VK_TRANSPORT, readVkCollection, readVkCollectionName, readVkNowPlaying, vkArtworkPixels, vkArtworkUrl, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds, withVkDomain } from '../src/shared/vk-site.js';
+import { VK_SITE_PARTITION, VK_TRANSPORT, readVkCollection, readVkCollectionName, readVkNowPlaying, vkArtworkPixels, vkArtworkUrl, vkHistoryLink, vkMusicPage, vkSeekRatio, vkSignInPage, vkSignInUrl, vkSiteEntry, vkSiteUrl, vkViewBounds, withVkDomain } from '../src/shared/vk-site.js';
 import type { VkNowPlaying, VkPlaybackAction, VkSiteState } from '../src/shared/vk-site.js';
 import { vkAppearanceScript } from './vk-appearance.js';
-import { inspectVkPlayer } from './vk-player.js';
+import { inspectVkPlayer, inspectVkProfile } from './vk-player.js';
 import { inspectVkAlbum, inspectVkCollection } from './vk-collection.js';
-import { fetchVkArtwork } from './vk-artwork.js';
+import { fetchVkArtwork, readVkPageCover } from './vk-artwork.js';
 import type { VkArtwork } from './vk-artwork.js';
 import { vkCoverKey } from './vk-cover-cache.js';
 import type { VkCoverCache } from './vk-cover-cache.js';
@@ -24,6 +24,8 @@ interface VkView {
   state: VkSiteState; revision: number; reading: boolean; confirming: boolean; qrStarted: boolean; returnToEntry: boolean; unbind(): void;
   cover?: CurrentCover;
   poll?: ReturnType<typeof setInterval>; timer?: ReturnType<typeof setTimeout>;
+  /** How often the profile name was asked for in this document. */
+  profileNameTries: number; profileTimer?: ReturnType<typeof setTimeout>;
 }
 const world = 1481;
 const preload = fileURLToPath(new URL('./vk-media-preload.cjs', import.meta.url));
@@ -86,6 +88,18 @@ export class VkSite {
   private async loadCover(active: VkView, cover: CurrentCover, urls: string[]) {
     const signal = AbortSignal.any([cover.cancel.signal, AbortSignal.timeout(6_000)]);
     for (const src of urls) {
+      // A cover stored by an earlier listen is already on disk; asking VK again would
+      // only delay the image and depend on a signed address that may have expired.
+      const known = vkCoverKey(src);
+      const stored = this.cached.has(known) ? await this.coverBytes(known) : undefined;
+      if (stored) {
+        if (signal.aborted || active.cover !== cover || !this.musicPageReady(active)) return;
+        cover.image = stored;
+        this.publish(active, { cover: `luma://app/media/vk-cover/${cover.id}` });
+        const current = active.state.track;
+        if (current) this.publish(active, { track: { ...current, artwork: known } });
+        return;
+      }
       const image = await fetchVkArtwork(net.fetch, src, signal);
       if (signal.aborted || active.cover !== cover || !this.musicPageReady(active)) return;
       if (!image) continue;
@@ -101,6 +115,51 @@ export class VkSite {
       this.publish(active, { cover: `luma://app/media/vk-cover/${cover.id}` });
       return;
     }
+  }
+
+  private coverBytes(key: string) {
+    return this.covers?.get(key);
+  }
+
+  /**
+   * A saved listen keeps only a cover key, so an entry recorded before its cover was
+   * read — or one whose file was swept — is resolved here from the track's own VK
+   * page. The caller only ever receives the opaque key.
+   */
+  async coverFor(owner: BrowserWindow, link: unknown) {
+    const url = vkHistoryLink(link);
+    if (!url || !this.covers || owner.isDestroyed()) return;
+    const signal = AbortSignal.timeout(8_000);
+    try {
+      const response = await this.partition().fetch(url, { credentials: 'include', signal, redirect: 'follow',
+        headers: { Accept: 'text/html' } });
+      if (!response.ok || !response.body) return;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let html = '';
+      try {
+        while (html.length < 300_000) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          html += decoder.decode(value, { stream: true });
+          if (/<\/head>/i.test(html)) break;
+        }
+      } finally { void reader.cancel().catch(() => {}); }
+      const source = readVkPageCover(html);
+      if (!source) return;
+      const key = vkCoverKey(source);
+      if (this.cached.has(key)) return key;
+      const image = await fetchVkArtwork(net.fetch, source, signal);
+      if (!image) return;
+      await this.covers.put(key, image);
+      this.cached.add(key);
+      return key;
+    } catch { /* A page without a public cover leaves the row as it was. */ }
+  }
+
+  /** Covers left on disk by earlier launches are publishable without a request. */
+  async warmCovers() {
+    for (const key of await this.covers?.keys() ?? []) this.cached.add(key);
   }
 
   private partition() {
@@ -145,7 +204,9 @@ export class VkSite {
     const active = this.active;
     if (!active || active.id !== id || active.owner !== owner || typeof foreground !== 'boolean') return;
     if (!foreground && active.foreground) {
-      if (!this.musicPageReady(active)) { this.dispose(active); return; }
+      // A page that has not finished loading keeps working in the background: dropping
+      // it here meant every return to the tab started the whole VK catalogue again.
+      if (active.state.phase !== 'loading' && !this.musicPageReady(active)) { this.dispose(active); return; }
       // Catch the first play even if the listener immediately switches to Now Playing.
       void this.readTrack(active);
     }
@@ -153,10 +214,16 @@ export class VkSite {
     this.layoutView(active, foreground ? value : null);
   }
 
-  private applyAppearance(active: VkView) {
+  private applyAppearance(active: VkView, early = false) {
     const contents = active.view.webContents;
-    if (active.state.phase !== 'ready' || contents.isDestroyed()) return;
-    const code = vkAppearanceScript(contents.getURL(), active.state.signIn);
+    if (contents.isDestroyed()) return;
+    // A fresh document has no state yet; its own address is enough to know whether the
+    // sheet belongs there, and styling it now keeps VK's own chrome from ever painting.
+    if (!early && active.state.phase !== 'ready') return;
+    const href = contents.getURL();
+    const page = vkSiteUrl(href);
+    const signIn = early ? (page ? vkSignInPage(page) : false) : active.state.signIn;
+    const code = vkAppearanceScript(href, signIn);
     if (code) void contents.executeJavaScriptInIsolatedWorld(world, [{ code }]).catch(() => {});
   }
 
@@ -172,6 +239,7 @@ export class VkSite {
     this.active = undefined;
     active.unbind();
     clearTimeout(active.timer);
+    clearTimeout(active.profileTimer);
     clearInterval(active.poll);
     const { owner: parent, view } = active;
     if (!parent.isDestroyed()) parent.contentView.removeChildView(view);
@@ -202,7 +270,8 @@ export class VkSite {
     const entry = withVkDomain(url, this.settings.vkDomain) ?? url;
     this.applyProxy();
     const view = new WebContentsView({ webPreferences: { preload, session: this.partition(), nodeIntegration: false, nodeIntegrationInSubFrames: false,
-      contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, disableHtmlFullscreenWindowResize: true } });
+      contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, disableHtmlFullscreenWindowResize: true,
+      backgroundThrottling: false } });
     view.setBackgroundColor('#171820');
     const contents = view.webContents;
     const close = () => this.close(owner, id);
@@ -218,6 +287,7 @@ export class VkSite {
     const hide = () => { active.windowVisible = false; syncWindow(); };
     const show = () => { active.windowVisible = true; syncWindow(); };
     const active: VkView = { id, owner, view, entry, shown: false, foreground: true, revision: 0, reading: false, confirming: false, qrStarted: false, returnToEntry: false,
+      profileNameTries: 0,
       windowVisible: owner.isVisible(), minimized: false,
       state: { host: '', phase: 'loading', back: false, signIn: false }, unbind() {
         owner.removeListener('minimize', minimize);
@@ -263,6 +333,13 @@ export class VkSite {
       this.visibility(active);
       if (active.state.phase === 'ready') void this.readyPage(active, true);
     });
+    // Style each new document as soon as it exists: waiting for the whole catalogue
+    // meant a visible flash of VK's own header and a reflow on every visit.
+    contents.on('dom-ready', () => {
+      if (this.active !== active) return;
+      const url = contents.getURL();
+      if (vkMusicPage(url)) this.applyAppearance(active, true);
+    });
     contents.on('did-finish-load', () => void this.readyPage(active));
     contents.on('did-fail-load', (_event, code, _description, _dest, main) => { if (main && code !== -3) this.fail(active); });
     contents.on('render-process-gone', () => this.fail(active));
@@ -283,6 +360,22 @@ export class VkSite {
     active.qrStarted = active.returnToEntry = true;
     this.navigate(active, login);
     return true;
+  }
+
+  /**
+   * The signed-in profile's display name, read from VK's own profile block. It is asked
+   * for once per document and quietly retried while VK renders its shell lazily.
+   */
+  private async readProfile(active: VkView) {
+    if (this.active !== active || active.state.user || active.profileNameTries >= 3) return;
+    const contents = active.view.webContents;
+    if (contents.isDestroyed()) return;
+    const tries = ++active.profileNameTries;
+    const name = await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkProfile() }]).catch(() => '');
+    if (this.active !== active || contents.isDestroyed() || active.state.signIn) return;
+    if (typeof name === 'string' && name) { this.publish(active, { user: name }); return; }
+    // VK mounts its shell late; two more looks are enough for the profile block.
+    if (tries < 3) active.profileTimer = setTimeout(() => void this.readProfile(active), 1_500);
   }
 
   private async readyPage(active: VkView, inPage = false) {
@@ -320,6 +413,7 @@ export class VkSite {
       ...((!music || signIn) && { track: undefined, engaged: undefined, cover: undefined }) });
     this.applyAppearance(active);
     this.visibility(active);
+    if (!signIn) void this.readProfile(active);
     void this.readTrack(active);
   }
 

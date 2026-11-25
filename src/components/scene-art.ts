@@ -47,37 +47,60 @@ export function drawStars(ctx: CanvasRenderingContext2D, w: number, h: number, t
 }
 
 export function drawAurora(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, energy: number) {
-  const count = Math.min(160, Math.max(64, Math.floor(w / 5)));
+  const steps = Math.min(140, Math.max(56, Math.round(w / 7)));
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
   for (let layer = 0; layer < 3; layer++) {
     const x0 = -w * .12, span = w * 1.25, dt = t * (.38 - layer * .055);
     const offset = .43 + .13 * layer;
     const edge = (u: number) => h * (offset + .13 * Math.sin(u * 7 - dt + layer) + .045 * Math.sin(u * 18 + dt + layer) - .20 * u);
+    const folds = (u: number) => .58 + .29 * Math.sin(u * (33 + layer * 6) + dt * 1.7) + .13 * Math.sin(u * 105 - dt * 2);
+    const height = (u: number) => h * (.18 + .37 * folds(u) + .09 * Math.sin(u * 5 + dt));
     const light = layer === 1 ? '180,133,255' : layer === 2 ? '78,186,255' : '86,255,183';
-    // Follow a curved lower hem with overlapping vertical folds, each fading into the sky.
-    for (let i = 0; i <= count; i++) {
-      const u = i / count, x = x0 + u * span, y = edge(u);
-      const folds = .58 + .29 * Math.sin(u * (33 + layer * 6) + dt * 1.7) + .13 * Math.sin(u * 105 - dt * 2);
-      const height = h * (.18 + .37 * folds + .09 * Math.sin(u * 5 + dt));
-      const strength = (layer === 0 ? .71 : .44) * (1 + .22 * energy) * Math.sin(Math.PI * u) ** .6;
-      const glow = ctx.createLinearGradient(x, y - height, x, y + h * .025);
-      glow.addColorStop(0, `rgba(${light},0)`);
-      glow.addColorStop(.52, `rgba(${light},${strength * folds * .22})`);
-      glow.addColorStop(.88, `rgba(${light},${strength * (.30 + .7 * folds)})`);
-      glow.addColorStop(1, `rgba(${light},0)`);
-      ctx.fillStyle = glow;
-      ctx.beginPath(); ctx.moveTo(x - span / count, y + h * .025);
-      ctx.lineTo(x + span / count, y + h * .025);
-      ctx.lineTo(x + span / count + h * .075, y - height);
-      ctx.lineTo(x - span / count + h * .075, y - height); ctx.fill();
+    const strength = (layer === 0 ? .71 : .44) * (1 + .22 * energy);
+    // One continuous body per layer instead of a column per fold: the hem is a single
+    // smooth curve and the fade is one vertical gradient, so neighbours never leave a
+    // seam that reads as a gap between separate lines.
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps, x = x0 + u * span;
+      if (i) ctx.lineTo(x, edge(u)); else ctx.moveTo(x, edge(u));
     }
+    for (let i = steps; i >= 0; i--) {
+      const u = i / steps;
+      ctx.lineTo(x0 + u * span, edge(u) - height(u));
+    }
+    ctx.closePath();
+    const top = h * (offset - .58), bottom = h * (offset + .05);
+    const body = ctx.createLinearGradient(0, top, 0, bottom);
+    body.addColorStop(0, `rgba(${light},0)`);
+    body.addColorStop(.4, `rgba(${light},${(strength * .12).toFixed(3)})`);
+    body.addColorStop(.76, `rgba(${light},${(strength * .3).toFixed(3)})`);
+    body.addColorStop(1, `rgba(${light},0)`);
+    ctx.fillStyle = body;
+    ctx.fill();
+    // The curtains are lit by wide, heavily overlapping bands clipped to the body, so
+    // the folds merge into a single gradient rather than a row of separated strips.
+    ctx.save();
+    ctx.clip();
+    const bands = Math.max(20, Math.min(72, Math.round(span / 18)));
+    for (let i = 0; i <= bands; i++) {
+      const u = i / bands, x = x0 + u * span, width = span / bands * 2.2;
+      const glow = Math.max(0, strength * (.055 + .05 * Math.sin(i * 2.4 + dt * 1.6)) * Math.sin(Math.PI * u) ** .5);
+      const band = ctx.createLinearGradient(x - width / 2, 0, x + width / 2, 0);
+      band.addColorStop(0, `rgba(${light},0)`);
+      band.addColorStop(.5, `rgba(${light},${glow.toFixed(3)})`);
+      band.addColorStop(1, `rgba(${light},0)`);
+      ctx.fillStyle = band;
+      ctx.fillRect(x - width / 2, top, width, bottom - top);
+    }
+    ctx.restore();
     const rim = ctx.createLinearGradient(0, 0, w, 0);
     rim.addColorStop(0, `rgba(${light},0)`); rim.addColorStop(.46, `rgba(${light},.48)`); rim.addColorStop(1, `rgba(${light},.08)`);
     ctx.strokeStyle = rim; ctx.lineWidth = Math.max(1.1, h * .0039);
     ctx.beginPath();
-    for (let i = 0; i <= count; i++) {
-      const u = i / count;
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
       if (!i) ctx.moveTo(x0, edge(u)); else ctx.lineTo(x0 + u * span, edge(u));
     }
     ctx.stroke();

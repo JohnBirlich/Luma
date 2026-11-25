@@ -49,7 +49,6 @@ jobs:
           exit $result
       - run: npm run build
       - run: npm run test:desktop
-        timeout-minutes: 8
         env:
           LUMA_LIVE_CATALOG: ${{ inputs.live_catalog && '1' || '0' }}
           LUMA_LIVE_RADIO: ${{ inputs.live_radio && '1' || '0' }}

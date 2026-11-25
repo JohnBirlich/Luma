@@ -16,7 +16,7 @@ export interface StatisticsData {
   vkRecentCount: number;
   fullNumbers: boolean;
   /** Which accounts are signed in right now; the rest are placeholders for later. */
-  accounts: { vk: boolean };
+  accounts: { vk: boolean; vkName?: string };
 }
 
 /** H:MM:SS for short totals, hours with one decimal once the count is large. */
@@ -62,6 +62,8 @@ export function Statistics({ data }: { data: StatisticsData }) {
       icon: Headphones, label: t('Прослушано'), rows: [
         [t('Локальные треки'), number(data.stats.localListens)],
         [t('Треки из VK Музыки'), number(data.stats.vkListens)],
+        [t('Треки из Spotify'), number(0)],
+        [t('Треки из Яндекс Музыки'), number(0)],
         [t('Всего треков'), number(total)],
         [t('Время в плеере'), duration(seconds, t.language)],
         ...(since ? [[t('Считаем с'), since] as [string, string]] : []),
@@ -95,7 +97,8 @@ export function Statistics({ data }: { data: StatisticsData }) {
     <section className="statistics-group statistics-accounts" aria-label={t('Аккаунты')}>
       <header><UserRound size={17} aria-hidden="true" /><h3>{t('Аккаунты')}</h3></header>
       <dl>
-        <div><dt>{t('Аккаунт VK')}</dt><dd><span className={`account-state ${data.accounts.vk ? 'is-on' : 'is-off'}`}><i aria-hidden="true" />{t(data.accounts.vk ? 'Подключено' : 'Не подключено')}</span></dd></div>
+        <div><dt>{t('Аккаунт VK')}</dt><dd><span className={`account-state ${data.accounts.vk ? 'is-on' : 'is-off'}`}><i aria-hidden="true" />
+          {data.accounts.vk ? data.accounts.vkName ?? t('Подключено') : t('Не подключено')}</span></dd></div>
         <div><dt>{t('Аккаунт Spotify')}</dt><dd><span className="account-state is-later"><i aria-hidden="true" />{t('Временно недоступно')}</span></dd></div>
         <div><dt>{t('Аккаунт Яндекс Музыки')}</dt><dd><span className="account-state is-later"><i aria-hidden="true" />{t('Временно недоступно')}</span></dd></div>
       </dl>

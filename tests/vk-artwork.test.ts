@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readVkNowPlaying, vkArtworkPixels, vkArtworkUrl } from '../src/shared/vk-site.js';
-import { MAX_VK_ARTWORK_BYTES, fetchVkArtwork } from '../electron/vk-artwork.js';
+import { MAX_VK_ARTWORK_BYTES, fetchVkArtwork, readVkPageCover } from '../electron/vk-artwork.js';
 
 const src = 'https://sun9-72.userapi.com/impg/music-fixture?size=720x720&quality=95&sign=test';
 const photo = 'https://sun9-104.vkuserphoto.ru/impg/music-fixture.jpg?size=200x200&quality=95&sign=test&c_uniq_tag=test&type=album';
@@ -89,4 +89,19 @@ test('VK feedback pair is read from the rendered player, not assumed', () => {
   assert.equal(readVkNowPlaying({ ...playable, liked: true, disliked: false })?.disliked, false);
   assert.equal(readVkNowPlaying({ ...playable, liked: 'true', disliked: 1 })?.liked, undefined);
   assert.equal(readVkNowPlaying({ ...playable, liked: 'true', disliked: 1 })?.disliked, undefined);
+});
+
+test('a saved listen resolves its cover from the track page link preview only', () => {
+  const head = (meta) => `<!doctype html><html><head><title>Трек</title>${meta}</head><body></body></html>`;
+  assert.equal(readVkPageCover(head(`<meta property="og:image" content="${src}">`)), src);
+  assert.equal(readVkPageCover(head(`<meta content="${photo}" property="og:image">`)), photo);
+  // The link preview is escaped HTML, so the address is decoded before it is checked.
+  assert.equal(readVkPageCover(head(`<meta property="og:image" content="${src.replaceAll('&', '&amp;')}">`)), src);
+  for (const meta of ['', '<meta property="og:title" content="Трек">',
+    '<meta property="og:image" content="https://evil.example/cover.jpg">',
+    '<meta property="og:image" content="javascript:alert(1)">',
+    '<meta property="og:image" content="https://sun9-72.userapi.com/impg/x?redirect=1">']) {
+    assert.equal(readVkPageCover(head(meta)), undefined, meta);
+  }
+  assert.equal(readVkPageCover('x'.repeat(512 * 1024 + 1)), undefined, 'an oversized document is not parsed');
 });

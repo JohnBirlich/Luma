@@ -1,4 +1,4 @@
-import { readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { readdir, readFile, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -9,7 +9,7 @@ import type { VkArtwork } from './vk-artwork.js';
 
 /** Opaque, URL-free handle for one VK cover image. */
 export const VK_COVER_KEY = /^[a-f0-9]{32}$/;
-export const MAX_VK_COVERS = 120;
+export const MAX_VK_COVERS = 240;
 /** Total on-disk budget for saved covers; the newest listens always win. */
 export const MAX_VK_COVER_BYTES = 64 * 1024 * 1024;
 
@@ -41,10 +41,22 @@ export class VkCoverCache {
     if (!VK_COVER_KEY.test(key)) return;
     await this.open();
     for (const [extension, mime] of Object.entries(EXTENSIONS)) {
-      const bytes = await readFile(join(this.root(), key + extension)).catch(() => null);
+      const path = join(this.root(), key + extension);
+      const bytes = await readFile(path).catch(() => null);
       if (!bytes || !bytes.byteLength || bytes.byteLength > MAX_VK_ARTWORK_BYTES || coverMime(bytes) !== mime) continue;
+      // The sweep sorts by modification time, so a cover that is still on screen —
+      // a saved listen in the history, for instance — must not age out underneath it.
+      const now = new Date();
+      await utimes(path, now, now).catch(() => {});
       return { bytes: new Uint8Array(bytes), mime };
     }
+  }
+
+  /** Every key already on disk, so a new session can serve those covers without a request. */
+  async keys(): Promise<string[]> {
+    await this.open();
+    const names = await readdir(this.root()).catch(() => [] as string[]);
+    return names.filter((name) => /^[a-f0-9]{32}\.(?:webp|png|jpg)$/.test(name)).map((name) => name.slice(0, 32));
   }
 
   async put(key: string, image: VkArtwork) {

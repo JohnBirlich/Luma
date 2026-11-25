@@ -45,6 +45,8 @@ export interface Preferences {
   disliked: string[];
   recent: string[];
   vkRecent: VkHistoryEntry[];
+  /** The display name VK itself shows for the signed-in profile; empty until it is read. */
+  vkAccount: string;
   stationIds: string[];
   playlists: LumaPlaylist[];
   onlineTracks: OnlineTrack[];
@@ -84,7 +86,7 @@ export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
   playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: DISCORD_APP_ID, enabled: true }, exportLyrics: false,
-  resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
+  resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], vkAccount: '', stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
   stats: emptyStats,
 };
 const persistentIds = (ids: readonly string[]) => ids.filter((id) => !sessionCatalogId(id));
@@ -121,6 +123,7 @@ export function decodePreferences(value: string | null): Preferences {
       favorites: readFavorites(data.favorites).filter((id) => !excluded.has(id)), disliked,
       recent: readFavorites(data.recent).slice(0, RECENT_LIMIT),
       vkRecent: readVkHistory(data.vkRecent),
+      vkAccount: typeof data.vkAccount === 'string' ? data.vkAccount.slice(0, 60).replace(/[\p{Cc}\p{Cf}\s]+/gu, ' ').trim() : '',
       stats: readListeningStats(data.stats),
       stationIds: readStationIds(data.stationIds),
       playlists: readLumaPlaylists(data.playlists),
@@ -169,7 +172,7 @@ export function encodePreferences(preferences: Preferences, current: QueueState)
   const stored = { ...preferences, resumeRepeat, resumeShuffle, queue };
   // Session-only streams never enter the persisted queue, links, history or playlists.
   return JSON.stringify({ ...stored,
-    favorites: persistentIds(stored.favorites), disliked: persistentIds(stored.disliked), recent: persistentIds(stored.recent), vkRecent: readVkHistory(stored.vkRecent),
+    favorites: persistentIds(stored.favorites), disliked: persistentIds(stored.disliked), recent: persistentIds(stored.recent), vkRecent: readVkHistory(stored.vkRecent), vkAccount: stored.vkAccount,
     playlists: readLumaPlaylists(stored.playlists), onlineTracks: stored.onlineTracks.filter(({ id }) => !sessionCatalogId(id)),
     onlineRefs: activeOnlineRefs(stored).filter(({ id }) => !sessionCatalogId(id)),
   });

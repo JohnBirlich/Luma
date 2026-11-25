@@ -80,7 +80,12 @@ test('Luma adopts the same cosmetic CSS without running the extension or styling
 
   apply();
   assert.equal(document.adoptedStyleSheets.length, 2);
-  assert.equal(document.adoptedStyleSheets[1].css, `${read('styles.css').replace('html[data-vk-music-only]', 'html')}\n[data-luma-radio] { display: none !important; }`);
+  // The shared sheet comes first; Luma then adds its own header rules outside its scope.
+  const sheetCss = document.adoptedStyleSheets[1].css;
+  assert.ok(sheetCss.startsWith(read('styles.css').replace('html[data-vk-music-only]', 'html')), 'the audited sheet is adopted as-is');
+  assert.match(sheetCss, /#page_header_cont[\s\S]{0,400}opacity: 0 !important/u, 'Luma never paints the VK header');
+  assert.match(sheetCss, /\[aria-label="Наверх"\]/u, 'the site scroll-to-top bubble is gone');
+  assert.ok(sheetCss.endsWith('[data-luma-radio] { display: none !important; }'));
   // A sign-in page keeps only VK's own QR card: no header, search or footer.
   apply(true);
   assert.equal(document.adoptedStyleSheets.length, 2);

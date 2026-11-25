@@ -1143,6 +1143,11 @@ async function smoke() {
         return expected.every((title, index) => headings.filter(h => h === title).length === 1 &&
           (index === 0 || headings.indexOf(title) > headings.indexOf(expected[index - 1]))) && !headings.includes('Жанры и настроения');
       })()`));
+      await waitFor('the Spotify and Yandex Music placeholders are in place', () => run(`(() => {
+        const cards = [...document.querySelectorAll('.home-page .service-stub')];
+        return cards.length === 2 && cards[0].textContent.includes('Spotify') && cards[1].textContent.includes('Яндекс Музыка')
+          && cards.every((card) => card.querySelector('.service-stub-badge')?.textContent.trim() === 'Скоро');
+      })()`));
       const originalBounds = window.getBounds();
       const originalZoom = window.webContents.getZoomFactor();
       const homeLayout = (wide) => run(`(() => {
@@ -1244,18 +1249,18 @@ async function smoke() {
         const headerStyle = getComputedStyle(header), bodyRect = body.getBoundingClientRect();
         const displayed = (el) => el.getBoundingClientRect().width > 0;
         if (mode === 'standard') return headerStyle.opacity === '1' && displayed(link) && displayed(feed) && displayed(chat) && bodyRect.left >= 164;
-        const hidden = headerStyle.opacity === '0' && getComputedStyle(header.querySelector('ul')).getPropertyValue('interactivity') === 'inert';
+        const hidden = headerStyle.opacity === '0';
         const player = header.querySelector('#top_audio_layer_place'), bar = header.getBoundingClientRect();
         const viewport = document.documentElement.clientWidth;
+        // Luma never paints VK's header — not even the bar that used to carry the compact
+        // player. It stays laid out and inert so the site's own transport remains usable.
         return !displayed(sidebar) && !displayed(chat) && viewport - bodyRect.width <= 33 && bodyRect.left >= 0 && bodyRect.right <= viewport + 1
-          && document.documentElement.scrollWidth <= viewport + 1 && (player
-            ? headerStyle.opacity === '1' && displayed(player) && Math.abs(bar.left - bodyRect.left) < 1 && bar.bottom <= bodyRect.top
-              && !displayed(header.querySelector('#fixture-vk-home')) && !displayed(header.querySelector('#fixture-vk-search'))
-              && !displayed(header.querySelector('#fixture-vk-account'))
-            : hidden && bodyRect.top < 32);
+          && document.documentElement.scrollWidth <= viewport + 1 && hidden && bodyRect.top < 60
+          && (!player || (displayed(player) && Math.abs(bar.top) < 1));
       })()`);
       assert.equal(await noLayoutChoice(), true);
       await waitFor('signed-in VK opens without the general panels by default', () => shellIs('minimal'));
+      await waitFor('the profile name comes from VK’s own block, not from a link', () => run(`window.vkFixtureStates.at(-1)?.state.user === 'Даниил Ефремов'`));
       assert.equal(await guestRun(`(() => {
         const search = document.querySelector('#fixture-vk-search'); search.focus(); return document.activeElement === search;
       })()`), false, 'hidden chrome does not take focus');
@@ -1319,11 +1324,15 @@ async function smoke() {
       await waitFor('native Mix starts the fixture audio in minimal mode', () => guestRun(`!document.querySelector('audio').paused`));
       await waitFor('the second played title gets a history entry', async () => (await preferences()).vkRecent.some(({ title, artist }) =>
         title === vkFixtureTracks[1] && artist === vkFixtureArtist));
+      // The header keeps its layout but is inert and transparent: it must not swallow a
+      // click that belongs to the catalogue below it.
       assert.equal(await guestRun(`(() => {
         const control = document.querySelector('#fixture-toggle'), rect = control.getBoundingClientRect();
         if (!control.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))) return false;
+        const shell = document.querySelector('#page_header_cont');
+        if (getComputedStyle(shell).pointerEvents !== 'none') return false;
         control.click(); return true;
-      })()`), true, 'nothing intercepts the compact player');
+      })()`), true, 'the hidden header keeps only its own controls hittable');
       await waitFor('native compact player pauses playback', () => guestRun(`document.querySelector('audio').paused`));
       const beforeScroll = nativeView.getBounds();
       await guestRun(`window.scrollTo(0, 900)`);
@@ -1561,10 +1570,11 @@ async function smoke() {
       const lastView = vkView();
       const lastGuest = lastView.webContents;
       await lastGuest.executeJavaScript(`window.scrollTo(0, 850)`);
-      await waitFor('compact transport returns when the full player scrolls offscreen', () => lastGuest.executeJavaScript(`scrollY > 400
-        && getComputedStyle(document.querySelector('#top_nav')).opacity === '1'`));
+      // Scrolling must not bring VK's own bars back: nothing moves with the page.
+      await waitFor('scrolling never resurfaces the VK header or its compact player', () => lastGuest.executeJavaScript(`scrollY > 400
+        && getComputedStyle(document.querySelector('#top_nav')).opacity === '0'`));
       await lastGuest.executeJavaScript(`window.scrollTo(0, 0)`);
-      await waitFor('only the full player is available at the top again', () => lastGuest.executeJavaScript(`scrollY === 0
+      await waitFor('the VK header stays hidden at the top as well', () => lastGuest.executeJavaScript(`scrollY === 0
         && getComputedStyle(document.querySelector('#top_nav')).opacity === '0'`));
       await lastGuest.executeJavaScript(`document.querySelector('#fixture-toggle').click()`);
       await waitFor('the signed-in legacy page plays before source handoff', async () => await lastGuest.executeJavaScript('document.querySelector("audio").currentTime > .12')
@@ -1579,6 +1589,9 @@ async function smoke() {
       await waitFor('only the canonical VK link is saved', async () => (await preferences()).vkRecent[0]?.link === trackUrl);
       await run(`[...document.querySelectorAll('.home-page .hub-shelf-head button')].find(button => button.textContent.trim() === 'Вся история').click()`);
       await waitFor('history shows the VK item beside library history', () => run(`document.querySelector('.vk-history-section .vk-history-track strong')?.textContent === ${JSON.stringify(vkFixtureTracks[0])}`));
+      // Actions sit next to the play button; nothing is hidden behind a three-dot menu.
+      assert.equal(await run(`!!document.querySelector('.vk-history-section .vk-history-more, .vk-history-section .vk-history-menu')`), false);
+      assert.ok(await run(`document.querySelectorAll('.vk-history-section .vk-history-actions .vk-history-action').length >= 4`), 'track actions are inline');
       await click('.vk-history-section .vk-history-track');
       // The saved link is canonical, so the guest lands on the same track without the
       // tracking query — and Luma's own screen is never replaced by the guest view.
