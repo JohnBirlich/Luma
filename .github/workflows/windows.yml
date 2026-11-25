@@ -48,18 +48,7 @@ jobs:
           }
           exit $result
       - run: npm run build
-      - name: Desktop smoke
-        timeout-minutes: 8
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run test:desktop 2>&1 | tee smoke.log || {
-            status=$?
-            report=$(grep -aA12 -E 'Timed out|AssertionError|not ok ' smoke.log | tr -d '\r' | tail -n 24 \
-              | sed -e 's/%/%25/g' -e 's/\r//g' | paste -sd '\n' - | sed ':a;N;$!ba;s/\n/%0A/g')
-            echo "::error title=Smoke::$report"
-            exit $status
-          }
+      - run: npm run test:desktop
         env:
           LUMA_LIVE_CATALOG: ${{ inputs.live_catalog && '1' || '0' }}
           LUMA_LIVE_RADIO: ${{ inputs.live_radio && '1' || '0' }}
