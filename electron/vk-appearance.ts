@@ -25,7 +25,9 @@ const lumaShell = `
 :is(#page_header_cont, #page_header, #top_nav,
   [class*="SpaLayout__header"], [class*="TopNavigation__root"], [class*="StickyHeader"]) {
   position: fixed !important; top: 0 !important; inset-inline-start: 0 !important; margin: 0 !important;
-  width: 100% !important; max-width: 100% !important; height: auto !important;
+  /* A zero-height shell keeps the page's own flow intact while the controls inside it
+     stay laid out: they are readable, but nothing is painted or covered. */
+  width: 100% !important; max-width: 100% !important; height: 0 !important; min-height: 0 !important; overflow: visible !important;
   opacity: 0 !important; interactivity: inert !important;
 }
 :is(#page_header_cont, #page_header, #top_nav) * { interactivity: inert !important; }

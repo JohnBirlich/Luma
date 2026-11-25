@@ -1256,8 +1256,8 @@ async function smoke() {
         // player. It stays laid out and inert so the site's own transport remains usable.
         return !displayed(sidebar) && !displayed(chat) && viewport - bodyRect.width <= 33 && bodyRect.left >= 0 && bodyRect.right <= viewport + 1
           && document.documentElement.scrollWidth <= viewport + 1 && hidden && bodyRect.top < 32
-          && (!player || (displayed(player) && bar.height > 0 && Math.abs(bar.top) < 1))
-          && headerStyle.position === 'fixed';
+          && (!player || (displayed(player) && Math.abs(bar.top) < 1))
+          && Math.round(bar.height) === 0;
       })()`);
       assert.equal(await noLayoutChoice(), true);
       const shellDump = await guestRun(`(() => {
