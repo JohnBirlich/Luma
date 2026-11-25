@@ -68,6 +68,18 @@ export function useVkSite(onClosed: () => void) {
     return api && session && !session.resetting ? api.command(session.id, action, ratio).catch(() => false) : Promise.resolve(false);
   }, [api]);
 
+  /** Opens the album of the track the guest is showing. */
+  const album = useCallback(() => {
+    const session = active.current;
+    return api && session && !session.resetting ? api.album(session.id).catch(() => false) : Promise.resolve(false);
+  }, [api]);
+
+  /** Plays a saved VK track on its own page while Luma's own screen stays in front. */
+  const playTrack = useCallback((url: string) => {
+    const session = active.current;
+    return api && session && !session.resetting ? api.playTrack(session.id, url).catch(() => false) : Promise.resolve(false);
+  }, [api]);
+
   /** Starts a VK catalogue entry in the guest; the page may be behind Luma at the time. */
   const collection = useCallback((kind: VkCollection, name?: string) => {
     const session = active.current;
@@ -98,7 +110,7 @@ export function useVkSite(onClosed: () => void) {
     }
   }, [api, retry, store]);
 
-  return { view, open, close, command, collection, layout, hasSession, pause, retry, reset };
+  return { view, open, close, command, collection, playTrack, album, layout, hasSession, pause, retry, reset };
 }
 
 export type VkSiteController = ReturnType<typeof useVkSite>;

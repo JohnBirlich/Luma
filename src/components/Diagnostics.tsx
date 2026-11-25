@@ -3,9 +3,9 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowLeft, Bug, Copy, Monitor, Radio, Terminal, Trash2 } from 'lucide-react';
 import { clearDiagnostics, getDiagnostics, saveDiagnostics, subscribeDiagnostics } from '../data/diagnostics';
 import { refreshConnection, useConnectionPhase } from '../data/network';
-import { diagnosticSystem, diagnosticsReport, displayValues, LOG_AREAS, LOG_EVENTS, LOG_LEVELS, MAX_LOG_ENTRIES } from '../shared/diagnostics';
+import { diagnosticSystem, diagnosticsReport, displayValues, JOURNAL_VISIBLE, LOG_AREAS, LOG_EVENTS, LOG_LEVELS } from '../shared/diagnostics';
 import { runtimeMode } from '../shared/app-info';
-import type { DiagnosticSnapshot, LogArea } from '../shared/diagnostics';
+import type { DiagnosticSnapshot, LogArea, LogLevel } from '../shared/diagnostics';
 
 const storageLabel = { file: 'Файл в профиле Luma', browser: 'Хранилище браузера', session: 'Только пока открыто приложение' } as const;
 
@@ -13,7 +13,7 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
   const t = useText();
   const [snapshot, setSnapshot] = useState<DiagnosticSnapshot>();
   const [area, setArea] = useState<LogArea | 'all'>('all');
-  const [problems, setProblems] = useState(false);
+  const [level, setLevel] = useState<LogLevel | 'all' | 'problems'>('all');
   const [confirm, setConfirm] = useState(false);
   const [working, setWorking] = useState(false);
   const [status, setStatus] = useState('');
@@ -36,10 +36,12 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
     return () => { active = false; cancelAnimationFrame(frame); unsubscribe(); };
   }, []);
 
-  const rows = useMemo(() => snapshot?.entries.filter(({ event }) => {
-    const [, group, level] = LOG_EVENTS[event];
-    return (area === 'all' || area === group) && (!problems || level !== 'info');
-  }).reverse() ?? [], [snapshot, area, problems]);
+  // Only the newest slice is shown, however long the journal file on disk grows.
+  const rows = useMemo(() => (snapshot?.entries ?? []).filter(({ event }) => {
+    const [, group, severity] = LOG_EVENTS[event];
+    const levelMatch = level === 'all' || (level === 'problems' ? severity !== 'info' : severity === level);
+    return (area === 'all' || area === group) && levelMatch;
+  }).reverse().slice(0, JOURNAL_VISIBLE), [snapshot, area, level]);
 
   async function action(kind: 'clear' | 'save' | 'copy') {
     if (!snapshot || working) return;
@@ -105,7 +107,11 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
           <option value="all">{t("Все события")}</option>
           {Object.entries(LOG_AREAS).map(([key, name]) => <option key={key} value={key}>{t(name)}</option>)}
         </select></label>
-        <button className="button outline-button" type="button" aria-pressed={problems} onClick={() => setProblems(!problems)}>{t("Только сбои")}</button>
+        <label><span>{t("Уровень")}</span><select value={level} onChange={(event) => setLevel(event.currentTarget.value as LogLevel | 'all' | 'problems')} aria-label={t("Уровень событий")}>
+          <option value="all">{t("Все уровни")}</option>
+          {(Object.keys(LOG_LEVELS) as LogLevel[]).map((key) => <option key={key} value={key}>{t(LOG_LEVELS[key])}</option>)}
+          <option value="problems">{t("Все сбои")}</option>
+        </select></label>
       </div>
       {!!rows.length && <ol className="journal-entries" aria-label={t("События, новые сверху")}>
         {rows.map((item, index) => {
@@ -120,7 +126,7 @@ export const DiagnosticsPage = memo(function DiagnosticsPage({ back, locale }: {
       </ol>}
       {snapshot && !rows.length && <p className="journal-empty">{snapshot.entries.length ? t("Нет событий с выбранными фильтрами.") : t("Записей пока нет. Новые события появятся здесь автоматически.")}</p>}
     </section>
-    <p className="diagnostic-note">{t("Храним последние")}{" "}{MAX_LOG_ENTRIES}{" "}{t("событий локально. Без имён треков, путей, ссылок и токенов. Экспортируются все записи, не только отфильтрованные.")}</p>
+    <p className="diagnostic-note">{t("Журнал хранится файлом в профиле Luma; на экране видны последние {0} событий. Без имён треков, путей, ссылок и токенов. Экспортируются все записи, не только отфильтрованные.", JOURNAL_VISIBLE)}</p>
     <div className="diagnostic-action-status" role="status">{t(status)}</div>
   </div>;
 });

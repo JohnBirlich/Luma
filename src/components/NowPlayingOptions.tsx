@@ -2,7 +2,7 @@ import { APP_NAME } from '../shared/app-info';
 import { useText } from '../i18n/context';
 import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Activity, AudioLines, AudioWaveform, Check, CircleSlash, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Music2, Droplets, Sparkles, Sunset, Hexagon, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
+import { Activity, AudioLines, Check, CircleSlash, Diamond, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Music2, Droplets, Sparkles, Sunset, Hexagon, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
 import type { TrackDisplay } from '../shared/media';
 import type { ReadSpectrum } from '../player/useAudio';
 import { EFFECT_TEMPOS } from '../shared/customization';
@@ -24,7 +24,7 @@ const EFFECTS = [
   { id: 'waves', label: 'Волны', description: 'Морской прибой в сумерках', icon: Waves },
   { id: 'stars', label: 'Звёзды', description: 'Звёздная пыль и мягкий параллакс', icon: Sparkles },
   { id: 'spectrum', label: 'Спектр', description: 'Длинные линии в ритме трека', icon: AudioLines },
-  { id: 'columns', label: 'Ленты', description: 'Плавные волновые ленты в такт частотам', icon: AudioWaveform },
+  { id: 'columns', label: 'Кристаллы', description: 'Гранёные кристаллы растут в такт частотам', icon: Diamond },
   { id: 'orbits', label: 'Орбиты', description: 'Планета, кольца и спутники', icon: Orbit },
   { id: 'prism', label: 'Призма', description: 'Вращающаяся пирамида с цветными лучами', icon: Triangle },
   { id: 'pulse', label: 'Импульс', description: 'Кольца в ритме баса', icon: Activity },

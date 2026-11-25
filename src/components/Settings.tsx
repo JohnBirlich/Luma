@@ -413,10 +413,12 @@ export function SettingsPage(props: SettingsProps) {
           {section?.id === 'integrations' && <>
             <SettingCard title="Discord Rich Presence"><DiscordSettings options={props.discord} change={props.changeDiscord} /></SettingCard>
             <SettingCard title={t("Виджеты рабочего стола")} detail={t("Компактный плеер поверх окон Windows. Продолжает то же воспроизведение; полноразмерное окно можно вернуть кнопкой или Esc.")}>
-              <label className="setting-row select-row"><span><strong>{t("Фон")}</strong><small>{t("Материал под выбранным фоновым эффектом.")}</small></span>
-                <select value={appearance.widgetBackground} onChange={(event) => changeAppearance({ ...appearance, widgetBackground: event.currentTarget.value as WidgetBackground })}>
+              {/* A label around a select re-activates the control after an option is
+                  picked, which made the material impossible to choose. */}
+              <div className="setting-row select-row"><span><strong>{t("Фон")}</strong><small>{t("Материал под выбранным фоновым эффектом.")}</small></span>
+                <select aria-label={t("Фон виджета")} value={appearance.widgetBackground} onChange={(event) => changeAppearance({ ...appearance, widgetBackground: event.currentTarget.value as WidgetBackground })}>
                   {Object.entries(WIDGET_BACKGROUNDS).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
-                </select></label>
+                </select></div>
               <WidgetPreview macos={props.effectiveAppearance.theme === 'macos'} track={props.previewTrack}
                 tint={props.widgetTint} appearance={appearance} />
               <div className="settings-actions">

@@ -53,9 +53,9 @@ export function MenuPage(props: MenuPageProps) {
   return (
     <div className="page menu-page">
       <header className="page-header">
-        <div><p className="overline page-kicker"><span />{APP_NAME}</p><h1>{about ? t("О приложении") : statistics ? t("Статистика") : t("Меню")}</h1></div>
         {(about || statistics) && <button type="button" className="icon-button hub-back" onClick={() => { setAbout(false); setStatistics(false); }}
           aria-label={t("В меню")} title={t("В меню")}><ArrowLeft size={18} /></button>}
+        <div><p className="overline page-kicker"><span />{APP_NAME}</p><h1>{about ? t("О приложении") : statistics ? t("Статистика") : t("Меню")}</h1></div>
       </header>
       <div className="menu-body">
         {about ? <About /> : statistics ? <Statistics data={props.statistics} /> : <>

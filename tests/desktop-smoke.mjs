@@ -345,7 +345,7 @@ async function smoke() {
   fixtureNotice('Native fullscreen', `Electron fullscreen reached ${display.bounds.width}×${display.bounds.height} monitor bounds; button, Esc, and host exit passed.`);
   await click('.scene-open');
   await waitFor('scene dialog reopens', () => run(`!!document.querySelector('.scene-dialog[open]')`));
-  for (const [label, effect] of [['Спектр', 'spectrum'], ['Ленты', 'columns'], ['Ноты', 'notes']]) {
+  for (const [label, effect] of [['Спектр', 'spectrum'], ['Кристаллы', 'columns'], ['Ноты', 'notes']]) {
     await click(`.scene-choice[aria-label="${label}"]`);
     await waitFor(`${label} previews on a bounded canvas`, () => run(`(() => {
       const backdrop = document.querySelector('.scene-dialog-preview .scene-${effect}');
@@ -1576,11 +1576,13 @@ async function smoke() {
       await run(`[...document.querySelectorAll('.home-page .hub-shelf-head button')].find(button => button.textContent.trim() === 'Вся история').click()`);
       await waitFor('history shows the VK item beside library history', () => run(`document.querySelector('.vk-history-section .vk-history-track strong')?.textContent === ${JSON.stringify(vkFixtureTracks[0])}`));
       await click('.vk-history-section .vk-history-track');
-      const historyView = await waitVk(trackUrl);
-      await waitFor('history opens the song on VK without adding to the queue', async () => historyView !== lastView && lastGuest.isDestroyed() && await readyView());
-      assert.deepEqual((await preferences()).queue, vkQueue);
-      const historyGuest = historyView.webContents;
-      await historyGuest.executeJavaScript(`document.querySelector('#fixture-toggle').click()`);
+      // The saved link is canonical, so the guest lands on the same track without the
+      // tracking query — and Luma's own screen is never replaced by the guest view.
+      await waitFor('history plays the song inside the same VK view', async () => !lastGuest.isDestroyed() && lastGuest.getURL().startsWith(trackUrl)
+        && await run(`window.vkFixtureStates.at(-1)?.state.track?.playing === true`));
+      await waitFor('the in-place press starts the guest player', () => lastGuest.executeJavaScript('document.querySelector("audio").paused === false'));
+      assert.deepEqual((await preferences()).queue, vkQueue, 'history playback still keeps VK out of the Luma queue');
+      const historyGuest = lastGuest;
       await waitPauseVk();
       await click(`${vkDock} .playing-mini`);
       await waitFor('the reopened track has its library control', () => run(`!!document.querySelector('${mainFavorite}:enabled')`));

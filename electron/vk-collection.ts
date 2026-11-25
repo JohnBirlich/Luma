@@ -51,3 +51,35 @@ function findCollection(kind: string, name: string | null) {
 
 export const inspectVkCollection = (kind: string, name?: string) =>
   `(${findCollection.toString()})(...${JSON.stringify([kind, name ?? null])})`;
+
+/**
+ * Finds the album of the track open in the guest: VK links the album under the
+ * player, and the same entry can appear as a labelled button on other builds.
+ */
+function findAlbum() {
+  const clean = (value: string | null | undefined) => (value ?? '').replace(/\s+/gu, ' ').trim();
+  const onScreen = (element: Element) => {
+    const rect = element.getBoundingClientRect();
+    if (rect.width < 10 || rect.height < 10 || rect.bottom < 0 || rect.top > innerHeight * 1.6) return false;
+    const style = getComputedStyle(element);
+    return style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity || '1') > .1;
+  };
+  const point = (element: Element) => {
+    element.scrollIntoView({ block: 'center', inline: 'center' });
+    const rect = element.getBoundingClientRect();
+    const x = Math.round(rect.left + rect.width / 2), y = Math.round(rect.top + rect.height / 2);
+    return x > 0 && y > 0 && x < innerWidth && y < innerHeight ? { point: { x, y } } : false;
+  };
+  const link = [...document.querySelectorAll<HTMLAnchorElement>('a[href*="/music/album/"], a[href*="audios-"]')]
+    .filter((anchor) => !anchor.closest('header, #page_header_cont') && onScreen(anchor))[0];
+  if (link) return point(link);
+  const wanted = /^(?:открыть )?альбом$|перейти (?:в|к) альбом|open album|go to album|\bальбом\b/i;
+  for (const element of [...document.querySelectorAll<HTMLElement>('button, a, [role="button"], [role="menuitem"]')]) {
+    if (!onScreen(element)) continue;
+    const text = clean(element.getAttribute('aria-label') || element.getAttribute('title') || element.innerText);
+    if (text && text.length <= 60 && wanted.test(text)) return point(element);
+  }
+  return false;
+}
+
+export const inspectVkAlbum = () => `(${findAlbum.toString()})()`;

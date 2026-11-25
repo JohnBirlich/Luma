@@ -195,6 +195,7 @@
 [data-layout='glass'] .journal-level { color: #194983; }
 [data-layout='glass'] .level-warn .journal-level { color: #754912; }
 [data-layout='glass'] .level-error .journal-level { color: #8b2242; }
+[data-layout='glass'] .level-critical .journal-level { color: #7a1024; font-weight: 720; }
 [data-layout='glass'] :is(.cover-error,.lastfm-issue,.error-banner) { color: #8d243d; }
 [data-layout='glass'] .toast { color: #165a50; background: var(--glass-surface); border-color: var(--glass-edge); border-radius: 18px; box-shadow: var(--glass-shadow); }
 [data-layout='glass'] .toast-error { color: #9b2344; }

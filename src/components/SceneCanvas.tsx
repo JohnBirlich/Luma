@@ -3,7 +3,7 @@ import { initialBeat, sampleBeat } from '../shared/beat';
 import type { ReadSpectrum } from '../player/useAudio';
 import { compactScene, sceneBufferSize, sceneFps } from '../shared/scene-budget';
 
-import { advanceColumns, advanceSpectrum, drawAurora, drawNotes, drawOrbits, drawPrism, drawRibbons, drawSpectrum, drawStars, flattenSpectrum, ribbonPalettes, seeded, spectrumColumns, spectrumFrames } from './scene-art';
+import { advanceColumns, advanceSpectrum, drawAurora, drawCrystals, drawNotes, drawOrbits, drawPrism, drawSpectrum, drawStars, flattenSpectrum, ribbonPalettes, seeded, spectrumColumns, spectrumFrames } from './scene-art';
 import { CANVAS_EFFECTS, coastSpeed, isAmbientEffect } from '../shared/scene-motion';
 import type { CanvasEffect } from '../shared/scene-motion';
 
@@ -218,7 +218,7 @@ export function SceneCanvas({ effect, playing, enabled, tempo, sample }: {
       } else if (bars && barColors) {
         if (!canMove || (!active && !velocity)) bars.fill(0);
         else if (dt > 0) advanceColumns(bars, dt, live ? { time: t, bins } : active && !read ? { time: t } : undefined);
-        drawRibbons(ctx, w, h, bars, barColors, t);
+        drawCrystals(ctx, w, h, bars, barColors, t);
       } else if (effect === 'pulse' && pulseHalo) {
         if (onset || (!live && runtime.current.playing && Math.floor(t / 1.25) !== Math.floor((t - dt * velocity / runtime.current.tempo) / 1.25))) onsets.push(t);
         while (onsets.length && (t - onsets[0] >= 1.22 || !velocity)) onsets.shift();

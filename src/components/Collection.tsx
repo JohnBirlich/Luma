@@ -19,6 +19,7 @@ import type { Appearance, LibraryLayout } from '../shared/customization';
 import { musicSearchKey, searchWords } from '../shared/russian';
 import { Artwork } from './Artwork';
 import { VkHistoryRows } from './VkHistory';
+import type { VkHistoryActions } from './VkHistory';
 import type { VkHistoryEntry } from '../shared/vk-history';
 import { DislikeButton, FavoriteButton } from './FavoriteButton';
 import { Signal } from './QueuePanel';
@@ -185,7 +186,7 @@ interface LibraryPageProps extends CatalogSearchPreferences, SearchHistoryProps 
   mode: 'library' | 'search' | 'favorites' | 'recent';
   vkRecent: readonly VkHistoryEntry[];
   openVkRecent?(url: string): void;
-  playVkRecent?(entry: VkHistoryEntry): void;
+  vkActions?: VkHistoryActions;
   initialScope?: 'all' | 'offline';
   fullNumbers: boolean;
   favorites: ReadonlySet<string>;
@@ -324,7 +325,7 @@ export function LibraryPage(props: LibraryPageProps) {
       </> : libraryResults(results)}
       {vkResults.length > 0 && <section className="vk-history-section" aria-labelledby="vk-history-title">
         <h2 id="vk-history-title">{t('История VK Музыки')}</h2>
-        <VkHistoryRows entries={vkResults} open={props.openVkRecent} play={props.playVkRecent} />
+        <VkHistoryRows entries={vkResults} open={props.openVkRecent} actions={props.vkActions} />
       </section>}
     </div>
   );
