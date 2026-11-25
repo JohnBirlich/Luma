@@ -1,8 +1,5 @@
 import { dialog, net, session, WebContentsView } from 'electron';
 import type { BrowserWindow } from 'electron';
-import { appendFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -460,10 +457,9 @@ export class VkSite {
    */
   async playTrack(owner: BrowserWindow, id: unknown, url: unknown) {
     const active = this.active, contents = active?.view.webContents;
-    if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) { probe(' playTrack no session'); return false; }
-    if (!active.windowVisible || active.minimized || !vkSiteEntry(url)) { probe(' playTrack guarded', active.windowVisible, active.minimized, !!vkSiteEntry(url)); return false; }
+    if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) return false;
+    if (!active.windowVisible || active.minimized || !vkSiteEntry(url)) return false;
     const onPage = contents.getURL() === url;
-    probe(' playTrack start', contents.getURL(), 'onPage', onPage, 'shown', active.shown, 'fg', active.foreground);
     if (onPage && active.state.track?.playing) return true;
     if (!active.shown) {
       const [w, h] = active.owner.getContentSize();
@@ -475,7 +471,6 @@ export class VkSite {
     // needs the same state, and the read-back is what keeps it alive afterwards.
     active.foreground = true;
     const finish = (started: boolean) => {
-      probe(' playTrack finish', contents.getURL(), started);
       if (!started) active.foreground = wasForeground;
       if (this.active === active) this.visibility(active);
       return started;
@@ -487,14 +482,11 @@ export class VkSite {
         await new Promise((resolve) => { setTimeout(resolve, 250); });
       }
       if (this.active !== active || contents.isDestroyed() || !this.musicPageReady(active)) {
-        probe(' playTrack nav failed', contents.isDestroyed(), active.state.phase, contents.getURL());
         return finish(false);
       }
-      probe(' playTrack page ready', contents.getURL(), active.state.phase);
     }
     // The press is replayed like a catalogue card's: VK only reacts to a real input event.
     for (let attempt = 0; attempt < 5; attempt++) {
-      probe(' playTrack press attempt', attempt, contents.getURL(), 'playing', active.state.track?.playing, 'rev', active.revision, revision);
       if (active.revision !== revision && active.state.track?.playing) break;
       const result: unknown = await contents.executeJavaScriptInIsolatedWorld(world,
         [{ code: inspectVkPlayer('toggle', undefined, 'trusted') }], true).catch(() => undefined);
@@ -517,14 +509,6 @@ export class VkSite {
   }
 
   /** Opens the album of the track that is open in the guest, with a real press. */
-  /** Temporary: what the guest currently reports, for the smoke diagnostics. */
-  probeState() {
-    const active = this.active, contents = active?.view.webContents;
-    return active && contents && !contents.isDestroyed()
-      ? { url: contents.getURL(), phase: active.state.phase, playing: active.state.track?.playing === true, shown: active.shown, fg: active.foreground, id: active.id }
-      : undefined;
-  }
-
   async album(owner: BrowserWindow, id: unknown) {
     const active = this.active, contents = active?.view.webContents;
     if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) return false;
@@ -661,7 +645,3 @@ export class VkSite {
   }
 }
 
-/** Temporary diagnostics sink: stdout is buffered away when the smoke exits. */
-function probe(...parts: unknown[]) {
-  try { appendFileSync(join(tmpdir(), 'luma-probe.log'), `${parts.map(String).join(' ')}\n`); } catch { /* ignore */ }
-}

@@ -179,14 +179,7 @@ function bindIpc(library: DesktopLibrary, logs: DesktopDiagnostics, info: AppInf
   ipcMain.handle('vk-site:close', (event, id) => vkSite.close(appWindow(event), id));
   ipcMain.handle('vk-site:command', (event, id, action, fraction) => vkSite.command(appWindow(event), id, action, fraction));
   ipcMain.handle('vk-site:collection', (event, id, kind, name) => vkSite.collection(appWindow(event), id, kind, name));
-  ipcMain.handle('vk-site:play-track', async (event, id, url) => {
-    const started = await vkSite.playTrack(appWindow(event), id, url);
-    const window = appWindow(event);
-    console.log('[probe] vk playTrack', JSON.stringify({ id, url, started, state: vkSite.probeState(),
-      views: window?.contentView.children.map((child) => (child as { webContents?: { getURL(): string; isDestroyed(): boolean } }).webContents)
-        ?.map((contents) => contents && !contents.isDestroyed() ? contents.getURL() : 'destroyed') }));
-    return started;
-  });
+  ipcMain.handle('vk-site:play-track', (event, id, url) => vkSite.playTrack(appWindow(event), id, url));
   ipcMain.handle('vk-site:album', (event, id) => vkSite.album(appWindow(event), id));
   ipcMain.handle('vk-site:reset', (event, id) => vkSite.clear(appWindow(event), id, {
     type: 'warning', title: t('Сессия VK'), message: t('Сбросить данные входа VK в Luma?'),
