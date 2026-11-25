@@ -460,6 +460,7 @@ export class VkSite {
     if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) { console.log('[probe] playTrack no session'); return false; }
     if (!active.windowVisible || active.minimized || !vkSiteEntry(url)) { console.log('[probe] playTrack guarded', active.windowVisible, active.minimized, !!vkSiteEntry(url)); return false; }
     const onPage = contents.getURL() === url;
+    console.log('[probe] playTrack start', contents.getURL(), 'onPage', onPage, 'shown', active.shown, 'fg', active.foreground);
     if (onPage && active.state.track?.playing) return true;
     if (!active.shown) {
       const [w, h] = active.owner.getContentSize();
@@ -471,6 +472,7 @@ export class VkSite {
     // needs the same state, and the read-back is what keeps it alive afterwards.
     active.foreground = true;
     const finish = (started: boolean) => {
+      console.log('[probe] playTrack finish', contents.getURL(), started);
       if (!started) active.foreground = wasForeground;
       if (this.active === active) this.visibility(active);
       return started;

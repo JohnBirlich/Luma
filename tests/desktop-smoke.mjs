@@ -1578,8 +1578,8 @@ async function smoke() {
       await click('.vk-history-section .vk-history-track');
       // The saved link is canonical, so the guest lands on the same track without the
       // tracking query — and Luma's own screen is never replaced by the guest view.
-      await waitFor('history plays the song inside the same VK view', async () => lastGuest.getURL().startsWith(trackUrl)
-        && !lastGuest.isDestroyed() && await run(`!document.querySelector('.vk-site-slot')`));
+      await waitFor('history plays the song inside the same VK view', async () => !lastGuest.isDestroyed() && lastGuest.getURL().startsWith(trackUrl)
+        && await run(`window.vkFixtureStates.at(-1)?.state.track?.playing === true`));
       await waitFor('the in-place press starts the guest player', () => lastGuest.executeJavaScript('document.querySelector("audio").paused === false'));
       assert.deepEqual((await preferences()).queue, vkQueue, 'history playback still keeps VK out of the Luma queue');
       const historyGuest = lastGuest;
