@@ -1259,7 +1259,7 @@ async function smoke() {
           && (!player || (displayed(player) && bar.height > 0 && Math.abs(bar.top) < 1));
       })()`);
       assert.equal(await noLayoutChoice(), true);
-      console.log('SHELLDEBUG ' + await guestRun(`(() => {
+      const shellDump = await guestRun(`(() => {
         const header = document.querySelector('#page_header_cont'), sidebar = document.querySelector('#layout_sidebar');
         const body = document.querySelector('#page_body');
         const chat = document.querySelector('#fixture-chat');
@@ -1277,8 +1277,8 @@ async function smoke() {
           player: displayed(player), barHeight: bar && Math.round(bar.height), barTop: bar && Math.round(bar.top),
           position: header && getComputedStyle(header).position,
         });
-      })()`));
-      await waitFor('signed-in VK opens without the general panels by default', () => shellIs('minimal'));
+      })()`);
+      await waitFor(`signed-in VK opens without the general panels by default ${shellDump}`, () => shellIs('minimal'));
       await waitFor('the profile name comes from VK’s own block, not from a link', () => run(`window.vkFixtureStates.at(-1)?.state.user === 'Даниил Ефремов'`));
       assert.equal(await guestRun(`(() => {
         const search = document.querySelector('#fixture-vk-search'); search.focus(); return document.activeElement === search;
