@@ -457,8 +457,8 @@ export class VkSite {
    */
   async playTrack(owner: BrowserWindow, id: unknown, url: unknown) {
     const active = this.active, contents = active?.view.webContents;
-    if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) return false;
-    if (!active.windowVisible || active.minimized || !vkSiteEntry(url)) return false;
+    if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) { console.log('[probe] playTrack no session'); return false; }
+    if (!active.windowVisible || active.minimized || !vkSiteEntry(url)) { console.log('[probe] playTrack guarded', active.windowVisible, active.minimized, !!vkSiteEntry(url)); return false; }
     const onPage = contents.getURL() === url;
     if (onPage && active.state.track?.playing) return true;
     if (!active.shown) {
@@ -481,7 +481,11 @@ export class VkSite {
       while (this.active === active && !contents.isDestroyed() && !this.musicPageReady(active) && active.state.phase !== 'failed' && Date.now() < deadline) {
         await new Promise((resolve) => { setTimeout(resolve, 250); });
       }
-      if (this.active !== active || contents.isDestroyed() || !this.musicPageReady(active)) return finish(false);
+      if (this.active !== active || contents.isDestroyed() || !this.musicPageReady(active)) {
+        console.log('[probe] playTrack nav failed', contents.isDestroyed(), active.state.phase, contents.getURL());
+        return finish(false);
+      }
+      console.log('[probe] playTrack page ready', contents.getURL());
     }
     // The press is replayed like a catalogue card's: VK only reacts to a real input event.
     for (let attempt = 0; attempt < 5; attempt++) {
