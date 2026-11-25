@@ -14,6 +14,25 @@ function readMusicOnlyStyle() {
 
 const minimal = readMusicOnlyStyle();
 
+/**
+ * Luma's own additions to the shared sheet. They live outside its `@scope` block, which
+ * only reaches descendants of the VK body, so the header shell itself stays reachable.
+ */
+const lumaShell = `
+/* Luma draws its own transport: VK's header — including the compact player inside it —
+   is never on screen. It keeps its layout and is made inert instead, so it neither
+   covers the catalogue nor moves while the page scrolls. */
+:is(#page_header_cont, #page_header, #top_nav,
+  [class*="SpaLayout__header"], [class*="TopNavigation__root"], [class*="StickyHeader"]) {
+  position: fixed !important; top: 0 !important; inset-inline-start: 0 !important; margin: 0 !important;
+  opacity: 0 !important; interactivity: inert !important;
+}
+:is(#page_header_cont, #page_header, #top_nav) * { interactivity: inert !important; }
+/* VK's «Наверх» bubble points at its own scroll container, which Luma replaced. */
+:is([aria-label="Наверх"], [title="Наверх"], [aria-label="Back to top"], [title="Back to top"],
+  #stl_left, #stl_bg, #stl_btn, .stl_btn, [class*="ScrollToTop"]) { display: none !important; }
+`;
+
 // Runs in Luma's isolated world. Only replace our own sheet, without editing VK's
 // stylesheets, relocating its controls or reading any data from the profile link.
 function setAppearance(css: string, page: string) {
@@ -81,7 +100,7 @@ export function vkAppearanceScript(href: string, signIn: boolean) {
   if (!page) return;
   const vk = page.hostname === 'vk.ru' || page.hostname === 'vk.com';
   const music = vk && vkMusicPage(href);
-  const css = music && !signIn ? `${minimal}\n[data-luma-radio] { display: none !important; }`
+  const css = music && !signIn ? `${minimal}${lumaShell}\n[data-luma-radio] { display: none !important; }`
     : signIn ? signInOnly : '';
   return `(${setAppearance.toString()})(...${JSON.stringify([css, page.origin + page.pathname])})`;
 }

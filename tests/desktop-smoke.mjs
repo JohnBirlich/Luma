@@ -1256,29 +1256,11 @@ async function smoke() {
         // player. It stays laid out and inert so the site's own transport remains usable.
         return !displayed(sidebar) && !displayed(chat) && viewport - bodyRect.width <= 33 && bodyRect.left >= 0 && bodyRect.right <= viewport + 1
           && document.documentElement.scrollWidth <= viewport + 1 && hidden && bodyRect.top < 32
-          && (!player || (displayed(player) && bar.height > 0 && Math.abs(bar.top) < 1));
+          && (!player || (displayed(player) && bar.height > 0 && Math.abs(bar.top) < 1))
+          && headerStyle.position === 'fixed';
       })()`);
       assert.equal(await noLayoutChoice(), true);
-      const shellDump = await guestRun(`(() => {
-        const header = document.querySelector('#page_header_cont'), sidebar = document.querySelector('#layout_sidebar');
-        const body = document.querySelector('#page_body');
-        const chat = document.querySelector('#fixture-chat');
-        const player = header && header.querySelector('#top_audio_layer_place');
-        const bar = header && header.getBoundingClientRect(), bodyRect = body.getBoundingClientRect();
-        const viewport = document.documentElement.clientWidth;
-        const displayed = (el) => !!el && el.getBoundingClientRect().width > 0;
-        return JSON.stringify({
-          headerId: header?.id ?? null,
-          opacity: header && getComputedStyle(header).opacity,
-          ulInteractivity: header && header.querySelector('ul') ? getComputedStyle(header.querySelector('ul')).getPropertyValue('interactivity') : 'no-ul',
-          sidebar: displayed(sidebar), chat: displayed(chat),
-          gutter: viewport - Math.round(bodyRect.width), left: Math.round(bodyRect.left), right: Math.round(bodyRect.right), viewport,
-          scrollWidth: document.documentElement.scrollWidth, bodyTop: Math.round(bodyRect.top),
-          player: displayed(player), barHeight: bar && Math.round(bar.height), barTop: bar && Math.round(bar.top),
-          position: header && getComputedStyle(header).position,
-        });
-      })()`);
-      await waitFor(`signed-in VK opens without the general panels by default ${shellDump}`, () => shellIs('minimal'));
+      await waitFor('signed-in VK opens without the general panels by default', () => shellIs('minimal'));
       await waitFor('the profile name comes from VK’s own block, not from a link', () => run(`window.vkFixtureStates.at(-1)?.state.user === 'Даниил Ефремов'`));
       assert.equal(await guestRun(`(() => {
         const search = document.querySelector('#fixture-vk-search'); search.focus(); return document.activeElement === search;
@@ -1343,11 +1325,15 @@ async function smoke() {
       await waitFor('native Mix starts the fixture audio in minimal mode', () => guestRun(`!document.querySelector('audio').paused`));
       await waitFor('the second played title gets a history entry', async () => (await preferences()).vkRecent.some(({ title, artist }) =>
         title === vkFixtureTracks[1] && artist === vkFixtureArtist));
+      // The header keeps its layout but is inert and transparent: it must not swallow a
+      // click that belongs to the catalogue below it.
       assert.equal(await guestRun(`(() => {
-        const control = document.querySelector('#fixture-toggle'), rect = control.getBoundingClientRect();
-        if (!control.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))) return false;
+        const header = document.querySelector('#top_audio_layer_place'), rect = header.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        const control = document.querySelector('#fixture-toggle');
+        if (header.contains(hit)) return false;
         control.click(); return true;
-      })()`), true, 'nothing intercepts the compact player');
+      })()`), true, 'the hidden header does not intercept the page');
       await waitFor('native compact player pauses playback', () => guestRun(`document.querySelector('audio').paused`));
       const beforeScroll = nativeView.getBounds();
       await guestRun(`window.scrollTo(0, 900)`);
