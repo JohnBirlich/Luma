@@ -517,6 +517,14 @@ export class VkSite {
   }
 
   /** Opens the album of the track that is open in the guest, with a real press. */
+  /** Temporary: what the guest currently reports, for the smoke diagnostics. */
+  probeState() {
+    const active = this.active, contents = active?.view.webContents;
+    return active && contents && !contents.isDestroyed()
+      ? { url: contents.getURL(), phase: active.state.phase, playing: active.state.track?.playing === true, shown: active.shown, fg: active.foreground, id: active.id }
+      : undefined;
+  }
+
   async album(owner: BrowserWindow, id: unknown) {
     const active = this.active, contents = active?.view.webContents;
     if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) return false;
