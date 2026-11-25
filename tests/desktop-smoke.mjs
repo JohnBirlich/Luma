@@ -1624,7 +1624,8 @@ async function smoke() {
         assert.notEqual(newView, resettingView);
         // A fresh QR page keeps only VK's own code card: the sign-in sheet hides the
         // header, search and footer, and none of the music styling reaches it.
-        const qrCss = await newView.webContents.executeJavaScript('document.adoptedStyleSheets.map((sheet) => sheet.cssText).join("\\n")');
+        // Constructable sheets expose rules rather than cssText, so serialize them.
+        const qrCss = await newView.webContents.executeJavaScript(`document.adoptedStyleSheets.flatMap((sheet) => Array.from(sheet.cssRules, (rule) => rule.cssText)).join('\\n')`);
         assert.match(qrCss, /#box_layer_wrap/, 'the QR card is centred in the window');
         assert.match(qrCss, /#page_header_cont/, 'the VK header is hidden on the QR page');
         assert.doesNotMatch(qrCss, /data-luma-radio/, 'music styling is not applied to QR');
