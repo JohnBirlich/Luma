@@ -3,8 +3,8 @@ import { useText } from '../i18n/context';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUpCircle, AudioLines, Bell, Bug, Check, Globe2, HardDrive, Headphones, Keyboard, Monitor, Music2, Palette, Play, Plug, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
-import { ACCENTS, accentFor, CROSSFADE_TIMES, DATA_LANGUAGES, EFFECT_TEMPOS, formatCount, SEEK_STEPS, THEMES, WIDGET_BACKGROUNDS, WIDGET_SHORTCUT } from '../shared/customization';
-import type { Appearance, CrossfadeTime, DataLanguage, EffectTempo, LibraryLayout, PlaybackPreferences, SeekStep, StartPage, ThemeName, WidgetBackground } from '../shared/customization';
+import { ACCENTS, accentFor, BACKGROUND_EFFECTS, CROSSFADE_TIMES, DATA_LANGUAGES, EFFECT_LABELS, EFFECT_TEMPOS, formatCount, SEEK_STEPS, THEMES, WIDGET_SHORTCUT } from '../shared/customization';
+import type { Appearance, BackgroundEffect, CrossfadeTime, DataLanguage, EffectTempo, LibraryLayout, PlaybackPreferences, SeekStep, StartPage, ThemeName } from '../shared/customization';
 import { describeAudioFormat, describeStream, NETWORK_MODES, STREAM_QUALITIES } from '../shared/audio-quality';
 import type { AudioQuality, NetworkMode, StreamQuality } from '../shared/audio-quality';
 import { UI_LANGUAGES } from '../shared/ui-language';
@@ -24,9 +24,7 @@ import { VolumeControl } from './PlaybackControls';
 import type { VolumeProps } from './PlaybackControls';
 import { NowPlayingOptions } from './NowPlayingOptions';
 import { SceneBackground } from './SceneBackground';
-import { DiscordSettings } from './DiscordSettings';
 import { MusicServiceSettings } from './MusicServiceSettings';
-import type { DiscordPreferences } from '../shared/discord-presence';
 import { SleepTimer } from './SleepTimer';
 import type { SleepMinutes } from '../shared/sleep-timer';
 import { VinylRecord } from './VinylRecord';
@@ -120,8 +118,6 @@ interface SettingsProps {
   changeSleepTimer(minutes?: SleepMinutes): void;
   localFallback: boolean;
   toggleLocalFallback(): void;
-  discord: DiscordPreferences;
-  changeDiscord(options: DiscordPreferences): void;
   showDemos: boolean;
   libraryReady: boolean;
   previewTrack: Track | null;
@@ -145,6 +141,8 @@ interface SettingsProps {
   changePlayback(playback: PlaybackPreferences): void;
   toggleDemos(): void;
   reset(): void;
+  /** A newer release exists: the same orange badge as «Обновления» in the sidebar. */
+  updateAvailable?: boolean;
   sectionId: SettingsSectionId | undefined;
   selectSection(id?: SettingsSectionId): void;
   returnToTab(): void;
@@ -261,7 +259,8 @@ export function SettingsPage(props: SettingsProps) {
         <div className="settings-stack">
           {!section && <>
             <MenuGroup label={t("Плеер")}>{SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={t(item.label)} detail={t(item.detail)} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
-            <MenuGroup label={t("Приложение")}>{APP_SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={t(item.label)} detail={t(item.detail)} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
+            <MenuGroup label={t("Приложение")}>{APP_SECTIONS.map((item) => <MenuItem key={item.id} icon={item.icon} title={t(item.label)} detail={t(item.detail)}
+              flag={item.id === 'updates' && props.updateAvailable ? 'update-dot' : undefined} select={() => { setConfirmClear(false); props.selectSection(item.id); }} />)}</MenuGroup>
           </>}
           {section?.id === 'look' && <>
             <SettingCard title={t("Темы")} detail={t("Тема применяется ко всему окну. MacOS меняет компоновку: стеклянная навигация и плавающий плеер.")}>
@@ -411,13 +410,13 @@ export function SettingsPage(props: SettingsProps) {
             <ToggleRow title={t("Показывать уведомления об успехе")} detail={t("Сообщения об импорте, очереди и сохранении. Ошибки видны всегда.")} enabled={playback.successNotices} change={() => changePlayback({ ...playback, successNotices: !playback.successNotices })} />
           </SettingCard>}
           {section?.id === 'integrations' && <>
-            <SettingCard title="Discord Rich Presence"><DiscordSettings options={props.discord} change={props.changeDiscord} /></SettingCard>
             <SettingCard title={t("Виджеты рабочего стола")} detail={t("Компактный плеер поверх окон Windows. Продолжает то же воспроизведение; полноразмерное окно можно вернуть кнопкой или Esc.")}>
               {/* A label around a select re-activates the control after an option is
                   picked, which made the material impossible to choose. */}
-              <div className="setting-row select-row"><span><strong>{t("Фон")}</strong><small>{t("Материал под выбранным фоновым эффектом.")}</small></span>
-                <select aria-label={t("Фон виджета")} value={appearance.widgetBackground} onChange={(event) => changeAppearance({ ...appearance, widgetBackground: event.currentTarget.value as WidgetBackground })}>
-                  {Object.entries(WIDGET_BACKGROUNDS).map(([id, label]) => <option key={id} value={id}>{t(label)}</option>)}
+              {/* Same scenes as «Эффекты», so the widget always offers the full list. */}
+              <div className="setting-row select-row"><span><strong>{t("Фон")}</strong><small>{t("Эффект, который рисуется за виджетом.")}</small></span>
+                <select aria-label={t("Фон виджета")} value={appearance.widgetEffect} onChange={(event) => changeAppearance({ ...appearance, widgetEffect: event.currentTarget.value as BackgroundEffect })}>
+                  {BACKGROUND_EFFECTS.map((id) => <option key={id} value={id}>{t(EFFECT_LABELS[id])}</option>)}
                 </select></div>
               <WidgetPreview macos={props.effectiveAppearance.theme === 'macos'} track={props.previewTrack}
                 tint={props.widgetTint} appearance={appearance} />

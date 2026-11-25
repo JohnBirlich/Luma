@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { accentFor, artworkTone, contrastRatio, defaultAppearance, defaultPlayback, formatCount, scheduledTheme, shouldAdvanceAfterEnd, THEMES, themeVariables, WIDGET_BACKGROUNDS } from '../src/shared/customization.js';
+import { DISCORD_APP_ID } from '../src/shared/discord-presence.js';
 import { defaultKaraokeStyle } from '../src/shared/karaoke-style.js';
 import { defaultAudioQuality } from '../src/shared/audio-quality.js';
 import { decodePreferences, encodePreferences, readListeningStats, RECENT_LIMIT, rememberTrack } from '../src/player/preferences.js';
@@ -13,7 +14,7 @@ test('customization reads old profiles without altering queue, volume or equaliz
   };
   const { equalizer, ...rest } = decodePreferences(JSON.stringify(previous));
   const { equalizer: oldEqualizer, ...old } = previous;
-  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: '', enabled: false }, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [], stats: { localListens: 0, vkListens: 0, seconds: 0, since: '' } });
+  assert.deepEqual(rest, { ...old, uiLanguage: 'ru', nativeFloat: false, appearance: defaultAppearance, playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: DISCORD_APP_ID, enabled: true }, exportLyrics: false, resumeRepeat: 'one', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], playlists: [], stationIds: [], onlineTracks: [], onlineRefs: [], stats: { localListens: 0, vkListens: 0, seconds: 0, since: '' } });
   assert.equal(equalizer.enabled, oldEqualizer.enabled);
   assert.equal(equalizer.preset, oldEqualizer.preset);
   assert.equal(equalizer.preamp, oldEqualizer.preamp);

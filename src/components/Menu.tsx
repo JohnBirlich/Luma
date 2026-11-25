@@ -16,14 +16,17 @@ interface MenuItemProps {
   select(): void;
   disabled?: boolean;
   dialog?: boolean;
+  /** Extra marker next to the chevron, e.g. the orange dot for a new release. */
+  flag?: string;
 }
 
-export function MenuItem({ icon: Icon, title, detail, select, disabled, dialog }: MenuItemProps) {
+export function MenuItem({ icon: Icon, title, detail, select, disabled, dialog, flag }: MenuItemProps) {
   const description = useId();
   return (
     <button type="button" className="menu-item" onClick={select} disabled={disabled} aria-label={title} aria-describedby={description} aria-haspopup={dialog ? 'dialog' : undefined}>
       <span className="menu-item-icon" aria-hidden="true"><Icon size={19} strokeWidth={1.75} /></span>
       <span className="menu-item-copy"><strong>{title}</strong><small id={description}>{detail}</small></span>
+      {flag && <i className={flag} aria-hidden="true" />}
       <ChevronRight className="menu-chevron" size={17} aria-hidden="true" />
     </button>
   );

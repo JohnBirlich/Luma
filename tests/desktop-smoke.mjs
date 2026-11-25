@@ -182,7 +182,9 @@ async function smoke() {
     fixtureNotice('WASAPI Float probe', `Driver result for stereo 48 kHz Float32 on the runner: ${mode}.`);
   }
   assert.equal(await run('window.luma.lastfm.status().then(({ enabled }) => enabled)'), false);
-  assert.equal(await run('window.luma.discord.status()'), process.platform === 'win32' ? 'off' : 'unsupported');
+  assert.ok(process.platform === 'win32'
+    ? ['off', 'waiting', 'connected'].includes(await run('window.luma.discord.status()'))
+    : (await run('window.luma.discord.status()')) === 'unsupported', 'Discord presence follows the platform');
   assert.equal(await run(`window.luma.updates.install(${JSON.stringify(nextVersion)})`), 'unavailable', 'a source build cannot launch an installer');
   assert.equal(await run(`window.luma.updates.download(${JSON.stringify(nextVersion)})`), 'unavailable', 'a source build cannot download an update');
   assert.deepEqual(await run('window.luma.updates.downloadState()'), { state: 'idle' });
@@ -511,17 +513,19 @@ async function smoke() {
   await click('.settings-back');
   await click('.settings-page [aria-label="Интеграции"]');
   await waitFor('widget setting', () => run(`!!document.querySelector('[aria-label="Виджеты рабочего стола"] select')`));
+  // «Фон» offers the same scenes as «Эффекты», not a separate material list.
   await select('[aria-label="Виджеты рабочего стола"] select', 'liquid');
-  await waitFor('widget material updates in place', () => run(`document.querySelector('.widget-sample')?.dataset.widgetBackground === 'liquid'`));
-  assert.equal(await run(`document.querySelectorAll('[aria-label="Виджеты рабочего стола"] select option').length`), 10);
+  await waitFor('widget scene updates in place', () => run(`document.querySelector('.widget-sample')?.dataset.effect === 'liquid'
+    && !!document.querySelector('.widget-sample > .scene-liquid')`));
+  assert.equal(await run(`document.querySelectorAll('[aria-label="Виджеты рабочего стола"] select option').length`), 20);
   const widgetBounds = window.getBounds();
   const widgetTime = await run('document.querySelector("audio").currentTime');
   await click('[aria-label="Виджеты рабочего стола"] button');
   await waitFor('floating widget opens without replacing the renderer', async () => window.isAlwaysOnTop() && window.getBounds().width < widgetBounds.width
-    && await run(`document.querySelector('.widget-mode > .desktop-widget')?.dataset.widgetBackground === 'liquid' && window.testAudio === document.querySelector('audio')`));
+    && await run(`document.querySelector('.widget-mode > .desktop-widget')?.dataset.effect === 'liquid' && window.testAudio === document.querySelector('audio')`));
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   if (!await run(`matchMedia('(prefers-reduced-motion: reduce)').matches`)) await waitFor('widget scene keeps moving at idle', () => run(`
-    document.querySelector('audio').paused && !!document.querySelector('.widget-mode > .desktop-widget .scene-mix-flow.scene-moving')
+    document.querySelector('audio').paused && !!document.querySelector('.widget-mode > .desktop-widget .scene-liquid.scene-moving')
     && !document.querySelector('.main-pane .scene-moving')`));
   await click('.widget-window-buttons [aria-label="Вернуться в плеер"]');
   await waitFor('widget restores the old window', async () => !window.isAlwaysOnTop() && !await run(`!!document.querySelector('.widget-mode > .desktop-widget')`));

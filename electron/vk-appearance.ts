@@ -49,10 +49,39 @@ function setAppearance(css: string, page: string) {
   world.vkRadioWatcher = setInterval(() => { mark(); if (++runs >= 40) { clearInterval(world.vkRadioWatcher); delete world.vkRadioWatcher; } }, 1_500);
 }
 
+/**
+ * The sign-in screen: VK's own QR card is the only thing worth showing at any window
+ * size. The header, search, business-page link and the lower text blocks are hidden,
+ * and the card is scaled down instead of being cropped on a short window.
+ */
+const signInOnly = `
+html, body { background: #101116 !important; overflow-x: hidden !important; }
+/* Everything that frames the QR card: header, search, business-page link, sidebars, footer. */
+#page_header_cont, #top_nav, #layout_sidebar, #side_bar, #stl_left, #stl_bg, #bottom_nav, #footer,
+.Footer, .footer, [class*="Footer"], .vkuiPanelHeader, .vkuiSplitLayout__header,
+.LeftMenu, #side_effects, .ChatsSidebar, [class*="ChatsSidebar"],
+[class*="AuthHeader"], [class*="AuthFooter"], [class*="LoginHeader"], [class*="AuthTopLink"] { display: none !important; }
+#page_wrap, #page_layout, .vkuiSplitLayout, .vkuiSplitLayout__inner { background: transparent !important; }
+/* When VK renders the code as a box layer, pin that layer to the window and centre it. */
+#box_layer_wrap:has(#box_layer:not(:empty)) { position: fixed !important; inset: 0 !important; z-index: 2147483000 !important;
+  display: grid !important; place-items: center !important; padding: 10px !important; background: #101116 !important; }
+#box_layer { max-width: min(520px, 96vw) !important; max-height: 94vh !important; overflow: auto !important;
+  border-radius: 16px !important; box-shadow: 0 24px 70px #000a !important; }
+.vkc__AuthRoot, [class*="AuthPage"], [class*="LoginPage"] { margin: 0 auto !important; max-width: min(520px, 96vw) !important; }
+/* Short or narrow windows shrink the whole page instead of cropping the code. */
+@media (max-height: 860px) { html { zoom: .92; } }
+@media (max-height: 760px) { html { zoom: .84; } }
+@media (max-height: 660px) { html { zoom: .74; } }
+@media (max-height: 580px) { html { zoom: .64; } }
+@media (max-width: 560px) { html { zoom: .9; } }
+`;
+
 export function vkAppearanceScript(href: string, signIn: boolean) {
   const page = vkSiteUrl(href);
   if (!page) return;
-  const music = (page.hostname === 'vk.ru' || page.hostname === 'vk.com') && vkMusicPage(href);
-  const css = music && !signIn ? `${minimal}\n[data-luma-radio] { display: none !important; }` : '';
+  const vk = page.hostname === 'vk.ru' || page.hostname === 'vk.com';
+  const music = vk && vkMusicPage(href);
+  const css = music && !signIn ? `${minimal}\n[data-luma-radio] { display: none !important; }`
+    : signIn ? signInOnly : '';
   return `(${setAppearance.toString()})(...${JSON.stringify([css, page.origin + page.pathname])})`;
 }
