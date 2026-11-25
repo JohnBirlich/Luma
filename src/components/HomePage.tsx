@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AudioLines, ChevronRight, Disc3, Headphones, Link2, ListEnd, Play, Plus, Search, Settings2, Waves, X } from 'lucide-react';
+import { AudioLines, ChevronRight, Headphones, Link2, ListEnd, Play, Plus, Search, Settings2, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import type { Track } from '../shared/media';
 import type { VkCollection } from '../shared/vk-site';
@@ -135,6 +135,9 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
         onCompositionEnd={() => setComposing(false)} />{query && <button type="button" className="icon-button" aria-label={t('Очистить поиск')} onClick={() => { setQuery(''); formInput.current?.focus(); }}><X size={14} /></button>}</div></div>}
       <div className="hub-topline"><nav aria-label={t('Разделы на главной')} className="hub-tabs">
         {(Object.keys(TABS) as (keyof typeof TABS)[]).map((id) => <button type="button" key={id} data-home-tab={id} aria-current={tab === id && !term ? 'page' : undefined} onClick={() => selectTab(id)}>{t(TABS[id])}</button>)}
+        {([['spotify', 'Spotify'], ['yandex', 'Яндекс Музыка']] as const).map(([id, name]) =>
+          <span key={id} className="hub-tab-soon" data-home-soon={id} aria-disabled="true" title={t('Скоро: вход в аккаунт и перенос плейлистов')}>
+            {t(name)}<span className="hub-tab-soon-badge">{t('Скоро')}</span></span>)}
       </nav><div className="hub-top-actions">
         <button type="button" className="icon-button" disabled={props.busy} onClick={addMusic}
           aria-label={t('Добавить музыку')} title={t('Добавить музыку (Ctrl+O)')}><Plus size={18} aria-hidden="true" /></button>
@@ -187,17 +190,6 @@ export const HomePage = memo(function HomePage(props: HomeProps) {
               onClick={() => playVkOr('recent', () => mix('recent'))} disabled={props.busy || (!props.playVkCollection && !data.history.length)} />
             <Tile title={t('Избранное')} description={props.playVkCollection ? t('Избранное в Luma') : t('Треки, отмеченные сердцем')} color="rose"
               onClick={() => playVkOr('favorites', () => mix('favorites'))} disabled={props.busy || (!props.playVkCollection && !favoriteOptions)} />
-          </div>
-        </Shelf>
-        <Shelf title={t('Сервисы')} detail={t('Заготовки для Spotify и Яндекс Музыки: вход и перенос плейлистов появятся позже.')}>
-          <div className="hub-rail hub-service-rail">
-            {([['spotify', 'Spotify', 'Spotify'], ['yandex', t('Яндекс Музыка'), 'yandex']] as const).map(([id, name, tone]) => (
-              <div key={id} className={`service-stub service-${tone}`} role="group" aria-label={name} aria-disabled="true">
-                <span className="service-stub-mark" aria-hidden="true">{id === 'spotify' ? <Disc3 size={20} /> : <Waves size={20} />}</span>
-                <span className="service-stub-copy"><strong>{name}</strong><small>{t('Скоро: вход в аккаунт и перенос плейлистов')}</small></span>
-                <span className="service-stub-badge">{t('Скоро')}</span>
-              </div>
-            ))}
           </div>
         </Shelf>
         {props.vkRecent.length > 0 && <Shelf title={t('Недавно в VK Музыке')}

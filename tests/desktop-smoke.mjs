@@ -1143,10 +1143,15 @@ async function smoke() {
         return expected.every((title, index) => headings.filter(h => h === title).length === 1 &&
           (index === 0 || headings.indexOf(title) > headings.indexOf(expected[index - 1]))) && !headings.includes('Жанры и настроения');
       })()`));
-      await waitFor('the Spotify and Yandex Music placeholders are in place', () => run(`(() => {
-        const cards = [...document.querySelectorAll('.home-page .service-stub')];
-        return cards.length === 2 && cards[0].textContent.includes('Spotify') && cards[1].textContent.includes('Яндекс Музыка')
-          && cards.every((card) => card.querySelector('.service-stub-badge')?.textContent.trim() === 'Скоро');
+      await waitFor('the Spotify and Yandex Music placeholders share the tab row with VK Music', () => run(`(() => {
+        const tabs = document.querySelector('.home-page .hub-tabs');
+        const items = [...tabs.children];
+        const vk = items.findIndex((item) => item.dataset.homeTab === 'vk');
+        const soon = [...tabs.querySelectorAll('.hub-tab-soon')];
+        return vk >= 0 && soon.length === 2 && items.indexOf(soon[0]) === vk + 1 && items.indexOf(soon[1]) === vk + 2
+          && soon[0].textContent.trim() === 'SpotifyСкоро' && soon[1].textContent.trim() === 'Яндекс МузыкаСкоро'
+          && soon.every((chip) => chip.querySelector('.hub-tab-soon-badge')?.textContent.trim() === 'Скоро' && !chip.querySelector('svg'))
+          && !document.querySelector('.home-page .service-stub, .home-page .hub-service-rail');
       })()`));
       const originalBounds = window.getBounds();
       const originalZoom = window.webContents.getZoomFactor();
