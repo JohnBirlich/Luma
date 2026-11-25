@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Headphones, History, Library, Music2, Sparkles } from 'lucide-react';
+import { Headphones, History, Library, Music2, Sparkles, UserRound } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { formatCount } from '../shared/customization';
 import type { ListeningStats } from '../player/preferences';
@@ -15,6 +15,8 @@ export interface StatisticsData {
   recentCount: number;
   vkRecentCount: number;
   fullNumbers: boolean;
+  /** Which accounts are signed in right now; the rest are placeholders for later. */
+  accounts: { vk: boolean };
 }
 
 /** H:MM:SS for short totals, hours with one decimal once the count is large. */
@@ -90,6 +92,14 @@ export function Statistics({ data }: { data: StatisticsData }) {
       <header><Icon size={17} aria-hidden="true" /><h3>{label}</h3></header>
       <dl>{rows.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>
     </section>)}
+    <section className="statistics-group statistics-accounts" aria-label={t('Аккаунты')}>
+      <header><UserRound size={17} aria-hidden="true" /><h3>{t('Аккаунты')}</h3></header>
+      <dl>
+        <div><dt>{t('Аккаунт VK')}</dt><dd><span className={`account-state ${data.accounts.vk ? 'is-on' : 'is-off'}`}><i aria-hidden="true" />{t(data.accounts.vk ? 'Подключено' : 'Не подключено')}</span></dd></div>
+        <div><dt>{t('Аккаунт Spotify')}</dt><dd><span className="account-state is-later"><i aria-hidden="true" />{t('Временно недоступно')}</span></dd></div>
+        <div><dt>{t('Аккаунт Яндекс Музыки')}</dt><dd><span className="account-state is-later"><i aria-hidden="true" />{t('Временно недоступно')}</span></dd></div>
+      </dl>
+    </section>
     <p className="statistics-note"><Music2 size={14} aria-hidden="true" />{t('Считается на этом устройстве: Luma не отправляет статистику на сервер.')}</p>
   </div>;
 }

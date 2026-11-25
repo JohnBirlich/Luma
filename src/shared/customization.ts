@@ -16,6 +16,16 @@ export const ACCENTS = [
 
 export const HERO_STYLES = ['cover', 'blur', 'vinyl', 'center'] as const;
 export const BACKGROUND_EFFECTS = ['off', 'tunnel', 'aurora', 'waves', 'stars', 'spectrum', 'columns', 'orbits', 'prism', 'pulse', 'nebula', 'horizon', 'kaleidoscope', 'rain', 'fireworks', 'solar', 'meteors', 'notes', 'liquid', 'mix-flow'] as const;
+/**
+ * One label per background effect, shared by the player's «Эффекты» list and the
+ * desktop widget's «Фон», so both pickers offer exactly the same scenes.
+ */
+export const EFFECT_LABELS = {
+  off: 'Без эффекта', tunnel: 'Тоннель', aurora: 'Сияние', waves: 'Волны', stars: 'Звёзды', spectrum: 'Спектр',
+  columns: 'Кристаллы', orbits: 'Орбиты', prism: 'Призма', pulse: 'Импульс', nebula: 'Туманность', horizon: 'Неон',
+  kaleidoscope: 'Хромолинии', fireworks: 'Фейерверк', rain: 'Дождь', solar: 'Солнечный ветер', meteors: 'Метеоры',
+  notes: 'Ноты', liquid: 'Жидкое стекло', 'mix-flow': 'Переливы Luma',
+} as const satisfies Record<(typeof BACKGROUND_EFFECTS)[number], string>;
 export const EFFECT_TEMPOS = { calm: { label: 'Спокойный', factor: 1.65 }, normal: { label: 'Обычный', factor: 1 }, fast: { label: 'Быстрый', factor: 0.67 } } as const;
 export const START_PAGES = ['player', 'library', 'local', 'search'] as const;
 export const SEEK_STEPS = [5, 10, 15, 30] as const;
@@ -57,6 +67,8 @@ export interface Appearance {
   autoTheme: boolean;
   dayTheme: ThemeName;
   widgetBackground: WidgetBackground;
+  /** The scene drawn behind the desktop widget; «Эффекты» list, picked separately. */
+  widgetEffect: BackgroundEffect;
   libraryLayout: LibraryLayout;
   /** The now-playing switches the list asked for; all on by default. */
   coverRound: boolean;
@@ -85,7 +97,7 @@ export const defaultAppearance: Appearance = {
   theme: 'amber', accent: null, hero: 'cover', effect: 'aurora', effectStrength: 0.75, effectTempo: 'normal',
   audioReactive: true, nativeFullscreen: true, fullscreenQueue: true, compactSidebar: false, coverColors: true, motion: true,
   tabMotion: true, fullNumbers: false, classicDock: false, dataLanguage: 'system', autoTheme: false, dayTheme: 'ocean',
-  widgetBackground: 'blur', libraryLayout: 'list',
+  widgetBackground: 'blur', widgetEffect: 'aurora', libraryLayout: 'list',
   coverRound: true, coverOutline: true, showVolume: true, showTools: true, showLyrics: true, swipeTracks: true,
 };
 export const defaultPlayback: PlaybackPreferences = {
@@ -121,6 +133,7 @@ export function readAppearance(value: unknown): Appearance {
     autoTheme: data?.autoTheme === true,
     dayTheme: typeof data?.dayTheme === 'string' && Object.hasOwn(THEMES, data.dayTheme) ? data.dayTheme : defaultAppearance.dayTheme,
     widgetBackground: typeof data?.widgetBackground === 'string' && Object.hasOwn(WIDGET_BACKGROUNDS, data.widgetBackground) ? data.widgetBackground : 'blur',
+    widgetEffect: BACKGROUND_EFFECTS.includes(data?.widgetEffect as BackgroundEffect) ? data!.widgetEffect as BackgroundEffect : (BACKGROUND_EFFECTS.includes(effect as BackgroundEffect) ? effect as BackgroundEffect : defaultAppearance.widgetEffect),
     libraryLayout: data?.libraryLayout === 'grid' ? 'grid' : 'list',
     coverRound: data?.coverRound !== false,
     coverOutline: data?.coverOutline !== false,

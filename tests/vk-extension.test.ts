@@ -81,8 +81,12 @@ test('Luma adopts the same cosmetic CSS without running the extension or styling
   apply();
   assert.equal(document.adoptedStyleSheets.length, 2);
   assert.equal(document.adoptedStyleSheets[1].css, `${read('styles.css').replace('html[data-vk-music-only]', 'html')}\n[data-luma-radio] { display: none !important; }`);
+  // A sign-in page keeps only VK's own QR card: no header, search or footer.
   apply(true);
-  assert.deepEqual(document.adoptedStyleSheets, [original]);
+  assert.equal(document.adoptedStyleSheets.length, 2);
+  assert.match(document.adoptedStyleSheets[1].css, /#page_header_cont/u);
+  assert.match(document.adoptedStyleSheets[1].css, /#box_layer_wrap/u);
+  assert.doesNotMatch(document.adoptedStyleSheets[1].css, /data-luma-radio/u);
   apply();
   location.pathname = '/id42';
   apply();

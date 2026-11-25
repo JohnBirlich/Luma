@@ -1,4 +1,4 @@
-import { readDiscordPreferences } from '../shared/discord-presence';
+import { DISCORD_APP_ID, readDiscordPreferences } from '../shared/discord-presence';
 import type { DiscordPreferences } from '../shared/discord-presence';
 import { readSearchHistory } from '../shared/search-history';
 import { readStationIds, STATION_IDS } from '../shared/radio';
@@ -83,7 +83,7 @@ const KEY = 'luma-player:v1';
 export const RECENT_LIMIT = 60;
 const defaults: Preferences = {
   volume: 0.75, lastVolume: 0.75, showDemos: true, uiLanguage: 'ru', nativeFloat: false, equalizer: defaultEqualizer, appearance: defaultAppearance,
-  playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: '', enabled: false }, exportLyrics: false,
+  playback: defaultPlayback, audioQuality: defaultAudioQuality, autoLyrics: false, karaokeStyle: defaultKaraokeStyle, autoCatalogSearch: true, searchHistory: [], localFallback: false, discord: { clientId: DISCORD_APP_ID, enabled: true }, exportLyrics: false,
   resumeRepeat: 'off', resumeShuffle: false, favorites: [], disliked: [], recent: [], vkRecent: [], stationIds: [], playlists: [], onlineTracks: [], onlineRefs: [],
   stats: emptyStats,
 };

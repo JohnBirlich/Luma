@@ -18,11 +18,11 @@ const macLights = ['close', 'minimize', 'restore'] as const;
 function WidgetSurface({ track, tint, appearance, macos, label, preview = false, playing, sample, children }: WidgetLook & WidgetMotion & {
   label: string; preview?: boolean; children: ReactNode;
 }) {
-  const { widgetBackground: background, effect, effectStrength, effectTempo, motion, audioReactive } = appearance;
+  const { widgetBackground: background, widgetEffect, effectStrength, effectTempo, motion, audioReactive } = appearance;
   return <section className={`desktop-widget${preview ? ' widget-sample' : ''}`} aria-label={label} data-widget-layout={macos ? 'macos' : undefined}
-    data-widget-background={background} data-effect={effect === 'off' ? undefined : effect} style={{ '--widget-tint': tint } as CSSProperties}>
+    data-widget-background={background} data-effect={widgetEffect === 'off' ? undefined : widgetEffect} style={{ '--widget-tint': tint } as CSSProperties}>
     {(background === 'blur' || background === 'album') && <Artwork track={track} imageUrl={track?.backdropUrl} className="widget-backdrop" />}
-    <SceneBackground effect={effect} tone={track ? tint : undefined} strength={effectStrength} tempo={effectTempo} visible={motion}
+    <SceneBackground effect={widgetEffect} tone={track ? tint : undefined} strength={effectStrength} tempo={effectTempo} visible={motion}
       animate={playing} sample={audioReactive && !track?.online && playing ? sample : undefined} />
     {children}
   </section>;

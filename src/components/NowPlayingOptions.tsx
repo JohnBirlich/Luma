@@ -5,7 +5,7 @@ import type { CSSProperties } from 'react';
 import { Activity, AudioLines, Check, CircleSlash, Diamond, CloudRain, Disc3, Focus, Grid2X2, Image, LayoutTemplate, Orbit, Palette, Wind, Music2, Droplets, Sparkles, Sunset, Hexagon, Triangle, Waves, Sun, Telescope, X } from 'lucide-react';
 import type { TrackDisplay } from '../shared/media';
 import type { ReadSpectrum } from '../player/useAudio';
-import { EFFECT_TEMPOS } from '../shared/customization';
+import { EFFECT_LABELS, EFFECT_TEMPOS } from '../shared/customization';
 import type { Appearance, EffectTempo } from '../shared/customization';
 import { Artwork } from './Artwork';
 import { SceneBackground } from './SceneBackground';

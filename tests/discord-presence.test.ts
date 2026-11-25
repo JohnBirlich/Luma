@@ -6,13 +6,15 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 import { DesktopDiscord, DiscordFrames, discordFrame, discordPipe } from '../electron/discord-presence.js';
-import { readDiscordPreferences } from '../src/shared/discord-presence.js';
+import { DISCORD_APP_ID, readDiscordPreferences } from '../src/shared/discord-presence.js';
 
 const client = '123456789012345678';
 
-test('Discord needs an explicit opt-in and public application ID; packets are bounded', () => {
-  assert.deepEqual(readDiscordPreferences({ clientId: '', enabled: true }), { clientId: '', enabled: false });
+test('Discord uses Luma’s own application unless a profile opted out; packets are bounded', () => {
+  assert.deepEqual(readDiscordPreferences({ clientId: '', enabled: true }), { clientId: DISCORD_APP_ID, enabled: true });
+  assert.deepEqual(readDiscordPreferences({ clientId: '', enabled: false }), { clientId: DISCORD_APP_ID, enabled: true });
   assert.deepEqual(readDiscordPreferences({ clientId: client, enabled: 'true' }), { clientId: client, enabled: false });
+  assert.deepEqual(readDiscordPreferences({ clientId: client, enabled: true }), { clientId: client, enabled: true });
   assert.equal(discordPipe(0), '\\\\.\\pipe\\discord-ipc-0');
   const frames = new DiscordFrames();
   const data = discordFrame(1, { cmd: 'TEST' });

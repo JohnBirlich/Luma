@@ -948,7 +948,12 @@ export default function App() {
   }, [openVk]);
   const openEqualizer = () => setShowEqualizer(true);
   const toggleQueue = () => setQueueOpen((open) => !open);
-  const changeAppearance = (appearance: Appearance) => setPreferences((data) => ({ ...data, appearance }));
+  const changeAppearance = (appearance: Appearance) => setPreferences((data) => {
+    // MacOS brings its own Liquid Glass look: picking that theme also picks the scene
+    // behind the desktop widget, leaving the player's own scene alone.
+    const glass = appearance.theme === 'macos' && data.appearance.theme !== 'macos';
+    return { ...data, appearance: glass ? { ...appearance, widgetEffect: 'liquid' } : appearance };
+  });
   const toggleCompact = () => setPreferences((data) => ({ ...data, appearance: { ...data.appearance, compactSidebar: !data.appearance.compactSidebar } }));
   const saveStation = useCallback((id: string) => {
     if (STATION_IDS.has(id)) setPreferences((data) => ({ ...data,
@@ -1085,7 +1090,8 @@ export default function App() {
           basePage === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers}
             openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={openMixes} openDiagnostics={() => navigate('diagnostics')} openEqualizer={openEqualizer}
             statistics={{ stats: preferences.stats, ticking: player.playing || listeningToVk, localCount: localTracks.length, onlineCount: onlineTracks.length, playlistCount: preferences.playlists.length,
-              favoriteCount: preferences.favorites.length, recentCount: preferences.recent.length, vkRecentCount: preferences.vkRecent.length, fullNumbers: appearance.fullNumbers }} /> :
+              favoriteCount: preferences.favorites.length, recentCount: preferences.recent.length, vkRecentCount: preferences.vkRecent.length, fullNumbers: appearance.fullNumbers,
+              accounts: { vk: vkSignedIn } }} /> :
           basePage === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} disliked={dislikedIds} recent={recent} fullNumbers={appearance.fullNumbers}
             playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :
           <LibraryPage key={`${basePage}:${libraryScope}`} initialScope={basePage === 'library' ? libraryScope : 'all'} fullNumbers={appearance.fullNumbers} tracks={basePage === 'favorites' ? favorites : basePage === 'recent' ? recent : collection} currentId={queue.currentId} playing={player.playing} showDemos={preferences.showDemos} busy={working || !ready}
@@ -1102,7 +1108,6 @@ export default function App() {
             nativeFloat={preferences.nativeFloat} floatStatus={player.floatStatus} changeFloat={(nativeFloat) => setPreferences((data) => ({ ...data, nativeFloat }))}
             metered={audioQuality.network === 'auto' ? metered : audioQuality.network === 'metered'}
             autoLyrics={preferences.autoLyrics} exportLyrics={preferences.exportLyrics} showDemos={preferences.showDemos} libraryReady={ready && !working}
-            discord={preferences.discord} changeDiscord={(discord) => setPreferences((data) => ({ ...data, discord }))}
             sleepDeadline={sleepDeadline} changeSleepTimer={changeSleepTimer} localFallback={preferences.localFallback}
             toggleLocalFallback={() => setPreferences((data) => ({ ...data, localFallback: !data.localFallback }))}
             previewTrack={current} tint={appearance.coverColors ? localTone : theme['--accent']} localCount={localTracks.length} recentCount={preferences.recent.length + preferences.vkRecent.length}
@@ -1114,7 +1119,8 @@ export default function App() {
             toggleEffects={() => setPreferences((data) => ({ ...data, equalizer: { ...data.equalizer, enabled: !data.equalizer.enabled } }))}
             openLocalLibrary={() => navigate('library', 'offline')} widgetTint={localTone} openWidget={() => { void changeWidget(true); }}
             openTrackInfo={current && !current.demo && !current.online ? () => editTrackDetails(current.id) : undefined}
-            reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings} />
+            reset={resetCustomization} sectionId={settingsSection} selectSection={setSettingsSection} returnToTab={exitSettings}
+            updateAvailable={updateAvailable} />
         </div>}
       </main>
       {!widget && queueOpen && <>
