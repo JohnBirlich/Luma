@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Headphones, History, Library, Music2, Sparkles } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { formatCount } from '../shared/customization';
@@ -6,6 +6,8 @@ import type { ListeningStats } from '../player/preferences';
 
 export interface StatisticsData {
   stats: ListeningStats;
+  /** True while the deck (local or VK) is actually playing. */
+  ticking: boolean;
   localCount: number;
   onlineCount: number;
   playlistCount: number;
@@ -30,6 +32,22 @@ function duration(seconds: number, language: string) {
 
 export function Statistics({ data }: { data: StatisticsData }) {
   const t = useText();
+  // The stored total is flushed now and then; the screen counts the current listen
+  // second by second so the time in the player never stands still.
+  const base = data.stats.seconds;
+  const [tick, setTick] = useState(0);
+  const baseRef = useRef(base);
+  useEffect(() => {
+    if (base === baseRef.current) return;
+    baseRef.current = base;
+    setTick(0);
+  }, [base]);
+  useEffect(() => {
+    if (!data.ticking) return;
+    const timer = window.setInterval(() => setTick((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [data.ticking]);
+  const seconds = base + tick;
   const number = (value: number) => formatCount(value, data.fullNumbers, t.language);
   const since = useMemo(() => {
     if (!data.stats.since) return undefined;
@@ -43,7 +61,7 @@ export function Statistics({ data }: { data: StatisticsData }) {
         [t('Локальные треки'), number(data.stats.localListens)],
         [t('Треки из VK Музыки'), number(data.stats.vkListens)],
         [t('Всего треков'), number(total)],
-        [t('Время в плеере'), duration(data.stats.seconds, t.language)],
+        [t('Время в плеере'), duration(seconds, t.language)],
         ...(since ? [[t('Считаем с'), since] as [string, string]] : []),
       ],
     },
@@ -66,7 +84,7 @@ export function Statistics({ data }: { data: StatisticsData }) {
     <section className="statistics-hero" aria-label={t('Сводка прослушивания')}>
       <div className="statistics-hero-mark" aria-hidden="true"><Sparkles size={26} /></div>
       <div><p className="overline">{t('Сводка Luma')}</p><h2>{total > 0 ? t('Прослушано треков: {0}', number(total)) : t('Пока нет прослушиваний')}</h2>
-        <p>{data.stats.seconds > 0 ? t('Время в плеере: {0}', duration(data.stats.seconds, t.language)) : t('Начните воспроизведение, и статистика заполнится сама.')}</p></div>
+        <p>{seconds > 0 ? t('Время в плеере: {0}', duration(seconds, t.language)) : t('Начните воспроизведение, и статистика заполнится сама.')}</p></div>
     </section>
     {groups.map(({ icon: Icon, label, rows }) => <section className="statistics-group" key={label} aria-label={label}>
       <header><Icon size={17} aria-hidden="true" /><h3>{label}</h3></header>

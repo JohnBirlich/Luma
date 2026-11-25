@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, FileText, FileUp, Link2, ListMusic, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, FileMusic, FileText, FileUp, Link2, ListMusic, X } from 'lucide-react';
 import { useText } from '../i18n/context';
 import { MAX_PLAYLIST_TRACKS, playlistTitle } from '../shared/luma-playlists';
 import type { Track } from '../shared/media';
@@ -33,7 +33,7 @@ const sources = [
   { id: 'yandex', name: 'Яндекс Музыка', logo: yandexMusic, hint: 'CSV / TXT', tint: '#ffcc00' },
   { id: 'vk', name: 'VK Музыка', icon: FileText, hint: 'CSV / TXT', tint: '#4c8bf5' },
   { id: 'file', name: 'Другой сервис или список', icon: FileText, hint: 'CSV / TXT', tint: '#9aa3b5' },
-  { id: 'm3u', name: 'Плейлист из M3U', icon: ListMusic, hint: 'M3U / M3U8', tint: '#c58bff' },
+  { id: 'm3u', name: 'Плейлист из M3U', icon: FileMusic, hint: 'M3U / M3U8 · файл плейлиста', tint: '#c58bff' },
 ] as const;
 type ImportSource = typeof sources[number];
 const PAGE_SIZE = 10;
@@ -167,7 +167,9 @@ export function PlaylistImport({ collection, save, close }: {
     <div className="playlist-import-body" ref={body}>
       {step === 1 && <>
         <div className="playlist-import-card">
-          <ul className="playlist-import-sources">{sources.map((item) => <li key={item.id}>
+          <ul className="playlist-import-sources">{[...sources.filter((item) => item.id !== 'm3u'), ...sources.filter((item) => item.id === 'm3u')].map((item) => <li key={item.id}
+            className={item.id === 'm3u' ? 'playlist-source-file' : undefined}>
+            {item.id === 'm3u' && <p className="playlist-import-divider">{t('Или файл плейлиста')}</p>}
             <button type="button" data-source={item.id} onClick={() => setSource(item)}>
               <span className="playlist-source-mark" style={{ '--source-tint': item.tint } as CSSProperties} aria-hidden="true">{'logo' in item
                 ? <img src={item.logo} width={24} height={24} alt="" draggable={false} /> : <item.icon size={18} />}</span>
@@ -192,7 +194,7 @@ export function PlaylistImport({ collection, save, close }: {
           : source.id === 'luma' ? 'Выберите полученный файл .luma.json, затем проверьте совпадения с вашей медиатекой.'
           : source.id === 'unison' ? 'Откройте резервную копию из Unison. Luma читает только плейлисты и избранное, не историю и не настройки.'
           : source.id === 'vk' ? 'Если у вас уже есть список VK в CSV или TXT, откройте его здесь. Luma не подключается к аккаунту VK и не скачивает музыку.'
-          : source.id === 'm3u' ? 'Откройте M3U / M3U8 со списком локальных аудиофайлов. Luma не открывает пути, ссылки или потоки из списка.'
+          : source.id === 'm3u' ? 'Откройте M3U или M3U8 — обычный список или расширенный с #EXTINF. Luma читает только названия и исполнителей и сопоставляет их с вашей медиатекой; пути, ссылки и потоки из списка не открываются.'
           : 'Выберите CSV / TXT, экспортированный из сервиса или инструмента переноса плейлистов.')}</p>
         {source.id !== 'm3u' && source.id !== 'luma' && source.id !== 'unison' && <p>{t('Для CSV нужны колонки «Название» и «Исполнитель», альбом необязателен. В TXT — «Исполнитель — Название» на каждой строке.')}</p>}
         <input type="file" ref={input} hidden accept={source.id === 'spotify' ? '.json,.csv,.txt' : source.id === 'luma' || source.id === 'unison' ? '.json' : source.id === 'm3u' ? '.m3u,.m3u8' : '.csv,.txt'} onChange={(event) => {

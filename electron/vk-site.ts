@@ -10,7 +10,7 @@ import { VK_SITE_PARTITION, VK_TRANSPORT, readVkCollection, readVkCollectionName
 import type { VkNowPlaying, VkPlaybackAction, VkSiteState } from '../src/shared/vk-site.js';
 import { vkAppearanceScript } from './vk-appearance.js';
 import { inspectVkPlayer } from './vk-player.js';
-import { inspectVkCollection } from './vk-collection.js';
+import { inspectVkAlbum, inspectVkCollection } from './vk-collection.js';
 import { fetchVkArtwork } from './vk-artwork.js';
 import type { VkArtwork } from './vk-artwork.js';
 import { vkCoverKey } from './vk-cover-cache.js';
@@ -447,6 +447,76 @@ export class VkSite {
       const started = active.state.engaged === true;
       if (!started) { active.foreground = wasForeground; this.visibility(active); }
       return started;
+    } catch { return false; }
+  }
+
+  /**
+   * Starts a saved VK listen on its own page without taking Luma's screen away. The
+   * guest is given a viewport but stays invisible, and VK's transport is pressed with
+   * a replayed input event, exactly like a catalogue card is.
+   */
+  async playTrack(owner: BrowserWindow, id: unknown, url: unknown) {
+    const active = this.active, contents = active?.view.webContents;
+    if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) return false;
+    if (!active.windowVisible || active.minimized || !vkSiteEntry(url)) return false;
+    if (!active.shown) {
+      const [w, h] = active.owner.getContentSize();
+      active.view.setBounds({ x: 0, y: 0, width: Math.max(1024, w), height: Math.max(720, h) });
+      active.view.setVisible(false);
+    }
+    if (!this.musicPageReady(active) || contents.getURL() !== url) {
+      this.navigate(active, url);
+      const deadline = Date.now() + 15_000;
+      while (this.active === active && !contents.isDestroyed() && contents.getURL() !== url && Date.now() < deadline) {
+        await new Promise((resolve) => { setTimeout(resolve, 250); });
+      }
+      while (this.active === active && !contents.isDestroyed() && !this.musicReady(active) && active.state.phase !== 'failed' && Date.now() < deadline) {
+        await new Promise((resolve) => { setTimeout(resolve, 250); });
+      }
+      if (this.active !== active || contents.isDestroyed() || !this.musicReady(active)) return false;
+    }
+    const revision = active.revision, wasForeground = active.foreground;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      if (active.state.track?.playing) return true;
+      const result: unknown = await contents.executeJavaScriptInIsolatedWorld(world,
+        [{ code: inspectVkPlayer('toggle', undefined, 'trusted') }], true).catch(() => undefined);
+      const point = result && typeof result === 'object' ? (result as { point?: { x?: unknown; y?: unknown } }).point : undefined;
+      const x = Math.round(Number(point?.x)), y = Math.round(Number(point?.y));
+      if (Number.isFinite(x) && Number.isFinite(y) && x > 0 && y > 0 && this.active === active && active.revision === revision) {
+        active.foreground = true;
+        contents.sendInputEvent({ type: 'mouseMove', x, y });
+        contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+        contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+      }
+      for (let wait = 0; wait < 6; wait++) {
+        await new Promise((resolve) => { setTimeout(resolve, 500); });
+        if (this.active !== active || active.revision !== revision) return false;
+        if (active.state.track?.playing) return true;
+        active.foreground = true;
+        await this.readTrack(active);
+      }
+    }
+    active.foreground = wasForeground;
+    this.visibility(active);
+    return active.state.track?.playing === true;
+  }
+
+  /** Opens the album of the track that is open in the guest, with a real press. */
+  async album(owner: BrowserWindow, id: unknown) {
+    const active = this.active, contents = active?.view.webContents;
+    if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) return false;
+    if (!active.windowVisible || active.minimized || !this.musicReady(active)) return false;
+    const revision = active.revision;
+    try {
+      const result: unknown = await contents.executeJavaScriptInIsolatedWorld(world, [{ code: inspectVkAlbum() }], true);
+      const point = result && typeof result === 'object' ? (result as { point?: { x?: unknown; y?: unknown } }).point : undefined;
+      const x = Math.round(Number(point?.x)), y = Math.round(Number(point?.y));
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x <= 0 || y <= 0) return false;
+      if (this.active !== active || active.revision !== revision || contents.isDestroyed()) return false;
+      contents.sendInputEvent({ type: 'mouseMove', x, y });
+      contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+      contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+      return true;
     } catch { return false; }
   }
 

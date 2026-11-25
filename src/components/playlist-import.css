@@ -59,3 +59,12 @@
 .openwhyd-import-form { display: grid; gap: 9px; width: 100%; }
 .openwhyd-import-form > button { justify-self: start; }
 .playlist-import-preview .playlist-origin-link { grid-column: 1 / -1; }
+
+/* The M3U reader closes the list as a file option, not one more service. */
+.playlist-import-divider { display: flex; align-items: center; gap: 9px; margin: 13px 0 6px; padding: 0 12px;
+  font-size: 10.5px; font-weight: 720; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.playlist-import-divider::after { content: ''; flex: 1; height: 1px; background: #ffffff14; }
+.playlist-import-sources > .playlist-source-file > button { border-top: 0; border-radius: 10px;
+  background: linear-gradient(100deg, #c58bff1f, #ffffff08); box-shadow: inset 0 0 0 1px #c58bff33; }
+.playlist-import-sources > .playlist-source-file > button:hover { background: linear-gradient(100deg, #c58bff2e, #ffffff12); }
+.playlist-import-sources > .playlist-source-file .playlist-source-mark { background: #c58bff26; color: #e3c4ff; }

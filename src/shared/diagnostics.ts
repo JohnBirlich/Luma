@@ -3,10 +3,13 @@ import type { Text } from '../i18n/text.js';
 import { APP_NAME, runtimeMode } from './app-info.js';
 import type { AppInfo } from './app-info.js';
 
-export const MAX_LOG_ENTRIES = 300;
-export const MAX_LOG_FILE_BYTES = 192 * 1024;
+// The journal on disk keeps a longer trail; the screen only ever shows the latest
+// visible slice so a long-running profile stays readable.
+export const MAX_LOG_ENTRIES = 1000;
+export const JOURNAL_VISIBLE = 300;
+export const MAX_LOG_FILE_BYTES = 512 * 1024;
 export const LOG_AREAS = { startup: 'Запуск', network: 'Подключение', library: 'Медиатека', playback: 'Воспроизведение', app: 'Интерфейс' } as const;
-export const LOG_LEVELS = { info: 'Инфо', warn: 'Сбой', error: 'Ошибка' } as const;
+export const LOG_LEVELS = { info: 'Информация', warn: 'Предупреждение', error: 'Ошибка', critical: 'Критический сбой' } as const;
 const FIELDS = { ms: 'Время', tracks: 'Треков', added: 'Добавлено', duplicates: 'Дубликатов', failed: 'Ошибок', code: 'Код' } as const;
 
 type Source = 'main' | 'renderer';
@@ -21,13 +24,13 @@ export const LOG_EVENTS = {
   'desktop.protocol': ['main', 'startup', 'info', 'Подключён локальный протокол'],
   'desktop.ready': ['main', 'startup', 'info', 'Окно Luma загружено', 'ms'],
   'desktop.musicLinkDelivered': ['main', 'app', 'info', 'Музыкальная ссылка передана окну Luma'],
-  'desktop.failed': ['main', 'startup', 'error', 'Не удалось запустить настольный Luma'],
+  'desktop.failed': ['main', 'startup', 'critical', 'Не удалось запустить настольный Luma'],
   'desktop.pageFailed': ['main', 'startup', 'error', 'Ошибка загрузки окна', 'code'],
-  'desktop.rendererExited': ['main', 'app', 'error', 'Процесс интерфейса завершился неожиданно', 'code'],
+  'desktop.rendererExited': ['main', 'app', 'critical', 'Процесс интерфейса завершился неожиданно', 'code'],
   'desktop.stopped': ['main', 'startup', 'info', 'Выход из приложения'],
   'renderer.start': ['renderer', 'startup', 'info', 'Интерфейс Luma загружен', 'ms'],
-  'renderer.error': ['renderer', 'app', 'error', 'Необработанная ошибка интерфейса'],
-  'renderer.rejection': ['renderer', 'app', 'error', 'Необработанная ошибка фоновой операции'],
+  'renderer.error': ['renderer', 'app', 'critical', 'Необработанная ошибка интерфейса'],
+  'renderer.rejection': ['renderer', 'app', 'critical', 'Необработанная ошибка фоновой операции'],
   'network.online': ['renderer', 'network', 'info', 'Устройство в сети'],
   'network.offline': ['renderer', 'network', 'warn', 'Устройство вне сети'],
   'vk.websiteOpening': ['main', 'network', 'info', 'Открывается официальный сайт VK Музыки'],

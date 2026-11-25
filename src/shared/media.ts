@@ -124,6 +124,8 @@ export interface DesktopBridge {
     close(id: number): Promise<void>;
     command(id: number, action: VkSiteAction, fraction?: number): Promise<boolean>;
     collection(id: number, kind: VkCollection, name?: string): Promise<boolean>;
+    playTrack(id: number, url: string): Promise<boolean>;
+    album(id: number): Promise<boolean>;
     reset(id: number): Promise<boolean>;
     onState(callback: (id: number, state: VkSiteState) => void): () => void;
   };

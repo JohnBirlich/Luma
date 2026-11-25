@@ -34,6 +34,7 @@ import { saveSharedPlaylist } from './data/playlist-share';
 import { musicLaunchUrl, readMusicLink } from './shared/music-links';
 import { vkMusicSearchUrl, vkSiteEntry } from './shared/vk-site';
 import { rememberVkListen, vkHistoryDestination } from './shared/vk-history';
+import type { VkHistoryActions } from './components/VkHistory';
 import type { VkHistoryEntry } from './shared/vk-history';
 import type { VkCollection, VkSiteAction } from './shared/vk-site';
 import { VK_MUSIC_URL } from './shared/vk';
@@ -838,11 +839,15 @@ export default function App() {
     navigate('player');
     selectHomeTab('radio');
   }, [navigate, selectHomeTab]);
+  // «Обновления» belongs to the settings hub: the release screen is a settings
+  // section, so the shortcut opens it there instead of a section of its own.
   const openUpdates = useCallback(() => {
-    navigate('player');
-    selectHomeTab('updates');
-  }, [navigate, selectHomeTab]);
-  const updatesActive = page === 'player' && homeTab === 'updates' && !homeQuery.trim();
+    if (window.matchMedia('(max-width: 1079px)').matches) setQueueOpen(false);
+    if (page !== 'settings') settingsFrom.current = { page, top: scrollArea.current?.scrollTop ?? 0 };
+    setSettingsSection('updates');
+    setPage('settings');
+  }, [page]);
+  const updatesActive = page === 'settings' && settingsSection === 'updates';
   const updateAvailable = useUpdateAvailable(ready);
   const radioActive = page === 'player' && homeTab === 'radio' && !homeQuery.trim();
   // The guest's state lives in a ref so the background start can watch it without
@@ -870,31 +875,72 @@ export default function App() {
     if (started) pause();
     return started;
   }, [connected, hasVkSession, openVkSite, pause, showVkTab, vkSite]);
-  /** Opens a saved VK listen on its own track page and starts it with VK's transport. */
+  /** Waits for the guest to show a usable music page; resolves false on sign-in or failure. */
+  const waitVkMusic = useCallback(async (deadline: number) => {
+    for (;;) {
+      const session = vkViewRef.current;
+      if (!session) return false;
+      if (session.state.signIn) return false;
+      if (session.state.phase === 'ready' && !session.resetting) return true;
+      if (session.state.phase === 'failed' || Date.now() > deadline) return false;
+      await new Promise((resolve) => { setTimeout(resolve, 200); });
+    }
+  }, []);
+  /**
+   * Plays a saved VK listen inside the guest. Luma's own screen keeps its place: the
+   * page loads behind it and only VK's transport is pressed.
+   */
   const playVkRecent = useCallback((entry: VkHistoryEntry) => {
     const url = vkHistoryDestination(entry);
     if (!window.luma?.vkSite || !connected || !url) return;
-    openVk(url);
-    const deadline = Date.now() + 20_000;
+    const deadline = Date.now() + 25_000;
+    void (async () => {
+      if (!hasVkSession()) { pause(); openVkSite(url); }
+      if (!await waitVkMusic(deadline)) { if (vkViewRef.current?.state.signIn) showVkTab(); return; }
+      const ok = await vkSite.playTrack(url);
+      if (!ok && !vkViewRef.current?.state.track?.playing) setNotice({ message: 'Не удалось запустить трек в VK Музыке.', error: true });
+    })();
+  }, [connected, hasVkSession, openVkSite, pause, setNotice, showVkTab, vkSite, waitVkMusic]);
+  const vkRecentAction = useCallback((entry: VkHistoryEntry, action: 'favorite' | 'dislike') => {
+    playVkRecent(entry);
+    const deadline = Date.now() + 25_000;
     void (async () => {
       for (;;) {
-        const session = vkViewRef.current;
-        if (!session) return;
-        if (session.state.signIn) return;
-        if (session.state.phase === 'ready' && !session.resetting) break;
-        if (session.state.phase === 'failed' || Date.now() > deadline) return;
-        await new Promise((resolve) => { setTimeout(resolve, 250); });
+        if (vkViewRef.current?.state.track?.playing) break;
+        if (Date.now() > deadline) { setNotice({ message: 'Трек в VK не запустился, действие недоступно.', error: true }); return; }
+        await new Promise((resolve) => { setTimeout(resolve, 400); });
       }
-      // Some builds start a track page on their own; only press when they did not.
-      for (const delay of [600, 600, 600, 600]) {
-        await new Promise((resolve) => { setTimeout(resolve, delay); });
-        const session = vkViewRef.current;
-        if (!session || session.state.phase !== 'ready') return;
-        if (session.state.track?.playing) return;
-      }
-      await commandVk('toggle').catch(() => false);
+      const ok = await commandVk(action);
+      setNotice(ok
+        ? { message: action === 'favorite' ? 'Трек добавлен в мою музыку VK.' : 'Отмечено «Не нравится» в VK.' }
+        : { message: 'VK не принял действие для этого трека.', error: true });
     })();
-  }, [commandVk, connected, openVk]);
+  }, [commandVk, playVkRecent, setNotice]);
+  const openVkAlbum = useCallback((entry: VkHistoryEntry) => {
+    const url = vkHistoryDestination(entry);
+    if (!window.luma?.vkSite || !connected || !url) return;
+    openVk(url);
+    const deadline = Date.now() + 25_000;
+    void (async () => {
+      if (!await waitVkMusic(deadline)) return;
+      await new Promise((resolve) => { setTimeout(resolve, 1200); });
+      if (!await vkSite.album()) setNotice({ message: 'Альбом не найден на странице VK. Открыта запись трека.', error: true });
+    })();
+  }, [connected, openVk, setNotice, vkSite, waitVkMusic]);
+  const copyVkLink = useCallback((entry: VkHistoryEntry) => {
+    const url = vkHistoryDestination(entry);
+    if (!url) { setNotice({ message: 'У этой записи нет ссылки VK.', error: true }); return; }
+    const done = () => setNotice({ message: 'Ссылка скопирована.' });
+    if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(url).then(done, () => setNotice({ message: 'Не удалось скопировать ссылку.', error: true }));
+    else setNotice({ message: 'Буфер обмена недоступен.', error: true });
+  }, [setNotice]);
+  const vkActions = useMemo<VkHistoryActions>(() => ({
+    play: playVkRecent,
+    addToLibrary: (entry) => vkRecentAction(entry, 'favorite'),
+    dislike: (entry) => vkRecentAction(entry, 'dislike'),
+    openAlbum: openVkAlbum,
+    copyLink: copyVkLink,
+  }), [copyVkLink, openVkAlbum, playVkRecent, vkRecentAction]);
   const searchVk = useCallback((query: string) => {
     const url = vkMusicSearchUrl(query);
     if (url) openVk(url);
@@ -938,7 +984,6 @@ export default function App() {
   // VK's switches redraw without changing the marker Luma can read, so a press this
   // side is reflected at once and the guest's own read takes over again shortly.
   const vkMode = useRef<{ shuffle?: boolean; repeat?: Repeat }>({});
-  const vkModeTimer = useRef(0);
   const [, refreshVkMode] = useState(0);
   const vkModeKey = `${vkTrack?.title ?? ''}|${vkTrack?.link ?? ''}`;
   const vkModeKeyRef = useRef(vkModeKey);
@@ -948,15 +993,14 @@ export default function App() {
     if (mode.shuffle !== undefined && vkTrack?.shuffle === mode.shuffle) { delete mode.shuffle; refreshVkMode((tick) => tick + 1); }
     if (mode.repeat !== undefined && vkTrack?.repeat === mode.repeat) { delete mode.repeat; refreshVkMode((tick) => tick + 1); }
   }, [vkTrack?.shuffle, vkTrack?.repeat]);
-  useEffect(() => () => window.clearTimeout(vkModeTimer.current), []);
   const vkShuffle = vkMode.current.shuffle ?? vkTrack?.shuffle ?? false;
   const vkRepeat = vkMode.current.repeat ?? vkTrack?.repeat ?? 'off';
   const pressVkMode = useCallback((change: { shuffle?: boolean; repeat?: Repeat }) => {
     vkMode.current = { ...vkMode.current, ...change };
     refreshVkMode((tick) => tick + 1);
-    window.clearTimeout(vkModeTimer.current);
-    vkModeTimer.current = window.setTimeout(() => { vkMode.current = {}; refreshVkMode((tick) => tick + 1); }, 3000);
     void vkAction('shuffle' in change ? 'shuffle' : 'repeat').then((ok) => {
+      // A refused press gives the switch back to VK; an accepted one stays pressed
+      // on this side until the guest reports the same state or another track starts.
       if (ok) return;
       vkMode.current = {};
       refreshVkMode((tick) => tick + 1);
@@ -1015,7 +1059,7 @@ export default function App() {
         <div key={basePage} className="page-body" hidden={widget || page === 'settings'}>
         {basePage === 'player' ? <Suspense fallback={<p className="page" role="status">{t('Загружаем…')}</p>}>
           <HomePage tracks={collection} recent={recent} vkRecent={preferences.vkRecent} openRecent={() => navigate('recent')}
-            openVkRecent={window.luma?.vkSite && connected ? openVk : undefined} playVkRecent={window.luma?.vkSite && connected ? playVkRecent : undefined} favorites={favoriteIds}
+            openVkRecent={window.luma?.vkSite && connected ? openVk : undefined} vkActions={window.luma?.vkSite && connected ? vkActions : undefined} favorites={favoriteIds}
             playVkCollection={vkSignedIn ? startVkCollection : undefined} openVkTopic={window.luma?.vkSite && connected && !vkVisible ? startVkCollection : undefined} disliked={dislikedIds} saved={savedOnline}
             tab={homeTab} query={homeQuery} setQuery={setHomeQuery} selectTab={selectHomeTab}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
@@ -1039,7 +1083,7 @@ export default function App() {
           basePage === 'diagnostics' ? <DiagnosticsPage back={backToMenu} locale={locale} /> :
           basePage === 'menu' ? <MenuPage localCount={localTracks.length} fullNumbers={appearance.fullNumbers}
             openSettings={openSettings} openLibrary={goToLibrary} openFavorites={() => navigate('favorites')} openRecent={() => navigate('recent')} openMixes={openMixes} openDiagnostics={() => navigate('diagnostics')} openEqualizer={openEqualizer}
-            statistics={{ stats: preferences.stats, localCount: localTracks.length, onlineCount: onlineTracks.length, playlistCount: preferences.playlists.length,
+            statistics={{ stats: preferences.stats, ticking: player.playing || listeningToVk, localCount: localTracks.length, onlineCount: onlineTracks.length, playlistCount: preferences.playlists.length,
               favoriteCount: preferences.favorites.length, recentCount: preferences.recent.length, vkRecentCount: preferences.vkRecent.length, fullNumbers: appearance.fullNumbers }} /> :
           basePage === 'mixes' ? <MixesPage tracks={collection} currentId={queue.currentId} playing={player.playing} favorites={favoriteIds} favoriteTracks={favorites} disliked={dislikedIds} recent={recent} fullNumbers={appearance.fullNumbers}
             playAll={playAll} addMix={queueMix} goToLibrary={goToLibrary} /> :
@@ -1047,7 +1091,7 @@ export default function App() {
             visible={page === basePage && !widget && !modalOpen && !presentationOpen}
             autoCatalogSearch={preferences.autoCatalogSearch} changeAutoCatalogSearch={changeAutoCatalogSearch}
             searchHistory={preferences.searchHistory} rememberSearch={rememberQuery} clearSearchHistory={clearSearchHistory}
-            vkRecent={preferences.vkRecent} openVkRecent={window.luma?.vkSite && connected ? openVk : undefined} playVkRecent={window.luma?.vkSite && connected ? playVkRecent : undefined}
+            vkRecent={preferences.vkRecent} openVkRecent={window.luma?.vkSite && connected ? openVk : undefined} vkActions={window.luma?.vkSite && connected ? vkActions : undefined}
             mode={basePage === 'favorites' || basePage === 'search' || basePage === 'recent' ? basePage : 'library'} favorites={favoriteIds} disliked={dislikedIds} toggleDislike={toggleDislike} toggleFavorite={toggleFavorite} goToLibrary={goToLibrary} openMixes={() => navigate('mixes')} openRecent={() => navigate('recent')} openFavorites={() => navigate('favorites')}
             chooseOnline={chooseOnline} searchVk={window.luma?.vkSite ? searchVk : undefined} openSearch={() => navigate('search')} layout={appearance.libraryLayout} changeLayout={changeLibraryLayout} openHome={() => navigate('player')} addMusic={choose} toggleDemos={toggleDemos} play={(id) => playTrack(id, true)} playAll={playAll} add={addToQueue} editCover={editTrackCover} editDetails={editTrackDetails} remove={removeTrack} />}
         </div>
