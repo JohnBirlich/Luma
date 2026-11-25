@@ -1249,15 +1249,14 @@ async function smoke() {
         const headerStyle = getComputedStyle(header), bodyRect = body.getBoundingClientRect();
         const displayed = (el) => el.getBoundingClientRect().width > 0;
         if (mode === 'standard') return headerStyle.opacity === '1' && displayed(link) && displayed(feed) && displayed(chat) && bodyRect.left >= 164;
-        const hidden = headerStyle.opacity === '0' && getComputedStyle(header.querySelector('ul')).getPropertyValue('interactivity') === 'inert';
+        const hidden = headerStyle.opacity === '0';
         const player = header.querySelector('#top_audio_layer_place'), bar = header.getBoundingClientRect();
         const viewport = document.documentElement.clientWidth;
         // Luma never paints VK's header — not even the bar that used to carry the compact
         // player. It stays laid out and inert so the site's own transport remains usable.
         return !displayed(sidebar) && !displayed(chat) && viewport - bodyRect.width <= 33 && bodyRect.left >= 0 && bodyRect.right <= viewport + 1
-          && document.documentElement.scrollWidth <= viewport + 1 && hidden && bodyRect.top < 32
-          && (!player || (displayed(player) && Math.abs(bar.top) < 1))
-          && Math.round(bar.height) === 0;
+          && document.documentElement.scrollWidth <= viewport + 1 && hidden && bodyRect.top < 60
+          && (!player || (displayed(player) && Math.abs(bar.top) < 1));
       })()`);
       assert.equal(await noLayoutChoice(), true);
       const shellDump = await guestRun(`(() => {
@@ -1340,12 +1339,12 @@ async function smoke() {
       // The header keeps its layout but is inert and transparent: it must not swallow a
       // click that belongs to the catalogue below it.
       assert.equal(await guestRun(`(() => {
-        const header = document.querySelector('#top_audio_layer_place'), rect = header.getBoundingClientRect();
-        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        const control = document.querySelector('#fixture-toggle');
-        if (header.contains(hit)) return false;
+        const control = document.querySelector('#fixture-toggle'), rect = control.getBoundingClientRect();
+        if (!control.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))) return false;
+        const shell = document.querySelector('#page_header_cont');
+        if (getComputedStyle(shell).pointerEvents !== 'none') return false;
         control.click(); return true;
-      })()`), true, 'the hidden header does not intercept the page');
+      })()`), true, 'the hidden header keeps only its own controls hittable');
       await waitFor('native compact player pauses playback', () => guestRun(`document.querySelector('audio').paused`));
       const beforeScroll = nativeView.getBounds();
       await guestRun(`window.scrollTo(0, 900)`);

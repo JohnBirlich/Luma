@@ -20,17 +20,18 @@ const minimal = readMusicOnlyStyle();
  */
 const lumaShell = `
 /* Luma draws its own transport: VK's header — including the compact player inside it —
-   is never on screen. It keeps its layout and is made inert instead, so it neither
-   covers the catalogue nor moves while the page scrolls. */
+   is never painted. It keeps its layout so its controls stay readable and clickable for
+   delegated commands, but it neither covers the catalogue nor moves while scrolling. */
 :is(#page_header_cont, #page_header, #top_nav,
   [class*="SpaLayout__header"], [class*="TopNavigation__root"], [class*="StickyHeader"]) {
-  position: fixed !important; top: 0 !important; inset-inline-start: 0 !important; margin: 0 !important;
-  /* A zero-height shell keeps the page's own flow intact while the controls inside it
-     stay laid out: they are readable, but nothing is painted or covered. */
-  width: 100% !important; max-width: 100% !important; height: 0 !important; min-height: 0 !important; overflow: visible !important;
-  opacity: 0 !important; interactivity: inert !important;
+  position: sticky !important; top: 0 !important; inset-inline: 0 auto !important; margin: 0 !important;
+  background: none !important; border: 0 !important; box-shadow: none !important;
+  opacity: 0 !important; pointer-events: none !important;
 }
-:is(#page_header_cont, #page_header, #top_nav) * { interactivity: inert !important; }
+/* Only the controls themselves stay hittable, so VK's delegated presses still land. */
+:is(#page_header_cont, #page_header, #top_nav) :is(button, a, input, [role="button"], [role="switch"], [tabindex]) {
+  pointer-events: auto !important;
+}
 /* VK's «Наверх» bubble points at its own scroll container, which Luma replaced. */
 :is([aria-label="Наверх"], [title="Наверх"], [aria-label="Back to top"], [title="Back to top"],
   #stl_left, #stl_bg, #stl_btn, .stl_btn, [class*="ScrollToTop"]) { display: none !important; }

@@ -23,9 +23,15 @@ function visibleMusicPlayer(action: VkPlaybackAction | 'seek' | null, ratio: num
       && el.checkVisibility({ visibilityProperty: true });
   };
   const visible = (el: Element) => laidOut(el) && el.checkVisibility({ opacityProperty: true });
-  // The compact header is kept measurable and inert when hidden by Luma.
-  const readable = (el: Element) => visible(el) || (laidOut(el)
-    && !!el.closest(header) && getComputedStyle(el).getPropertyValue('interactivity') === 'inert');
+  // The compact header is hidden by Luma: it is either made inert or made transparent,
+  // and both keep its controls readable for delegated presses.
+  const hiddenChrome = (el: Element) => {
+    const shell = el.closest(header);
+    if (!shell) return false;
+    const style = getComputedStyle(shell);
+    return style.getPropertyValue('interactivity') === 'inert' || style.opacity === '0';
+  };
+  const readable = (el: Element) => visible(el) || (laidOut(el) && hiddenChrome(el));
   const actionable = (el: Element): el is HTMLElement => el instanceof HTMLElement
     && !el.matches('a:not([role="button"]), input, button[type="submit"], :disabled, .disabled') && !el.closest(`form, [aria-disabled="true"], ${trackRow}`) && readable(el);
   const signedOut = [...document.querySelectorAll(
