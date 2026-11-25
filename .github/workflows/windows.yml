@@ -48,8 +48,18 @@ jobs:
           }
           exit $result
       - run: npm run build
-      - run: npm run test:desktop
+      - name: Desktop smoke
         timeout-minutes: 8
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:desktop 2>&1 | tee smoke.log || {
+            status=$?
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::$line"
+            done < <(tail -n 120 smoke.log)
+            exit $status
+          }
         env:
           LUMA_LIVE_CATALOG: ${{ inputs.live_catalog && '1' || '0' }}
           LUMA_LIVE_RADIO: ${{ inputs.live_radio && '1' || '0' }}
