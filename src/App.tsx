@@ -894,8 +894,9 @@ export default function App() {
     const url = vkHistoryDestination(entry);
     if (!window.luma?.vkSite || !connected || !url) return;
     const deadline = Date.now() + 25_000;
+    pause(); // One source at a time: the local queue keeps its place but goes quiet.
     void (async () => {
-      if (!hasVkSession()) { pause(); openVkSite(url); }
+      if (!hasVkSession()) openVkSite(url);
       if (!await waitVkMusic(deadline)) { if (vkViewRef.current?.state.signIn) showVkTab(); return; }
       const ok = await vkSite.playTrack(url);
       if (!ok && !vkViewRef.current?.state.track?.playing) setNotice({ message: 'Не удалось запустить трек в VK Музыке.', error: true });

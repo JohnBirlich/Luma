@@ -459,46 +459,51 @@ export class VkSite {
     const active = this.active, contents = active?.view.webContents;
     if (!active || active.owner !== owner || active.id !== id || this.resetting || !contents || contents.isDestroyed()) return false;
     if (!active.windowVisible || active.minimized || !vkSiteEntry(url)) return false;
+    const onPage = contents.getURL() === url;
+    if (onPage && active.state.track?.playing) return true;
     if (!active.shown) {
       const [w, h] = active.owner.getContentSize();
       active.view.setBounds({ x: 0, y: 0, width: Math.max(1024, w), height: Math.max(720, h) });
       active.view.setVisible(false);
     }
-    if (!this.musicPageReady(active) || contents.getURL() !== url) {
+    const revision = active.revision, wasForeground = active.foreground;
+    // A silent navigation is only kept while the view counts as foreground; the press
+    // needs the same state, and the read-back is what keeps it alive afterwards.
+    active.foreground = true;
+    const finish = (started: boolean) => {
+      if (!started) active.foreground = wasForeground;
+      if (this.active === active) this.visibility(active);
+      return started;
+    };
+    if (!onPage || !this.musicPageReady(active)) {
       this.navigate(active, url);
       const deadline = Date.now() + 15_000;
-      while (this.active === active && !contents.isDestroyed() && contents.getURL() !== url && Date.now() < deadline) {
+      while (this.active === active && !contents.isDestroyed() && !this.musicPageReady(active) && active.state.phase !== 'failed' && Date.now() < deadline) {
         await new Promise((resolve) => { setTimeout(resolve, 250); });
       }
-      while (this.active === active && !contents.isDestroyed() && !this.musicReady(active) && active.state.phase !== 'failed' && Date.now() < deadline) {
-        await new Promise((resolve) => { setTimeout(resolve, 250); });
-      }
-      if (this.active !== active || contents.isDestroyed() || !this.musicReady(active)) return false;
+      if (this.active !== active || contents.isDestroyed() || !this.musicPageReady(active)) return finish(false);
     }
-    const revision = active.revision, wasForeground = active.foreground;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      if (active.state.track?.playing) return true;
+    // The press is replayed like a catalogue card's: VK only reacts to a real input event.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (active.revision !== revision && active.state.track?.playing) break;
       const result: unknown = await contents.executeJavaScriptInIsolatedWorld(world,
         [{ code: inspectVkPlayer('toggle', undefined, 'trusted') }], true).catch(() => undefined);
       const point = result && typeof result === 'object' ? (result as { point?: { x?: unknown; y?: unknown } }).point : undefined;
       const x = Math.round(Number(point?.x)), y = Math.round(Number(point?.y));
-      if (Number.isFinite(x) && Number.isFinite(y) && x > 0 && y > 0 && this.active === active && active.revision === revision) {
-        active.foreground = true;
+      if (Number.isFinite(x) && Number.isFinite(y) && x > 0 && y > 0 && this.active === active) {
         contents.sendInputEvent({ type: 'mouseMove', x, y });
         contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
         contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
       }
       for (let wait = 0; wait < 6; wait++) {
         await new Promise((resolve) => { setTimeout(resolve, 500); });
-        if (this.active !== active || active.revision !== revision) return false;
-        if (active.state.track?.playing) return true;
+        if (this.active !== active || contents.isDestroyed()) return false;
+        if (active.state.track?.playing === true) return finish(true);
         active.foreground = true;
         await this.readTrack(active);
       }
     }
-    active.foreground = wasForeground;
-    this.visibility(active);
-    return active.state.track?.playing === true;
+    return finish(active.state.track?.playing === true);
   }
 
   /** Opens the album of the track that is open in the guest, with a real press. */
