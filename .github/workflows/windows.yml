@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: windows-${{ github.ref }}${{ inputs.live_radio && '-live-radio' || inputs.live_catalog && '-live-catalog' || inputs.live_services && '-live-services' || '' }}
@@ -48,9 +49,21 @@ jobs:
           }
           exit $result
       - run: npm run build
-      - run: npm run test:desktop
+      - name: Run desktop smoke
         timeout-minutes: 8
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP luma-desktop.log
+          npm run test:desktop *>&1 | Tee-Object -FilePath $log
+          $result = $LASTEXITCODE
+          if ($result -ne 0) {
+            $tail = (Get-Content $log -Tail 120) -join "`n"
+            if ($env:PR_NUMBER) { gh pr comment $env:PR_NUMBER --body ("Smoke failure:`n``````" + "`n" + $tail + "`n``````") }
+            $tail
+          }
+          exit $result
         env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           LUMA_LIVE_CATALOG: ${{ inputs.live_catalog && '1' || '0' }}
           LUMA_LIVE_RADIO: ${{ inputs.live_radio && '1' || '0' }}
           LUMA_LIVE_SERVICES: ${{ inputs.live_services && '1' || '0' }}
