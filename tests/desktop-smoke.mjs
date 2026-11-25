@@ -1259,6 +1259,25 @@ async function smoke() {
           && (!player || (displayed(player) && bar.height > 0 && Math.abs(bar.top) < 1));
       })()`);
       assert.equal(await noLayoutChoice(), true);
+      console.log('SHELLDEBUG ' + await guestRun(`(() => {
+        const header = document.querySelector('#page_header_cont'), sidebar = document.querySelector('#layout_sidebar');
+        const body = document.querySelector('#page_body');
+        const chat = document.querySelector('#fixture-chat');
+        const player = header && header.querySelector('#top_audio_layer_place');
+        const bar = header && header.getBoundingClientRect(), bodyRect = body.getBoundingClientRect();
+        const viewport = document.documentElement.clientWidth;
+        const displayed = (el) => !!el && el.getBoundingClientRect().width > 0;
+        return JSON.stringify({
+          headerId: header?.id ?? null,
+          opacity: header && getComputedStyle(header).opacity,
+          ulInteractivity: header && header.querySelector('ul') ? getComputedStyle(header.querySelector('ul')).getPropertyValue('interactivity') : 'no-ul',
+          sidebar: displayed(sidebar), chat: displayed(chat),
+          gutter: viewport - Math.round(bodyRect.width), left: Math.round(bodyRect.left), right: Math.round(bodyRect.right), viewport,
+          scrollWidth: document.documentElement.scrollWidth, bodyTop: Math.round(bodyRect.top),
+          player: displayed(player), barHeight: bar && Math.round(bar.height), barTop: bar && Math.round(bar.top),
+          position: header && getComputedStyle(header).position,
+        });
+      })()`));
       await waitFor('signed-in VK opens without the general panels by default', () => shellIs('minimal'));
       await waitFor('the profile name comes from VK’s own block, not from a link', () => run(`window.vkFixtureStates.at(-1)?.state.user === 'Даниил Ефремов'`));
       assert.equal(await guestRun(`(() => {
